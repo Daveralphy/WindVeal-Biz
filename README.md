@@ -312,8 +312,8 @@ npm run build
 
 1. Create new Web Service on [Render](https://render.com)
 2. Connect GitHub repository
-3. Set build command: `cd apps/api && npm install && npm run build`
-4. Set start command: `cd apps/api && npm start`
+3. Set build command: `cd apps/api && pnpm install && pnpm run build`
+4. Set start command: `cd apps/api && pnpm start`
 5. Add environment variables (see `.env.example`)
 6. Deploy
 
@@ -406,10 +406,9 @@ POST /api/jobs/{jobId}/candidates
 Authorization: Bearer {token}
 Content-Type: multipart/form-data
 
-{
-  "resume": (file),
-  "email": "candidate@email.com" (optional)
-}
+Form Fields:
+- resume: File (PDF/DOCX)
+- email: String (optional)
 ```
 
 **Get Candidate Details**
