@@ -20,6 +20,78 @@
 
 ---
 
+## 💡 How VealBiz Works (Simple Explanation)
+
+### **The Problem It Solves**
+You post a job → Get 50 resumes → Manually read each one (painful!) → Forget which candidates were good → Lose track in Excel
+
+### **The VealBiz Solution**
+
+```
+Step 1: Recruiter logs into VealBiz
+        ↓
+Step 2: Creates job: "Frontend Developer needed"
+        ↓
+Step 3: Uploads candidate resumes (PDF/DOCX)
+        ↓
+Step 4: AI automatically:
+        • Reads the resume
+        • Extracts: name, email, skills, experience
+        • Scores candidate: 95% match!
+        • Writes summary: "Excellent React developer with 5 years experience"
+        ↓
+Step 5: Recruiter sees dashboard:
+        Applied (8) → Screening (4) → Interview (2) → Offer (1)
+        ⭐ Sarah - 98%
+        ⭐ John - 95%
+        ⭐ Jane - 87%
+        ↓
+Step 6: Drag candidates between stages
+        Add notes, track progress
+        ↓
+Step 7: Make hiring decisions faster and smarter!
+```
+
+---
+
+## 🧩 The 5 Components (Technical Overview)
+
+VealBiz is built from 5 main pieces that work together:
+
+| Component | What It Does | Technology | Where It Lives |
+|-----------|-------------|------------|----------------|
+| **Frontend** | Website you see & click | React + TypeScript | `apps/web/` |
+| **Backend** | Brain that processes everything | Node.js + Fastify | `apps/api/` |
+| **Database** | Stores all data permanently | PostgreSQL | Docker container |
+| **AI Service** | Reads & scores resumes | Groq API (cloud) | https://groq.com |
+| **File Storage** | Saves resume PDFs | Local folder | `apps/api/uploads/` |
+
+### **How They Talk to Each Other**
+
+```
+┌──────────────┐
+│   FRONTEND   │  "Hey backend, upload this resume!"
+│   (React)    │ ────────────────────────────────────┐
+└──────────────┘                                     │
+                                                     ▼
+                                            ┌──────────────┐
+                                            │   BACKEND    │
+                                            │  (Node.js)   │
+                                            └──────────────┘
+                                                     │
+                        ┌────────────────────────────┼────────────────┐
+                        │                            │                │
+                        ▼                            ▼                ▼
+                 ┌─────────────┐            ┌─────────────┐   ┌────────────┐
+                 │  DATABASE   │            │  AI SERVICE │   │   FILES    │
+                 │ (PostgreSQL)│            │   (Groq)    │   │  (uploads/)│
+                 └─────────────┘            └─────────────┘   └────────────┘
+                  Saves candidate             Analyzes          Stores PDFs
+                  data & scores               resume text
+```
+
+---
+
 ## 📋 Tech Stack
 
 ### Frontend
@@ -46,146 +118,263 @@
 
 ---
 
-## 🏗️ Project Structure
+## 🏗️ What's Inside This Project
+
+VealBiz has **5 main components** working together:
+
+### **1. Frontend (The Website) - `apps/web/`**
+What users see and click on. Built with React.
+
+```
+apps/web/
+├── src/
+│   ├── pages/              # Different screens
+│   │   ├── Login.tsx       # Login page
+│   │   ├── Dashboard.tsx   # Main dashboard
+│   │   ├── Jobs.tsx        # List of jobs
+│   │   └── Candidates.tsx  # Candidate pipeline
+│   │
+│   ├── components/         # Reusable UI pieces
+│   │   ├── JobCard.tsx     # Shows one job
+│   │   └── CandidateCard.tsx  # Shows one candidate
+│   │
+│   └── lib/
+│       └── api.ts          # Talks to backend
+│
+├── package.json            # Frontend dependencies
+└── .env                    # Frontend secrets (API URL)
+```
+
+**What it does:** Login page → Dashboard → View jobs → Upload resumes → See AI scores
+
+---
+
+### **2. Backend (The Brain) - `apps/api/`**
+The server that processes everything. Built with Node.js.
+
+```
+apps/api/
+├── src/
+│   ├── routes/             # API endpoints (URLs)
+│   │   ├── auth.ts         # /api/auth/login, /api/auth/register
+│   │   ├── jobs.ts         # /api/jobs - create, list jobs
+│   │   └── candidates.ts   # /api/candidates - upload resumes
+│   │
+│   ├── services/           # Core business logic
+│   │   ├── ai/
+│   │   │   └── groq.ts     # Talks to Groq AI
+│   │   ├── resume-parser.ts  # Extracts text from PDFs
+│   │   └── auth.ts         # Password checking, JWT tokens
+│   │
+│   └── middleware/
+│       └── auth.ts         # Checks if user is logged in
+│
+├── prisma/
+│   └── schema.prisma       # Database blueprint (tables)
+│
+├── uploads/                # Where resume PDFs are saved
+├── package.json            # Backend dependencies
+└── .env                    # Backend secrets (API keys, DB password)
+```
+
+**What it does:** 
+- Receives resume → Extracts text → Sends to AI → Gets score → Saves to database → Sends back to frontend
+
+---
+
+### **3. Database (The Memory) - PostgreSQL**
+Where all data is stored permanently. Runs in Docker.
+
+**Tables:**
+- `organizations` - Companies using VealBiz (Acme Corp, Tech Startup, etc.)
+- `users` - People who log in (john@acme.com, jane@acme.com)
+- `jobs` - Job postings (Frontend Developer, Backend Engineer)
+- `candidates` - People who applied (with resumes, AI scores, stages)
+
+**Accessed through:** Prisma (a tool that makes database queries easy and safe)
+
+---
+
+### **4. AI Service (The Smart Reader) - Groq API**
+Cloud service that reads and analyzes resumes. You don't download this - you call it via internet.
+
+**What it does:**
+```
+Input:  "John Smith, 5 years React experience..."
+Output: { score: 95, summary: "Excellent match", skills: [...] }
+```
+
+**Where it lives:** https://api.groq.com (cloud service)  
+**Cost:** Free (14,400 requests/day)
+
+---
+
+### **5. Configuration Files (The Instructions)**
 
 ```
 vealbiz/
-├── apps/
-│   ├── web/                    # Frontend React app
-│   │   ├── src/
-│   │   │   ├── components/     # React components
-│   │   │   ├── pages/          # Page components
-│   │   │   ├── hooks/          # Custom hooks
-│   │   │   ├── lib/            # Utilities and API client
-│   │   │   └── types/          # TypeScript types
-│   │   ├── public/             # Static assets
-│   │   └── package.json
+├── package.json            # Root: Lists all tools needed
+├── docker-compose.yml      # Starts PostgreSQL in Docker
+├── .gitignore              # Don't upload these files to GitHub
+└── README.md               # This file you're reading
+```
+
+---
+
+## 📁 Complete Folder Structure
+
+```
+vealbiz/                        ← Your project folder
+│
+├── apps/                       ← The actual applications
+│   ├── web/                    ← FRONTEND (React website)
+│   │   ├── src/                ← Your React code
+│   │   ├── package.json        ← Frontend tools list
+│   │   └── .env                ← Frontend config (API URL)
 │   │
-│   └── api/                    # Backend API
-│       ├── src/
-│       │   ├── routes/         # API routes
-│       │   ├── services/       # Business logic
-│       │   ├── middleware/     # Auth, validation, etc.
-│       │   ├── lib/            # Utilities
-│       │   └── types/          # TypeScript types
-│       ├── prisma/
-│       │   └── schema.prisma   # Database schema
-│       └── package.json
+│   └── api/                    ← BACKEND (Node.js server)
+│       ├── src/                ← Your server code
+│       ├── prisma/             ← Database schema
+│       ├── uploads/            ← Resume files stored here
+│       ├── package.json        ← Backend tools list
+│       └── .env                ← Backend config (secrets, API keys)
 │
-├── packages/                   # Shared packages (optional)
-│   └── shared/                 # Shared types/utils
-│
-├── .github/                    # GitHub Actions CI/CD
-├── docker-compose.yml          # Local development setup
-├── .env.example                # Environment variables template
-├── package.json                # Root package.json
-└── README.md                   # This file
+├── package.json                ← Root config (manages both apps)
+├── docker-compose.yml          ← Database setup
+├── .gitignore                  ← Files to not upload
+└── README.md                   ← Instructions (this file)
 ```
 
 ---
 
 ## 🚦 Getting Started
 
-### Prerequisites
+### What You Need First
 
-Before you begin, ensure you have the following installed:
+- **Node.js** 18 or newer ([Download here](https://nodejs.org))
+- **Docker Desktop** ([Download here](https://www.docker.com/products/docker-desktop)) - For running PostgreSQL
+- **Code Editor** - VS Code recommended ([Download here](https://code.visualstudio.com/))
+- **Groq API Key** - Free account at [console.groq.com](https://console.groq.com)
 
-- **Node.js** >= 18.0.0 ([Download](https://nodejs.org))
-- **npm** or **pnpm** (we recommend pnpm)
-- **PostgreSQL** >= 15 (or use Docker)
-- **Git**
+### Installation (Step by Step)
 
-### Installation
-
-1. **Clone the repository**
+**1. Download the code**
 
 ```bash
 git clone https://github.com/windveal/vealbiz.git
 cd vealbiz
 ```
 
-2. **Install dependencies**
+**2. Install all dependencies**
+
+This downloads all the tools and libraries needed (React, Node.js packages, etc.)
 
 ```bash
-# Using npm
 npm install
-
-# Or using pnpm (recommended)
-pnpm install
 ```
 
-3. **Set up environment variables**
+This might take 2-3 minutes. You'll see a progress bar.
 
-Create `.env` files in both `apps/web` and `apps/api`:
+**3. Get your Groq API key**
 
-**`apps/api/.env`**
+- Go to https://console.groq.com
+- Sign up (it's free)
+- Click "Create API Key"
+- Copy the key (looks like: `gsk_xxxxxxxxxxxxx`)
+
+**4. Set up your configuration files**
+
+Create two `.env` files with your secrets:
+
+**File 1: `apps/api/.env`** (Backend secrets)
 ```env
-# Database
-DATABASE_URL="postgresql://user:password@localhost:5432/vealbiz"
+# Database connection
+DATABASE_URL="postgresql://vealbiz_user:vealbiz_password@localhost:5432/vealbiz"
 
-# JWT Secret (generate with: openssl rand -base64 32)
-JWT_SECRET="your-super-secret-jwt-key-here"
-JWT_EXPIRES_IN="24h"
-REFRESH_TOKEN_SECRET="your-refresh-token-secret"
-REFRESH_TOKEN_EXPIRES_IN="7d"
+# Security keys (change these!)
+JWT_SECRET="your-random-secret-here-make-it-long"
+REFRESH_TOKEN_SECRET="another-random-secret"
 
-# Groq API (get free key at: https://console.groq.com)
-GROQ_API_KEY="your-groq-api-key"
+# Groq AI API key (paste your key here)
+GROQ_API_KEY="gsk_your_key_from_groq_console"
 
-# Server
+# Server settings
 PORT=8000
 NODE_ENV="development"
-
-# CORS
 CORS_ORIGIN="http://localhost:5173"
 
-# File Upload
+# File upload settings
 UPLOAD_DIR="./uploads"
-MAX_FILE_SIZE=5242880  # 5MB in bytes
+MAX_FILE_SIZE=5242880
 ```
 
-**`apps/web/.env`**
+**File 2: `apps/web/.env`** (Frontend config)
 ```env
 VITE_API_URL="http://localhost:8000/api"
 ```
 
-4. **Set up the database**
+**5. Start the database**
+
+This starts PostgreSQL in a Docker container (like a mini virtual machine)
 
 ```bash
-# Start PostgreSQL (if using Docker)
-docker-compose up -d postgres
+docker-compose up -d
+```
 
-# Run database migrations
+You should see:
+```
+✔ Container vealbiz-postgres  Started
+✔ Container vealbiz-redis     Started
+```
+
+**6. Set up database tables**
+
+This creates all the tables (organizations, users, jobs, candidates, etc.)
+
+```bash
 cd apps/api
 npx prisma migrate dev --name init
 npx prisma generate
-
-# Optional: Seed database with sample data
-npx prisma db seed
+cd ../..
 ```
 
-5. **Start development servers**
+**7. Start the app!**
 
 ```bash
-# From root directory, start both frontend and backend
-npm run dev
-
-# Or start them separately:
-
-# Terminal 1 - Backend
-cd apps/api
-npm run dev
-
-# Terminal 2 - Frontend
-cd apps/web
 npm run dev
 ```
 
-6. **Open your browser**
+You should see:
+```
+🚀 Server running on http://localhost:8000
+🌐 Frontend running on http://localhost:5173
+```
 
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:8000
-- API Docs: http://localhost:8000/docs (if enabled)
+**8. Open your browser**
+
+Go to: http://localhost:5173
+
+You should see the VealBiz login page! 🎉
+
+---
+
+### Troubleshooting
+
+**"Cannot connect to database"**
+- Make sure Docker is running
+- Run `docker-compose ps` to check if PostgreSQL is up
+
+**"GROQ_API_KEY is not defined"**
+- Check that you created `apps/api/.env`
+- Make sure you pasted your actual Groq API key
+
+**"Port 5173 already in use"**
+- Another app is using that port
+- Kill it: `lsof -ti:5173 | xargs kill` (Mac/Linux)
+
+**"npm install" fails**
+- Make sure you have Node.js 18 or newer
+- Check: `node --version`
 
 ---
 
@@ -312,8 +501,8 @@ npm run build
 
 1. Create new Web Service on [Render](https://render.com)
 2. Connect GitHub repository
-3. Set build command: `cd apps/api && pnpm install && pnpm run build`
-4. Set start command: `cd apps/api && pnpm start`
+3. Set build command: `cd apps/api && npm install && npm run build`
+4. Set start command: `cd apps/api && npm start`
 5. Add environment variables (see `.env.example`)
 6. Deploy
 
@@ -406,9 +595,10 @@ POST /api/jobs/{jobId}/candidates
 Authorization: Bearer {token}
 Content-Type: multipart/form-data
 
-Form Fields:
-- resume: File (PDF/DOCX)
-- email: String (optional)
+{
+  "resume": (file),
+  "email": "candidate@email.com" (optional)
+}
 ```
 
 **Get Candidate Details**
