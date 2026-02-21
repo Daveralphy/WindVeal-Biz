@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Generate Prisma Client
+      run: npm run db:generate --workspace=apps/api
+      # Note: You might need to add "db:generate": "prisma generate" to apps/api/package.json scripts
+
+    - name: Lint
+      run: npm run lint
+
+    - name: Build
+      run: npm run build
+
+    - name: Test
+      run: npm run test
+```
+
+<!--
+[PROMPT_SUGGESTION]Update apps/api/src/routes/candidates.ts to use the new processCandidateUpload service[/PROMPT_SUGGESTION]
+[PROMPT_SUGGESTION]Explain how to run the project locally now that all files are created[/PROMPT_SUGGESTION]

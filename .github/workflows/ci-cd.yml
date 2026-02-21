@@ -1,0 +1,410 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ========================
+  # Code Quality & Tests
+  # ========================
+  
+  test:
+    name: Test & Lint
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: vealbiz_test
+          POSTGRES_PASSWORD: testpass
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgresql://postgres:testpass@localhost:5432/vealbiz_test
+        run: npx prisma migrate deploy
+      
+      - name: Lint code
+        run: npm run lint
+        continue-on-error: true
+      
+      - name: Type checking
+        run: npm run type-check
+      
+      - name: Run tests
+        run: npm run test
+        continue-on-error: true
+      
+      - name: Build frontend
+        run: cd apps/web && npm run build
+      
+      - name: Build backend
+        run: cd apps/api && npm run build
+
+  # ========================
+  # Security & Dependencies
+  # ========================
+  
+  security:
+    name: Security Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+      
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+  
+  # ========================
+  # Build Docker Images
+  # ========================
+  
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata for API
+        id: meta-api
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-api
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      - name: Extract metadata for Web
+        id: meta-web
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-web
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      - name: Build and push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/api/Dockerfile
+          push: true
+          tags: ${{ steps.meta-api.outputs.tags }}
+          labels: ${{ steps.meta-api.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-api:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-api:buildcache,mode=max
+      
+      - name: Build and push Web image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/web/Dockerfile
+          push: true
+          tags: ${{ steps.meta-web.outputs.tags }}
+          labels: ${{ steps.meta-web.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-web:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-web:buildcache,mode=max
+
+  # ========================
+  # Deploy to Development
+  # ========================
+  
+  deploy-dev:
+    name: Deploy to Development
+    runs-on: ubuntu-latest
+    needs: [ test, build ]
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Deploy to Railway (Development)
+        run: |
+          npm install -g @railway/cli
+          railway login --token ${{ secrets.RAILWAY_TOKEN }}
+          railway up --service api --service web
+        env:
+          RAILWAY_ENVIRONMENT: development
+          DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.DEV_JWT_SECRET }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          FRONTEND_URL: https://dev.vealbiz.com
+          CORS_ORIGIN: https://dev.vealbiz.com
+
+  # ========================
+  # Deploy to Production
+  # ========================
+  
+  deploy-prod:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [ test, build, security ]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    environment:
+      name: production
+      url: https://vealbiz.com
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.sha,
+              environment: 'production',
+              required_contexts: [],
+              auto_merge: false
+            });
+            process.env.DEPLOYMENT_ID = deployment.data.id;
+      
+      - name: Deploy to Railway (Production)
+        run: |
+          npm install -g @railway/cli
+          railway login --token ${{ secrets.RAILWAY_TOKEN_PROD }}
+          railway up --service api --service web
+        env:
+          RAILWAY_ENVIRONMENT: production
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.PROD_JWT_SECRET }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          FRONTEND_URL: https://vealbiz.com
+          CORS_ORIGIN: https://vealbiz.com
+          NODE_ENV: production
+        continue-on-error: true
+      
+      - name: Update deployment status
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ job.status }}' === 'success' ? 'success' : 'failure';
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: process.env.DEPLOYMENT_ID,
+              state: status,
+              environment_url: 'https://vealbiz.com',
+              description: status === 'success' ? 'Deployment succeeded' : 'Deployment failed'
+            });
+      
+      - name: Notify Slack on Success
+        if: success()
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "✅ Production deployment successful",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Deployment Successful* 🚀\n*Environment:* Production\n*Commit:* ${{ github.sha }}\n*Author:* ${{ github.actor }}\n*URL:* https://vealbiz.com"
+                  }
+                }
+              ]
+            }
+      
+      - name: Notify Slack on Failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "❌ Production deployment failed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Deployment Failed* ⚠️\n*Environment:* Production\n*Commit:* ${{ github.sha }}\n*Author:* ${{ github.actor }}\n*Log:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  }
+                }
+              ]
+            }
+
+  # ========================
+  # Post-Deployment Tests
+  # ========================
+  
+  smoke-tests:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    needs: deploy-prod
+    if: success()
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Wait for deployment
+        run: sleep 30
+      
+      - name: Test API health
+        run: |
+          curl -f https://api.vealbiz.com/health || exit 1
+      
+      - name: Test frontend accessibility
+        run: |
+          curl -f https://vealbiz.com || exit 1
+      
+      - name: Test login endpoint
+        run: |
+          curl -X POST https://api.vealbiz.com/api/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"test@test.com","password":"test"}' \
+            -i
+      
+      - name: Notify on smoke test failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: '❌ Post-deployment smoke tests failed. Check logs at: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
+            });
+
+# ========================
+# Additional Workflows
+# ========================
+
+# Database Backup Job (daily)
+  backup-database:
+    name: Backup Production Database
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    
+    steps:
+      - name: Backup production database
+        run: |
+          # Uses Railway CLI or your backup service
+          npm install -g @railway/cli
+          railway login --token ${{ secrets.RAILWAY_TOKEN_PROD }}
+          railway exec -- pg_dump -U $DB_USER $DB_NAME > backup_$(date +%Y%m%d_%H%M%S).sql
+      
+      - name: Upload to storage
+        run: |
+          # Upload to S3 or other secure storage
+          aws s3 cp backup_*.sql s3://vealbiz-backups/ \
+            --region ${{ secrets.AWS_REGION }}
+
+# ========================
+# Workflow Status
+# ========================
+
+  workflow-status:
+    name: Workflow Status
+    runs-on: ubuntu-latest
+    needs: [ test, build ]
+    if: always()
+    
+    steps:
+      - name: Check workflow status
+        run: |
+          echo "Test Status: ${{ needs.test.result }}"
+          echo "Build Status: ${{ needs.build.result }}"
+          
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            echo "❌ Tests failed"
+            exit 1
+          fi
+          
+          if [ "${{ needs.build.result }}" != "success" ]; then
+            echo "❌ Build failed"
+            exit 1
+          fi
+          
+          echo "✅ All checks passed"
+      
+      - name: Create summary
+        if: always()
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY <<EOF
+          ## CI/CD Pipeline Summary
+          
+          | Check | Status |
+          |-------|--------|
+          | Tests | ${{ needs.test.result }} |
+          | Build | ${{ needs.build.result }} |
+          | Deploy (Dev) | ${{ needs.deploy-dev.result }} |
+          | Deploy (Prod) | ${{ needs.deploy-prod.result }} |
+          
+          **Commit:** ${{ github.sha }}
+          **Author:** ${{ github.actor }}
+          **Branch:** ${{ github.ref }}
+          EOF

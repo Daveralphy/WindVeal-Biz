@@ -1,0 +1,28 @@
+{
+  "name": "vealbiz",
+  "private": true,
+  "version": "0.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm --prefix apps/web run dev",
+    "dev:api": "npm --prefix apps/api run dev",
+    "dev:all": "concurrently \"npm run dev:api\" \"npm run dev\"",
+    "build": "npm run build:web && npm run build:api",
+    "build:web": "npm --prefix apps/web run build",
+    "build:api": "npm --prefix apps/api run build",
+    "bootstrap": "npm install",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:rebuild": "docker-compose build --no-cache",
+    "docker:logs": "docker-compose logs -f",
+    "docker:ps": "docker-compose ps",
+    "db:migrate": "npx prisma migrate deploy",
+    "db:seed": "npm --prefix apps/api run seed",
+    "db:push": "npx prisma db push",
+    "db:studio": "npx prisma studio",
+    "health": "curl http://localhost:3000/health"
+  }
+}

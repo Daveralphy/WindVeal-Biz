@@ -1,0 +1,134 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.production
+
+# Dependencies
+node_modules/
+/.pnp
+.pnp.js
+
+# Build artifacts
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+.jest-cache/
+junit.xml
+
+# IDE
+.vscode/
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.LSOverride
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Backups
+backups/
+*.backup
+*.bak
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# CI/CD
+.github/workflows/secrets.yml
+
+# Node
+.npmrc
+.yarnrc
+
+# Prisma
+prisma/.env*
+prisma/dev.db
+
+# Dist and build
+apps/*/dist
+apps/*/build
+apps/web/.next
+
+# Cache
+.eslintcache
+.stylelintcache
+
+# Misc
+.cache/
+*.pem
+.vercel/
+
+# Secrets scanning
+*.key
+*.pem
+secrets.json
+
+# Railway
+.railway/
+railway.json
+
+# Vercel
+.vercel
+
+# Heroku
+.penv
+
+# AWS
+.aws/
+credentials*
+
+# Local Netlify folder
+.netlify
+
+# Turborepo
+.turbo
+
+# Yarn / pnpm / npm
+pnpm-lock.yaml
+yarn.lock
+package-lock.json
+
+# Mac
+.AppleDouble
+.AppleDB
