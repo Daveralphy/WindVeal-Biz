@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import AppLayout from '@/components/layout/AppLayout';
+import AdminLayout from '@/components/layout/AdminLayout';
 import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import Dashboard from '@/pages/Dashboard';
@@ -13,6 +14,12 @@ import Careers from '@/pages/Careers';
 import Analytics from '@/pages/Analytics';
 import Team from '@/pages/Team';
 import Settings from '@/pages/Settings';
+import AdminDashboard from '@/pages/admin/AdminDashboard';
+import AdminOrganizations from '@/pages/admin/AdminOrganizations';
+import AdminUsers from '@/pages/admin/AdminUsers';
+import AdminSettings from '@/pages/admin/AdminSettings';
+import AdminAIUsage from '@/pages/admin/AdminAIUsage';
+import AdminAnalytics from '@/pages/admin/AdminAnalytics';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -22,8 +29,26 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function GuestRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+  const user = useAuthStore((s) => s.user);
+  if (isAuthenticated) {
+    return <Navigate to={user?.isSuperAdmin ? '/admin' : '/dashboard'} replace />;
+  }
   return <>{children}</>;
+}
+
+function SuperAdminRoute({ children }: { children: React.ReactNode }) {
+  const user = useAuthStore((s) => s.user);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!user?.isSuperAdmin) return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
+}
+
+function DefaultRedirect() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  return <Navigate to={user?.isSuperAdmin ? '/admin' : '/dashboard'} replace />;
 }
 
 export default function App() {
@@ -68,8 +93,24 @@ export default function App() {
           <Route path="/settings" element={<Settings />} />
         </Route>
 
+        {/* Admin routes */}
+        <Route
+          element={
+            <SuperAdminRoute>
+              <AdminLayout />
+            </SuperAdminRoute>
+          }
+        >
+          <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/admin/organizations" element={<AdminOrganizations />} />
+          <Route path="/admin/users" element={<AdminUsers />} />
+          <Route path="/admin/ai-usage" element={<AdminAIUsage />} />
+          <Route path="/admin/analytics" element={<AdminAnalytics />} />
+          <Route path="/admin/settings" element={<AdminSettings />} />
+        </Route>
+
         {/* Default redirect */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<DefaultRedirect />} />
       </Routes>
     </BrowserRouter>
   );

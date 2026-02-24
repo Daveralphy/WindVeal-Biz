@@ -22,7 +22,11 @@ export default function Login() {
     try {
       const { data } = await api.post('/auth/login', { email, password });
       setAuth(data.user, data.accessToken);
-      navigate('/dashboard');
+      if (data.user.isSuperAdmin) {
+        navigate('/admin');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||

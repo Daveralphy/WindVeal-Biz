@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import {
@@ -177,42 +177,14 @@ export default function AppLayout() {
         </nav>
 
         {/* User section at bottom */}
-        <div className="border-t border-vb-border p-3">
-          <div
-            className="flex items-center gap-3 cursor-pointer hover:bg-vb-surface rounded-lg p-2 transition-colors"
-            onClick={() => setUserMenuOpen(!userMenuOpen)}
-          >
-            <div className="w-8 h-8 rounded-full bg-brand/20 flex items-center justify-center text-brand text-xs font-semibold flex-shrink-0">
-              {user?.firstName?.[0]}
-              {user?.lastName?.[0]}
-            </div>
-            {sidebarOpen && (
-              <div className="flex-1 min-w-0">
-                <p className="text-vb-text text-sm font-medium truncate">
-                  {user?.firstName} {user?.lastName}
-                </p>
-                <p className="text-vb-text-muted text-xs truncate">Starter Plan</p>
-              </div>
-            )}
-          </div>
-
-          {userMenuOpen && sidebarOpen && (
-            <div className="mt-2 bg-vb-card rounded-lg border border-vb-border py-1">
-              <button
-                onClick={() => navigate('/settings')}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-vb-text-secondary hover:text-vb-text hover:bg-vb-surface transition-colors"
-              >
-                <Settings className="w-4 h-4" /> Settings
-              </button>
-              <button
-                onClick={handleLogout}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-vb-surface transition-colors"
-              >
-                <LogOut className="w-4 h-4" /> Log Out
-              </button>
-            </div>
-          )}
-        </div>
+        <UserProfileMenu
+          user={user}
+          sidebarOpen={sidebarOpen}
+          userMenuOpen={userMenuOpen}
+          setUserMenuOpen={setUserMenuOpen}
+          onNavigateSettings={() => { navigate('/settings'); setUserMenuOpen(false); }}
+          onLogout={handleLogout}
+        />
       </aside>
 
       {/* Main area */}
@@ -356,6 +328,74 @@ export default function AppLayout() {
             </div>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+function UserProfileMenu({
+  user,
+  sidebarOpen,
+  userMenuOpen,
+  setUserMenuOpen,
+  onNavigateSettings,
+  onLogout,
+}: {
+  user: { firstName?: string; lastName?: string } | null;
+  sidebarOpen: boolean;
+  userMenuOpen: boolean;
+  setUserMenuOpen: (open: boolean) => void;
+  onNavigateSettings: () => void;
+  onLogout: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [userMenuOpen, setUserMenuOpen]);
+
+  return (
+    <div className="relative border-t border-vb-border p-3" ref={menuRef}>
+      <div
+        className="flex items-center gap-3 cursor-pointer hover:bg-vb-surface rounded-lg p-2 transition-colors"
+        onClick={() => setUserMenuOpen(!userMenuOpen)}
+      >
+        <div className="w-8 h-8 rounded-full bg-brand/20 flex items-center justify-center text-brand text-xs font-semibold flex-shrink-0">
+          {user?.firstName?.[0]}
+          {user?.lastName?.[0]}
+        </div>
+        {sidebarOpen && (
+          <div className="flex-1 min-w-0">
+            <p className="text-vb-text text-sm font-medium truncate">
+              {user?.firstName} {user?.lastName}
+            </p>
+            <p className="text-vb-text-muted text-xs truncate">Starter Plan</p>
+          </div>
+        )}
+      </div>
+
+      {userMenuOpen && sidebarOpen && (
+        <div className="absolute bottom-full left-3 right-3 mb-2 bg-vb-card rounded-lg border border-vb-border shadow-lg py-1 z-50">
+          <button
+            onClick={onNavigateSettings}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-vb-text-secondary hover:text-vb-text hover:bg-vb-surface transition-colors"
+          >
+            <Settings className="w-4 h-4" /> Settings
+          </button>
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-vb-surface transition-colors"
+          >
+            <LogOut className="w-4 h-4" /> Log Out
+          </button>
+        </div>
       )}
     </div>
   );

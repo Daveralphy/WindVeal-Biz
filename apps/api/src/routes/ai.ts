@@ -92,6 +92,17 @@ export async function aiRoutes(app: FastifyInstance) {
       },
     });
 
+    // Log AI usage
+    await prisma.aIUsageLog.create({
+      data: {
+        userId: request.user!.userId,
+        organizationId,
+        type: 'AI_INSIGHTS',
+        model: 'llama-3.1-8b-instant',
+        success: true,
+      },
+    }).catch(() => {});
+
     return { insights, aiEnabled: true };
   });
 }

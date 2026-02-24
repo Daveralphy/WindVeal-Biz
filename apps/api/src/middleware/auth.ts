@@ -6,6 +6,7 @@ interface JWTPayload {
   userId: string;
   organizationId: string;
   role: string;
+  isSuperAdmin?: boolean;
 }
 
 declare module 'fastify' {

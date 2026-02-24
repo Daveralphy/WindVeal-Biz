@@ -7,6 +7,7 @@ interface User {
   firstName: string;
   lastName: string;
   role: string;
+  isSuperAdmin?: boolean;
   organizationId: string;
   organizationName: string;
   avatarUrl?: string;

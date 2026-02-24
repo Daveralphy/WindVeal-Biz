@@ -89,6 +89,21 @@ enum NotificationType {
   DEADLINE_REACHED
 }
 
+// ─── Subscription Plan ──────────────────────────────────
+
+model SubscriptionPlan {
+  id            String           @id @default(cuid())
+  tier          SubscriptionTier @unique
+  name          String
+  monthlyPrice  Int              @default(0)
+  aiChatLimit   Int              @default(15)
+  features      String[]
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@map("subscription_plans")
+}
+
 // ─── Organization ───────────────────────────────────────
 
 model Organization {
@@ -111,6 +126,7 @@ model Organization {
   auditLogs        AuditLog[]
   emailTemplates   EmailTemplate[]
   invitations      TeamInvitation[]
+  aiUsageLogs      AIUsageLog[]
 
   @@map("organizations")
 }
@@ -129,6 +145,7 @@ model User {
   phone          String?
   avatarUrl      String?
   role           UserRole     @default(RECRUITER)
+  isSuperAdmin   Boolean      @default(false)
   isActive       Boolean      @default(true)
   emailVerified  Boolean      @default(false)
   lastLoginAt    DateTime?
@@ -146,9 +163,26 @@ model User {
   notifications  Notification[]
   auditLogs      AuditLog[]      @relation("ActorUser")
   notes          ApplicantNote[]
+  aiUsageLogs    AIUsageLog[]
+  passwordResets PasswordResetToken[]
 
   @@index([organizationId])
   @@map("users")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 model RefreshToken {
@@ -532,4 +566,26 @@ model AuditLog {
   @@index([organizationId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// ─── AI Usage Logs ──────────────────────────────────────
+
+model AIUsageLog {
+  id             String       @id @default(cuid())
+  userId         String
+  organizationId String
+  type           String       // CHAT, AI_SCORING, AI_INSIGHTS
+  model          String?      // e.g. llama-3.1-8b-instant
+  tokensUsed     Int?         // estimated tokens
+  success        Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([type])
+  @@map("ai_usage_logs")
 }

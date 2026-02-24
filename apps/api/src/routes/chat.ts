@@ -4,27 +4,40 @@ import prisma from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
 import { env } from '../config/env.js';
 
-const PLAN_LIMITS: Record<string, { dailyMessages: number; features: string[] }> = {
-  STARTER: {
-    dailyMessages: 15,
-    features: ['general_questions', 'view_stats'],
-  },
-  PROFESSIONAL: {
-    dailyMessages: 100,
-    features: ['general_questions', 'view_stats', 'manage_jobs', 'manage_applicants', 'analytics'],
-  },
-  ENTERPRISE: {
-    dailyMessages: -1, // unlimited
-    features: ['general_questions', 'view_stats', 'manage_jobs', 'manage_applicants', 'analytics', 'bulk_actions', 'reports'],
-  },
-};
+// Cached plan config loaded from DB (refreshed every 5 minutes)
+interface PlanConfig { dailyMessages: number; features: string[] }
+let planCache: Record<string, PlanConfig> | null = null;
+let planCacheTime = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+async function getPlanLimits(): Promise<Record<string, PlanConfig>> {
+  if (planCache && Date.now() - planCacheTime < CACHE_TTL) return planCache;
+
+  const plans = await prisma.subscriptionPlan.findMany();
+  const result: Record<string, PlanConfig> = {};
+  for (const p of plans) {
+    result[p.tier] = { dailyMessages: p.aiChatLimit, features: p.features };
+  }
+
+  // Fallback if DB is empty
+  if (Object.keys(result).length === 0) {
+    result.STARTER = { dailyMessages: 15, features: ['general_questions', 'view_stats'] };
+    result.PROFESSIONAL = { dailyMessages: 100, features: ['general_questions', 'view_stats', 'manage_jobs', 'manage_applicants', 'analytics'] };
+    result.ENTERPRISE = { dailyMessages: -1, features: ['general_questions', 'view_stats', 'manage_jobs', 'manage_applicants', 'analytics', 'bulk_actions', 'reports'] };
+  }
+
+  planCache = result;
+  planCacheTime = Date.now();
+  return result;
+}
 
 // In-memory daily counter (per user). Resets each calendar day.
 const usageBuckets = new Map<string, { count: number; date: string }>();
 
-function checkRateLimit(userId: string, tier: string): { allowed: boolean; remaining: number; limit: number } {
+async function checkRateLimit(userId: string, tier: string): Promise<{ allowed: boolean; remaining: number; limit: number }> {
   const today = new Date().toISOString().slice(0, 10);
-  const limit = PLAN_LIMITS[tier]?.dailyMessages ?? 15;
+  const planLimits = await getPlanLimits();
+  const limit = planLimits[tier]?.dailyMessages ?? 15;
   if (limit === -1) return { allowed: true, remaining: -1, limit: -1 };
 
   const key = `${userId}:${today}`;
@@ -133,10 +146,11 @@ export async function chatRoutes(app: FastifyInstance) {
     if (!user) return reply.status(401).send({ error: 'User not found' });
 
     const tier = user.organization.subscriptionTier;
-    const planConfig = PLAN_LIMITS[tier] || PLAN_LIMITS.STARTER;
+    const allPlans = await getPlanLimits();
+    const planConfig = allPlans[tier] || allPlans.STARTER || { dailyMessages: 15, features: ['general_questions', 'view_stats'] };
 
     // Rate limit check
-    const rateCheck = checkRateLimit(userId, tier);
+    const rateCheck = await checkRateLimit(userId, tier);
     if (!rateCheck.allowed) {
       return reply.status(429).send({
         error: 'Daily message limit reached',
@@ -199,6 +213,18 @@ export async function chatRoutes(app: FastifyInstance) {
 
       const aiReply = completion.choices[0]?.message?.content?.trim() || "I couldn't generate a response. Please try again.";
 
+      // Log AI usage
+      await prisma.aIUsageLog.create({
+        data: {
+          userId,
+          organizationId,
+          type: 'CHAT',
+          model: 'llama-3.1-8b-instant',
+          tokensUsed: completion.usage?.total_tokens ?? null,
+          success: true,
+        },
+      });
+
       return reply.send({
         reply: aiReply,
         remaining: rateCheck.remaining,
@@ -207,6 +233,10 @@ export async function chatRoutes(app: FastifyInstance) {
       });
     } catch (err) {
       console.error('VealAI chat error:', err);
+      // Log failed usage
+      await prisma.aIUsageLog.create({
+        data: { userId, organizationId, type: 'CHAT', model: 'llama-3.1-8b-instant', success: false },
+      }).catch(() => {});
       return reply.status(500).send({
         error: 'Failed to generate response',
         reply: "Sorry, I'm having trouble right now. Please try again in a moment.",
@@ -229,7 +259,8 @@ export async function chatRoutes(app: FastifyInstance) {
     if (!user) return reply.status(401).send({ error: 'User not found' });
 
     const tier = user.organization.subscriptionTier;
-    const planConfig = PLAN_LIMITS[tier] || PLAN_LIMITS.STARTER;
+    const allPlans = await getPlanLimits();
+    const planConfig = allPlans[tier] || allPlans.STARTER || { dailyMessages: 15, features: ['general_questions', 'view_stats'] };
     const today = new Date().toISOString().slice(0, 10);
     const bucket = usageBuckets.get(`${userId}:${today}`);
     const used = bucket?.date === today ? bucket.count : 0;

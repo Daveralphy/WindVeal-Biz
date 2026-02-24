@@ -34,14 +34,14 @@ function generateSlug(name: string): string {
     .replace(/^-|-$/g, '');
 }
 
-function generateTokens(userId: string, organizationId: string, role: string) {
+function generateTokens(userId: string, organizationId: string, role: string, isSuperAdmin: boolean = false) {
   const accessToken = jwt.sign(
-    { userId, organizationId, role },
+    { userId, organizationId, role, isSuperAdmin },
     env.JWT_SECRET,
     { expiresIn: '15m' }
   );
   const refreshToken = jwt.sign(
-    { userId, organizationId, role },
+    { userId, organizationId, role, isSuperAdmin },
     env.REFRESH_TOKEN_SECRET,
     { expiresIn: '30d' }
   );
@@ -112,7 +112,7 @@ export async function authRoutes(app: FastifyInstance) {
       return { organization, user };
     });
 
-    const tokens = generateTokens(result.user.id, result.organization.id, result.user.role);
+    const tokens = generateTokens(result.user.id, result.organization.id, result.user.role, false);
 
     // Store refresh token
     await prisma.refreshToken.create({
@@ -175,7 +175,7 @@ export async function authRoutes(app: FastifyInstance) {
       data: { lastLoginAt: new Date() },
     });
 
-    const tokens = generateTokens(user.id, user.organizationId, user.role);
+    const tokens = generateTokens(user.id, user.organizationId, user.role, user.isSuperAdmin);
 
     await prisma.refreshToken.create({
       data: {
@@ -201,6 +201,7 @@ export async function authRoutes(app: FastifyInstance) {
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
+        isSuperAdmin: user.isSuperAdmin,
         organizationId: user.organizationId,
         organizationName: user.organization.name,
       },
@@ -220,8 +221,8 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     try {
-      const payload = jwt.verify(token, env.REFRESH_TOKEN_SECRET) as { userId: string; organizationId: string; role: string };
-      const tokens = generateTokens(payload.userId, payload.organizationId, payload.role);
+      const payload = jwt.verify(token, env.REFRESH_TOKEN_SECRET) as { userId: string; organizationId: string; role: string; isSuperAdmin?: boolean };
+      const tokens = generateTokens(payload.userId, payload.organizationId, payload.role, payload.isSuperAdmin || false);
 
       // Rotate refresh token
       await prisma.refreshToken.delete({ where: { id: stored.id } });
@@ -257,6 +258,43 @@ export async function authRoutes(app: FastifyInstance) {
     return { message: 'Logged out' };
   });
 
+  // Change password (regular user)
+  app.patch('/change-password', { preHandler: [authenticate] }, async (request, reply) => {
+    const schema = z.object({
+      currentPassword: z.string().min(1),
+      newPassword: z.string().min(8).regex(
+        /^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])/,
+        'Password must have uppercase, number, and special character'
+      ),
+    });
+
+    const parsed = schema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Validation failed', details: parsed.error.flatten() });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: request.user!.userId },
+    });
+
+    if (!user) {
+      return reply.status(404).send({ error: 'User not found' });
+    }
+
+    const valid = await bcrypt.compare(parsed.data.currentPassword, user.passwordHash);
+    if (!valid) {
+      return reply.status(401).send({ error: 'Current password is incorrect' });
+    }
+
+    const newHash = await bcrypt.hash(parsed.data.newPassword, 12);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: newHash },
+    });
+
+    return { message: 'Password updated successfully' };
+  });
+
   // Get current user
   app.get('/me', { preHandler: [authenticate] }, async (request, reply) => {
     const user = await prisma.user.findUnique({
@@ -275,6 +313,7 @@ export async function authRoutes(app: FastifyInstance) {
       firstName: user.firstName,
       lastName: user.lastName,
       role: user.role,
+      isSuperAdmin: user.isSuperAdmin,
       avatarUrl: user.avatarUrl,
       organizationId: user.organizationId,
       organizationName: user.organization.name,

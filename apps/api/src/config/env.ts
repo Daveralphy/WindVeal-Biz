@@ -6,6 +6,7 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(16),
   REFRESH_TOKEN_SECRET: z.string().min(16),
   GROQ_API_KEY: z.string().optional(),
+  SUPER_ADMIN_PASSWORD: z.string().optional(),
   PORT: z.coerce.number().default(8000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
