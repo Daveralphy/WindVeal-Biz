@@ -1,18 +1,25 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        // VealBiz Dark Theme
+        // VealBiz Theme — powered by CSS variables (set in index.css)
         vb: {
-          bg: '#0F0F0F',
-          surface: '#161616',
-          card: '#1A1A1A',
-          border: '#2A2A2A',
-          muted: '#3A3A3A',
-          sidebar: '#111111',
-          header: '#111111',
+          bg: 'var(--vb-bg)',
+          surface: 'var(--vb-surface)',
+          card: 'var(--vb-card)',
+          border: 'var(--vb-border)',
+          muted: 'var(--vb-muted)',
+          sidebar: 'var(--vb-sidebar)',
+          header: 'var(--vb-header)',
+          // Semantic text colors
+          text: 'var(--vb-text)',
+          'text-secondary': 'var(--vb-text-secondary)',
+          'text-muted': 'var(--vb-text-muted)',
+          'text-faint': 'var(--vb-text-faint)',
+          'icon': 'var(--vb-icon)',
         },
         // Brand
         brand: {

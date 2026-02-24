@@ -44,7 +44,7 @@ export default function Communications() {
   if (loading || !data) {
     return (
       <div className="space-y-6">
-        <h1 className="text-xl font-bold text-white">Communications</h1>
+        <h1 className="text-xl font-bold text-vb-text">Communications</h1>
         <div className="grid grid-cols-3 gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="bg-vb-card rounded-xl h-20 border border-vb-border animate-pulse" />
@@ -58,7 +58,7 @@ export default function Communications() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">Communications</h1>
+        <h1 className="text-xl font-bold text-vb-text">Communications</h1>
         <button className="px-4 py-2 bg-brand text-sm text-white rounded-lg hover:bg-brand-dark transition-colors">
           + Compose Email
         </button>
@@ -71,8 +71,8 @@ export default function Communications() {
               <Icon className={`w-5 h-5 ${color}`} />
             </div>
             <div>
-              <p className="text-white text-lg font-bold">{data.stats[key]}</p>
-              <p className="text-gray-500 text-xs">{label}</p>
+              <p className="text-vb-text text-lg font-bold">{data.stats[key]}</p>
+              <p className="text-vb-text-muted text-xs">{label}</p>
             </div>
           </div>
         ))}
@@ -80,28 +80,28 @@ export default function Communications() {
 
       <div className="bg-vb-surface border border-vb-border rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-vb-border">
-          <h2 className="text-white text-sm font-medium">Recent Emails</h2>
+          <h2 className="text-vb-text text-sm font-medium">Recent Emails</h2>
         </div>
         <div className="divide-y divide-vb-border">
           {data.emails.map((email) => (
-            <div key={email.id} className="px-4 py-3 flex items-center justify-between hover:bg-vb-card/50 transition-colors cursor-pointer">
+            <div key={email.id} className="px-4 py-3 flex items-center justify-between hover:bg-vb-surface transition-colors cursor-pointer">
               <div className="flex items-center gap-3">
-                <Mail className="w-4 h-4 text-gray-500" />
+                <Mail className="w-4 h-4 text-vb-text-muted" />
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-white text-sm">{email.to}</span>
+                    <span className="text-vb-text text-sm">{email.to}</span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full capitalize ${email.status === 'sent' ? 'bg-green-500/10 text-green-400' : 'bg-amber-500/10 text-amber-400'}`}>
                       {email.status}
                     </span>
                   </div>
-                  <p className="text-gray-500 text-xs">{email.subject}</p>
+                  <p className="text-vb-text-muted text-xs">{email.subject}</p>
                 </div>
               </div>
-              <span className="text-gray-600 text-xs">{timeAgo(email.sentAt)}</span>
+              <span className="text-vb-text-faint text-xs">{timeAgo(email.sentAt)}</span>
             </div>
           ))}
           {data.emails.length === 0 && (
-            <p className="px-4 py-8 text-gray-500 text-sm text-center">No emails sent yet</p>
+            <p className="px-4 py-8 text-vb-text-muted text-sm text-center">No emails sent yet</p>
           )}
         </div>
       </div>

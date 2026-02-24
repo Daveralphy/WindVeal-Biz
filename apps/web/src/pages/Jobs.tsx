@@ -26,7 +26,7 @@ const STATUS_STYLES: Record<string, string> = {
   ACTIVE: 'bg-green-500/10 text-green-400',
   PAUSED: 'bg-amber-500/10 text-amber-400',
   CLOSED: 'bg-red-500/10 text-red-400',
-  DRAFT: 'bg-gray-500/10 text-gray-400',
+  DRAFT: 'bg-gray-500/10 text-vb-text-secondary',
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -68,7 +68,7 @@ export default function Jobs() {
   if (loading) {
     return (
       <div className="space-y-5">
-        <h1 className="text-xl font-bold text-white">Jobs</h1>
+        <h1 className="text-xl font-bold text-vb-text">Jobs</h1>
         <div className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="bg-vb-card rounded-xl h-20 border border-vb-border animate-pulse" />
@@ -81,7 +81,7 @@ export default function Jobs() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">Jobs</h1>
+        <h1 className="text-xl font-bold text-vb-text">Jobs</h1>
         <Link
           to="/jobs/new"
           className="flex items-center gap-2 px-4 py-2 bg-brand text-sm text-white rounded-lg hover:bg-brand-dark transition-colors"
@@ -94,13 +94,13 @@ export default function Jobs() {
       {/* Filters */}
       <div className="flex gap-3 items-center">
         <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-vb-text-muted" />
           <input
             type="text"
             placeholder="Search jobs..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-white placeholder-gray-500 outline-none focus:border-brand"
+            className="w-full pl-10 pr-4 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand"
           />
         </div>
         <div className="flex gap-1">
@@ -111,7 +111,7 @@ export default function Jobs() {
               className={`px-3 py-1.5 text-xs rounded-lg capitalize transition-colors ${
                 statusFilter === s
                   ? 'bg-brand/10 text-brand'
-                  : 'text-gray-400 hover:text-white hover:bg-vb-card'
+                  : 'text-vb-text-secondary hover:text-vb-text hover:bg-vb-card'
               }`}
             >
               {s}
@@ -134,7 +134,7 @@ export default function Jobs() {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-white text-sm font-medium group-hover:text-brand transition-colors">
+                  <h3 className="text-vb-text text-sm font-medium group-hover:text-brand transition-colors">
                     {job.title}
                   </h3>
                   <span
@@ -143,7 +143,7 @@ export default function Jobs() {
                     {job.status.toLowerCase()}
                   </span>
                 </div>
-                <div className="flex items-center gap-3 mt-1 text-gray-500 text-xs">
+                <div className="flex items-center gap-3 mt-1 text-vb-text-muted text-xs">
                   <span>{job.department || 'General'}</span>
                   <span className="flex items-center gap-1">
                     <MapPin className="w-3 h-3" />
@@ -159,7 +159,7 @@ export default function Jobs() {
             </div>
 
             <div className="flex items-center gap-6">
-              <div className="flex items-center gap-1.5 text-gray-400">
+              <div className="flex items-center gap-1.5 text-vb-text-secondary">
                 <Users className="w-4 h-4" />
                 <span className="text-sm">{job.applicantCount}</span>
               </div>
@@ -168,7 +168,7 @@ export default function Jobs() {
                   e.preventDefault();
                   e.stopPropagation();
                 }}
-                className="text-gray-500 hover:text-white p-1"
+                className="text-vb-text-muted hover:text-vb-text p-1"
               >
                 <MoreHorizontal className="w-4 h-4" />
               </button>
@@ -179,8 +179,8 @@ export default function Jobs() {
 
       {filtered.length === 0 && (
         <div className="text-center py-16">
-          <Briefcase className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-          <p className="text-gray-400 text-sm">No jobs found</p>
+          <Briefcase className="w-12 h-12 text-vb-text-faint mx-auto mb-3" />
+          <p className="text-vb-text-secondary text-sm">No jobs found</p>
         </div>
       )}
     </div>

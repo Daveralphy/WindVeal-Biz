@@ -102,7 +102,7 @@ export default function Dashboard() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-xl font-bold text-white">Dashboard</h1>
+        <h1 className="text-xl font-bold text-vb-text">Dashboard</h1>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="bg-vb-card rounded-xl p-4 border border-vb-border h-28 animate-pulse" />
@@ -114,9 +114,9 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">Dashboard</h1>
+        <h1 className="text-xl font-bold text-vb-text">Dashboard</h1>
         <div className="flex gap-2">
-          <button className="px-4 py-2 bg-vb-card text-sm text-gray-300 rounded-lg hover:bg-vb-muted transition-colors">
+          <button className="px-4 py-2 bg-vb-card text-sm text-vb-text-secondary rounded-lg hover:bg-vb-muted transition-colors">
             Export Report
           </button>
           <button className="px-4 py-2 bg-brand text-sm text-white rounded-lg hover:bg-brand-dark transition-colors">
@@ -136,10 +136,10 @@ export default function Dashboard() {
               <div className={`p-2 rounded-lg ${bg}`}>
                 <Icon className={`w-4 h-4 ${color}`} />
               </div>
-              <ArrowUpRight className="w-3.5 h-3.5 text-gray-500" />
+              <ArrowUpRight className="w-3.5 h-3.5 text-vb-text-muted" />
             </div>
-            <p className="text-2xl font-bold text-white">{stats[key].toLocaleString()}</p>
-            <p className="text-xs text-gray-500 mt-1">{label}</p>
+            <p className="text-2xl font-bold text-vb-text">{stats[key].toLocaleString()}</p>
+            <p className="text-xs text-vb-text-muted mt-1">{label}</p>
           </div>
         ))}
       </div>
@@ -149,28 +149,28 @@ export default function Dashboard() {
         {/* Activity Feed */}
         <div className="lg:col-span-2 bg-vb-card rounded-xl border border-vb-border">
           <div className="px-5 py-4 border-b border-vb-border">
-            <h2 className="text-white font-semibold text-sm">Recent Activity</h2>
+            <h2 className="text-vb-text font-semibold text-sm">Recent Activity</h2>
           </div>
           <div className="divide-y divide-vb-border">
             {activity.map((item, i) => (
               <div
                 key={i}
-                className="flex items-start gap-3 px-5 py-3.5 hover:bg-vb-surface/50 cursor-pointer transition-colors"
+                className="flex items-start gap-3 px-5 py-3.5 hover:bg-vb-surface cursor-pointer transition-colors"
               >
                 <div
                   className={`w-2 h-2 rounded-full ${item.color} mt-2 flex-shrink-0`}
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-white text-sm font-medium">{item.action}</p>
-                  <p className="text-gray-400 text-xs mt-0.5">{item.detail}</p>
+                  <p className="text-vb-text text-sm font-medium">{item.action}</p>
+                  <p className="text-vb-text-secondary text-xs mt-0.5">{item.detail}</p>
                 </div>
-                <span className="text-gray-500 text-xs flex-shrink-0">
+                <span className="text-vb-text-muted text-xs flex-shrink-0">
                   {timeAgo(item.time)}
                 </span>
               </div>
             ))}
             {activity.length === 0 && (
-              <p className="px-5 py-8 text-gray-500 text-sm text-center">No recent activity</p>
+              <p className="px-5 py-8 text-vb-text-muted text-sm text-center">No recent activity</p>
             )}
           </div>
         </div>
@@ -178,7 +178,7 @@ export default function Dashboard() {
         {/* VealAI Insights */}
         <div className="bg-vb-card rounded-xl border border-vb-border">
           <div className="px-5 py-4 border-b border-vb-border">
-            <h2 className="text-white font-semibold text-sm flex items-center gap-2">
+            <h2 className="text-vb-text font-semibold text-sm flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-brand animate-pulse" />
               VealAI Insights
             </h2>
@@ -203,7 +203,7 @@ export default function Dashboard() {
                 />
               ))
             ) : (
-              <p className="text-gray-500 text-sm text-center py-4">No insights available</p>
+              <p className="text-vb-text-muted text-sm text-center py-4">No insights available</p>
             )}
           </div>
         </div>
@@ -228,9 +228,9 @@ function InsightCard({
     <div className="bg-vb-surface rounded-lg p-3.5 border border-vb-border">
       <div className="flex items-center gap-2">
         <span className={`w-1.5 h-1.5 rounded-full ${priorityColor}`} />
-        <p className="text-white text-sm font-medium">{title}</p>
+        <p className="text-vb-text text-sm font-medium">{title}</p>
       </div>
-      <p className="text-gray-400 text-xs mt-1 leading-relaxed">{desc}</p>
+      <p className="text-vb-text-secondary text-xs mt-1 leading-relaxed">{desc}</p>
       <button className="text-brand text-xs font-medium mt-2 hover:text-brand-light transition-colors">
         {action} →
       </button>

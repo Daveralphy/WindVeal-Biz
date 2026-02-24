@@ -74,7 +74,7 @@ export default function Pipeline() {
   if (loading && !pipeline.length) {
     return (
       <div className="space-y-5">
-        <h1 className="text-xl font-bold text-white">Visual Pipeline</h1>
+        <h1 className="text-xl font-bold text-vb-text">Visual Pipeline</h1>
         <div className="flex gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="w-[280px] h-80 bg-vb-surface rounded-xl border border-vb-border animate-pulse" />
@@ -87,12 +87,12 @@ export default function Pipeline() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">Visual Pipeline</h1>
+        <h1 className="text-xl font-bold text-vb-text">Visual Pipeline</h1>
         <div className="flex gap-2">
           <select
             value={selectedJobId}
             onChange={(e) => setSelectedJobId(e.target.value)}
-            className="bg-vb-card text-sm text-gray-300 rounded-lg px-3 py-2 border border-vb-border outline-none"
+            className="bg-vb-card text-sm text-vb-text-secondary rounded-lg px-3 py-2 border border-vb-border outline-none"
           >
             {jobs.map((j) => (
               <option key={j.id} value={j.id}>{j.title}</option>
@@ -118,14 +118,14 @@ export default function Pipeline() {
                   className="w-2.5 h-2.5 rounded-full"
                   style={{ backgroundColor: column.color }}
                 />
-                <span className="text-white text-sm font-medium">
+                <span className="text-vb-text text-sm font-medium">
                   {column.name}
                 </span>
-                <span className="bg-vb-card text-gray-400 text-xs px-1.5 py-0.5 rounded-md">
+                <span className="bg-vb-card text-vb-text-secondary text-xs px-1.5 py-0.5 rounded-md">
                   {column.applicants.length}
                 </span>
               </div>
-              <button className="text-gray-500 hover:text-white">
+              <button className="text-vb-text-muted hover:text-vb-text">
                 <MoreHorizontal className="w-4 h-4" />
               </button>
             </div>
@@ -140,13 +140,13 @@ export default function Pipeline() {
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2.5">
                       <div className="w-8 h-8 rounded-full bg-vb-muted flex items-center justify-center">
-                        <User className="w-3.5 h-3.5 text-gray-400" />
+                        <User className="w-3.5 h-3.5 text-vb-text-secondary" />
                       </div>
                       <div>
-                        <p className="text-white text-sm font-medium">
+                        <p className="text-vb-text text-sm font-medium">
                           {applicant.firstName} {applicant.lastName}
                         </p>
-                        <p className="text-gray-500 text-xs">
+                        <p className="text-vb-text-muted text-xs">
                           {applicant.source}
                         </p>
                       </div>
@@ -174,7 +174,7 @@ export default function Pipeline() {
                         </span>
                       )}
                     </div>
-                    <span className="text-gray-600 text-[10px]">
+                    <span className="text-vb-text-faint text-[10px]">
                       {daysAgo(applicant.createdAt)}d
                     </span>
                   </div>

@@ -48,7 +48,7 @@ export default function Careers() {
   if (loading || !data) {
     return (
       <div className="space-y-6">
-        <h1 className="text-xl font-bold text-white">Careers Page</h1>
+        <h1 className="text-xl font-bold text-vb-text">Careers Page</h1>
         <div className="bg-vb-card border border-vb-border rounded-xl h-40 animate-pulse" />
         <div className="space-y-2">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -62,9 +62,9 @@ export default function Careers() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">Careers Page</h1>
+        <h1 className="text-xl font-bold text-vb-text">Careers Page</h1>
         <div className="flex gap-2">
-          <button className="flex items-center gap-2 px-4 py-2 bg-vb-card text-sm text-gray-300 rounded-lg hover:bg-vb-muted border border-vb-border transition-colors">
+          <button className="flex items-center gap-2 px-4 py-2 bg-vb-card text-sm text-vb-text-secondary rounded-lg hover:bg-vb-muted border border-vb-border transition-colors">
             <Eye className="w-4 h-4" />
             Preview
           </button>
@@ -82,8 +82,8 @@ export default function Careers() {
             <Globe className="w-5 h-5 text-green-400" />
           </div>
           <div>
-            <h2 className="text-white text-sm font-medium">Careers Portal</h2>
-            <p className="text-gray-500 text-xs">
+            <h2 className="text-vb-text text-sm font-medium">Careers Portal</h2>
+            <p className="text-vb-text-muted text-xs">
               {data.slug}.vealbiz.com/careers
             </p>
           </div>
@@ -93,19 +93,19 @@ export default function Careers() {
         </div>
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-vb-surface rounded-lg p-3 text-center">
-            <p className="text-white text-lg font-bold">{data.publishedCount}</p>
-            <p className="text-gray-500 text-xs">Published Jobs</p>
+            <p className="text-vb-text text-lg font-bold">{data.publishedCount}</p>
+            <p className="text-vb-text-muted text-xs">Published Jobs</p>
           </div>
           <div className="bg-vb-surface rounded-lg p-3 text-center">
-            <p className="text-white text-lg font-bold">{data.totalApplications.toLocaleString()}</p>
-            <p className="text-gray-500 text-xs">Applications</p>
+            <p className="text-vb-text text-lg font-bold">{data.totalApplications.toLocaleString()}</p>
+            <p className="text-vb-text-muted text-xs">Applications</p>
           </div>
         </div>
       </div>
 
       {/* Published Jobs */}
       <div>
-        <h2 className="text-sm font-medium text-gray-400 mb-3">
+        <h2 className="text-sm font-medium text-vb-text-secondary mb-3">
           Published Listings
         </h2>
         <div className="space-y-2">
@@ -117,10 +117,10 @@ export default function Careers() {
               <div className="flex items-center gap-3">
                 <Briefcase className="w-4 h-4 text-brand" />
                 <div>
-                  <h3 className="text-white text-sm font-medium">
+                  <h3 className="text-vb-text text-sm font-medium">
                     {job.title}
                   </h3>
-                  <div className="flex items-center gap-3 text-gray-500 text-xs mt-0.5">
+                  <div className="flex items-center gap-3 text-vb-text-muted text-xs mt-0.5">
                     <span>{job.department || 'General'}</span>
                     <span className="flex items-center gap-1">
                       <MapPin className="w-3 h-3" />
@@ -130,11 +130,11 @@ export default function Careers() {
                   </div>
                 </div>
               </div>
-              <span className="text-gray-500 text-xs">{timeAgo(job.createdAt)}</span>
+              <span className="text-vb-text-muted text-xs">{timeAgo(job.createdAt)}</span>
             </div>
           ))}
           {data.jobs.length === 0 && (
-            <p className="text-gray-500 text-sm text-center py-8">No published jobs</p>
+            <p className="text-vb-text-muted text-sm text-center py-8">No published jobs</p>
           )}
         </div>
       </div>

@@ -4,19 +4,63 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Dark Theme (default — html type selector always matches) ─── */
+html {
+  --vb-bg: #0F0F0F;
+  --vb-surface: #161616;
+  --vb-card: #1A1A1A;
+  --vb-border: #2A2A2A;
+  --vb-muted: #3A3A3A;
+  --vb-sidebar: #111111;
+  --vb-header: #111111;
+  --vb-text: #FFFFFF;
+  --vb-text-secondary: #9CA3AF;
+  --vb-text-muted: #6B7280;
+  --vb-text-faint: #4B5563;
+  --vb-icon: #9CA3AF;
+  --vb-scrollbar: #3A3A3A;
+  background-color: #0F0F0F;
+  color: #FFFFFF;
+  color-scheme: dark;
+}
+
+/* ─── Light Theme (html.light specificity 0,1,1 beats html 0,0,1) ─── */
+html.light {
+  --vb-bg: #F5F5F7;
+  --vb-surface: #FFFFFF;
+  --vb-card: #FFFFFF;
+  --vb-border: #E5E7EB;
+  --vb-muted: #D1D5DB;
+  --vb-sidebar: #F9FAFB;
+  --vb-header: #FFFFFF;
+  --vb-text: #111827;
+  --vb-text-secondary: #4B5563;
+  --vb-text-muted: #6B7280;
+  --vb-text-faint: #9CA3AF;
+  --vb-icon: #6B7280;
+  --vb-scrollbar: #D1D5DB;
+  background-color: #F5F5F7;
+  color: #111827;
+  color-scheme: light;
+}
+
 @layer base {
   * {
-    @apply border-vb-border;
+    border-color: var(--vb-border);
   }
   body {
-    @apply bg-vb-bg text-white font-sans antialiased;
+    background-color: var(--vb-bg);
+    color: var(--vb-text);
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: #3A3A3A transparent;
+    scrollbar-color: var(--vb-scrollbar) transparent;
   }
   .scrollbar-thin::-webkit-scrollbar {
     width: 6px;
@@ -25,7 +69,7 @@
     background: transparent;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: #3A3A3A;
+    background-color: var(--vb-scrollbar);
     border-radius: 3px;
   }
 }

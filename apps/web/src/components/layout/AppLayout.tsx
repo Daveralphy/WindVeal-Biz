@@ -20,6 +20,7 @@ import {
   Check,
 } from 'lucide-react';
 import api from '@/lib/api';
+import VealAIChat from '@/components/ai/VealAIChat';
 
 interface Notification {
   id: string;
@@ -147,11 +148,11 @@ export default function AppLayout() {
         {/* Logo */}
         <div className="h-[60px] flex items-center px-4 border-b border-vb-border">
           {sidebarOpen ? (
-            <span className="text-white font-bold text-lg tracking-tight">
+            <span className="text-vb-text font-bold text-lg tracking-tight">
               VealBiz
             </span>
           ) : (
-            <span className="text-white font-bold text-lg">V</span>
+            <span className="text-vb-text font-bold text-lg">V</span>
           )}
         </div>
 
@@ -164,8 +165,8 @@ export default function AppLayout() {
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors group ${
                   isActive
-                    ? 'bg-vb-card text-white border-l-2 border-brand'
-                    : 'text-gray-400 hover:text-white hover:bg-vb-card/50'
+                    ? 'bg-vb-card text-vb-text border-l-2 border-brand'
+                    : 'text-vb-text-secondary hover:text-vb-text hover:bg-vb-surface'
                 }`
               }
             >
@@ -178,7 +179,7 @@ export default function AppLayout() {
         {/* User section at bottom */}
         <div className="border-t border-vb-border p-3">
           <div
-            className="flex items-center gap-3 cursor-pointer hover:bg-vb-card/50 rounded-lg p-2 transition-colors"
+            className="flex items-center gap-3 cursor-pointer hover:bg-vb-surface rounded-lg p-2 transition-colors"
             onClick={() => setUserMenuOpen(!userMenuOpen)}
           >
             <div className="w-8 h-8 rounded-full bg-brand/20 flex items-center justify-center text-brand text-xs font-semibold flex-shrink-0">
@@ -187,10 +188,10 @@ export default function AppLayout() {
             </div>
             {sidebarOpen && (
               <div className="flex-1 min-w-0">
-                <p className="text-white text-sm font-medium truncate">
+                <p className="text-vb-text text-sm font-medium truncate">
                   {user?.firstName} {user?.lastName}
                 </p>
-                <p className="text-gray-500 text-xs truncate">Starter Plan</p>
+                <p className="text-vb-text-muted text-xs truncate">Starter Plan</p>
               </div>
             )}
           </div>
@@ -199,7 +200,7 @@ export default function AppLayout() {
             <div className="mt-2 bg-vb-card rounded-lg border border-vb-border py-1">
               <button
                 onClick={() => navigate('/settings')}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-400 hover:text-white hover:bg-vb-surface transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-vb-text-secondary hover:text-vb-text hover:bg-vb-surface transition-colors"
               >
                 <Settings className="w-4 h-4" /> Settings
               </button>
@@ -221,11 +222,11 @@ export default function AppLayout() {
           <div className="flex items-center gap-4">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="text-gray-400 hover:text-white transition-colors"
+              className="text-vb-text-secondary hover:text-vb-text transition-colors"
             >
               <Menu className="w-5 h-5" />
             </button>
-            <span className="text-white font-semibold text-sm">
+            <span className="text-vb-text font-semibold text-sm">
               {orgName} Applicant Tracking System
             </span>
           </div>
@@ -233,23 +234,23 @@ export default function AppLayout() {
           <div className="flex items-center gap-3">
             {/* Search */}
             <div className="hidden md:flex items-center bg-vb-card rounded-lg px-3 py-1.5 gap-2 w-64">
-              <Search className="w-4 h-4 text-gray-500" />
+              <Search className="w-4 h-4 text-vb-text-muted" />
               <input
                 type="text"
                 placeholder="Search jobs, applicants..."
-                className="bg-transparent text-sm text-white placeholder:text-gray-500 outline-none w-full"
+                className="bg-transparent text-sm text-vb-text placeholder:text-vb-text-muted outline-none w-full"
               />
             </div>
 
             {/* VealAI Chat */}
-            <button className="p-2 text-gray-400 hover:text-white hover:bg-vb-card rounded-lg transition-colors">
+            <button className="p-2 text-vb-text-secondary hover:text-vb-text hover:bg-vb-card rounded-lg transition-colors">
               <MessageSquare className="w-[18px] h-[18px]" />
             </button>
 
             {/* Notifications */}
             <button
               onClick={() => setNotificationsOpen(!notificationsOpen)}
-              className="p-2 text-gray-400 hover:text-white hover:bg-vb-card rounded-lg transition-colors relative"
+              className="p-2 text-vb-text-secondary hover:text-vb-text hover:bg-vb-card rounded-lg transition-colors relative"
             >
               <Bell className="w-[18px] h-[18px]" />
               {unreadCount > 0 && (
@@ -271,6 +272,9 @@ export default function AppLayout() {
         </main>
       </div>
 
+      {/* VealAI Chat */}
+      <VealAIChat />
+
       {/* Notifications Drawer */}
       {notificationsOpen && (
         <>
@@ -280,7 +284,7 @@ export default function AppLayout() {
           />
           <div className="fixed right-0 top-0 h-full w-[340px] bg-vb-surface border-l border-vb-border z-50 flex flex-col">
             <div className="flex items-center justify-between px-5 h-[60px] border-b border-vb-border">
-              <h2 className="text-white font-semibold">Notifications</h2>
+              <h2 className="text-vb-text font-semibold">Notifications</h2>
               <div className="flex items-center gap-2">
                 {unreadCount > 0 && (
                   <button
@@ -292,7 +296,7 @@ export default function AppLayout() {
                 )}
                 <button
                   onClick={() => setNotificationsOpen(false)}
-                  className="text-gray-400 hover:text-white"
+                  className="text-vb-text-secondary hover:text-vb-text"
                 >
                   ✕
                 </button>
@@ -313,7 +317,7 @@ export default function AppLayout() {
                   ))}
                 </div>
               ) : notifications.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-40 text-gray-500">
+                <div className="flex flex-col items-center justify-center h-40 text-vb-text-muted">
                   <Bell className="w-8 h-8 mb-2 opacity-50" />
                   <p className="text-sm">No notifications yet</p>
                 </div>
@@ -324,7 +328,7 @@ export default function AppLayout() {
                     <div
                       key={notif.id}
                       onClick={() => !notif.read && handleMarkRead(notif.id)}
-                      className={`flex items-start gap-3 px-5 py-4 border-b border-vb-border hover:bg-vb-card/50 cursor-pointer transition-colors ${!notif.read ? 'bg-vb-card/20' : ''}`}
+                      className={`flex items-start gap-3 px-5 py-4 border-b border-vb-border hover:bg-vb-surface cursor-pointer transition-colors ${!notif.read ? 'bg-vb-surface' : ''}`}
                     >
                       <div
                         className={`w-8 h-8 rounded-full ${meta.color} flex-shrink-0 flex items-center justify-center mt-0.5`}
@@ -332,18 +336,18 @@ export default function AppLayout() {
                         <Bell className="w-3.5 h-3.5 text-white" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-medium">
+                        <p className="text-vb-text text-sm font-medium">
                           {meta.title}
                         </p>
-                        <p className="text-gray-400 text-xs mt-0.5">
+                        <p className="text-vb-text-secondary text-xs mt-0.5">
                           {meta.desc}
                         </p>
-                        <p className="text-gray-500 text-xs mt-1">{timeAgo(notif.createdAt)}</p>
+                        <p className="text-vb-text-muted text-xs mt-1">{timeAgo(notif.createdAt)}</p>
                       </div>
                       {!notif.read ? (
                         <div className="w-2 h-2 bg-brand rounded-full mt-2 flex-shrink-0" />
                       ) : (
-                        <Check className="w-3.5 h-3.5 text-gray-600 mt-2 flex-shrink-0" />
+                        <Check className="w-3.5 h-3.5 text-vb-text-faint mt-2 flex-shrink-0" />
                       )}
                     </div>
                   );

@@ -37,7 +37,7 @@ export default function Analytics() {
   if (loading || !data) {
     return (
       <div className="space-y-6">
-        <h1 className="text-xl font-bold text-white">Analytics</h1>
+        <h1 className="text-xl font-bold text-vb-text">Analytics</h1>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="bg-vb-card rounded-xl h-28 border border-vb-border animate-pulse" />
@@ -49,9 +49,9 @@ export default function Analytics() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">Analytics</h1>
+        <h1 className="text-xl font-bold text-vb-text">Analytics</h1>
         <div className="flex gap-2">
-          <select className="bg-vb-card text-sm text-gray-300 rounded-lg px-3 py-2 border border-vb-border outline-none">
+          <select className="bg-vb-card text-sm text-vb-text-secondary rounded-lg px-3 py-2 border border-vb-border outline-none">
             <option>Last 30 days</option>
             <option>Last 7 days</option>
             <option>Last 90 days</option>
@@ -72,10 +72,10 @@ export default function Analytics() {
                 <Icon className={`w-4 h-4 ${color}`} />
               </div>
             </div>
-            <p className="text-white text-lg font-bold">
+            <p className="text-vb-text text-lg font-bold">
               {data.stats[key as keyof typeof data.stats].toLocaleString()}{'suffix' in rest ? rest.suffix : ''}
             </p>
-            <p className="text-gray-500 text-xs mt-0.5">{label}</p>
+            <p className="text-vb-text-muted text-xs mt-0.5">{label}</p>
           </div>
         ))}
       </div>
@@ -85,14 +85,14 @@ export default function Analytics() {
         <div className="bg-vb-card border border-vb-border rounded-xl p-5">
           <div className="flex items-center gap-2 mb-4">
             <BarChart3 className="w-4 h-4 text-brand" />
-            <h2 className="text-white text-sm font-medium">Pipeline Funnel</h2>
+            <h2 className="text-vb-text text-sm font-medium">Pipeline Funnel</h2>
           </div>
           <div className="space-y-3">
             {data.pipelineFunnel.map(({ stage, count, percent }) => (
               <div key={stage}>
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-gray-400 text-xs">{stage}</span>
-                  <span className="text-white text-xs font-medium">
+                  <span className="text-vb-text-secondary text-xs">{stage}</span>
+                  <span className="text-vb-text text-xs font-medium">
                     {count}
                   </span>
                 </div>
@@ -111,7 +111,7 @@ export default function Analytics() {
         <div className="bg-vb-card border border-vb-border rounded-xl p-5">
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp className="w-4 h-4 text-brand" />
-            <h2 className="text-white text-sm font-medium">
+            <h2 className="text-vb-text text-sm font-medium">
               Applicant Sources
             </h2>
           </div>
@@ -119,8 +119,8 @@ export default function Analytics() {
             {data.sourceDistribution.map(({ source, count, percent }) => (
               <div key={source}>
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-gray-400 text-xs">{source}</span>
-                  <span className="text-white text-xs font-medium">
+                  <span className="text-vb-text-secondary text-xs">{source}</span>
+                  <span className="text-vb-text text-xs font-medium">
                     {count} ({percent}%)
                   </span>
                 </div>

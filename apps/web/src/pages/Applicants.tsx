@@ -55,7 +55,7 @@ export default function Applicants() {
   if (loading) {
     return (
       <div className="space-y-5">
-        <h1 className="text-xl font-bold text-white">All Applicants</h1>
+        <h1 className="text-xl font-bold text-vb-text">All Applicants</h1>
         <div className="bg-vb-surface border border-vb-border rounded-xl h-96 animate-pulse" />
       </div>
     );
@@ -64,8 +64,8 @@ export default function Applicants() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">All Applicants</h1>
-        <button className="flex items-center gap-2 px-4 py-2 bg-vb-card text-sm text-gray-300 rounded-lg hover:bg-vb-muted border border-vb-border transition-colors">
+        <h1 className="text-xl font-bold text-vb-text">All Applicants</h1>
+        <button className="flex items-center gap-2 px-4 py-2 bg-vb-card text-sm text-vb-text-secondary rounded-lg hover:bg-vb-muted border border-vb-border transition-colors">
           <Download className="w-4 h-4" />
           Export
         </button>
@@ -74,17 +74,17 @@ export default function Applicants() {
       {/* Filters */}
       <div className="flex gap-3 items-center">
         <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-vb-text-muted" />
           <input
             type="text"
             placeholder="Search applicants..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-white placeholder-gray-500 outline-none focus:border-brand"
+            className="w-full pl-10 pr-4 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand"
           />
         </div>
         <div className="relative">
-          <button className="flex items-center gap-2 px-3 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-gray-300 hover:bg-vb-muted transition-colors">
+          <button className="flex items-center gap-2 px-3 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text-secondary hover:bg-vb-muted transition-colors">
             <Filter className="w-4 h-4" />
             Stage
             <ChevronDown className="w-3 h-3" />
@@ -98,7 +98,7 @@ export default function Applicants() {
               className={`px-3 py-1.5 text-xs rounded-lg capitalize transition-colors ${
                 stageFilter === s
                   ? 'bg-brand/10 text-brand'
-                  : 'text-gray-400 hover:text-white hover:bg-vb-card'
+                  : 'text-vb-text-secondary hover:text-vb-text hover:bg-vb-card'
               }`}
             >
               {s}
@@ -115,9 +115,9 @@ export default function Applicants() {
               {COLUMNS.map((col) => (
                 <th
                   key={col}
-                  className="px-4 py-3 text-xs font-medium text-gray-500 text-left uppercase tracking-wider"
+                  className="px-4 py-3 text-xs font-medium text-vb-text-muted text-left uppercase tracking-wider"
                 >
-                  <span className="flex items-center gap-1 cursor-pointer hover:text-gray-300">
+                  <span className="flex items-center gap-1 cursor-pointer hover:text-vb-text-secondary">
                     {col}
                     {col !== 'Actions' && <ArrowUpDown className="w-3 h-3" />}
                   </span>
@@ -129,22 +129,22 @@ export default function Applicants() {
             {filtered.map((applicant) => (
               <tr
                 key={applicant.id}
-                className="hover:bg-vb-card/50 transition-colors cursor-pointer"
+                className="hover:bg-vb-surface transition-colors cursor-pointer"
               >
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-vb-muted flex items-center justify-center">
-                      <User className="w-3.5 h-3.5 text-gray-400" />
+                      <User className="w-3.5 h-3.5 text-vb-text-secondary" />
                     </div>
                     <div>
-                      <p className="text-white text-sm font-medium">
+                      <p className="text-vb-text text-sm font-medium">
                         {applicant.firstName} {applicant.lastName}
                       </p>
-                      <p className="text-gray-500 text-xs">{applicant.email}</p>
+                      <p className="text-vb-text-muted text-xs">{applicant.email}</p>
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-gray-300 text-sm">
+                <td className="px-4 py-3 text-vb-text-secondary text-sm">
                   {applicant.job.title}
                 </td>
                 <td className="px-4 py-3">
@@ -172,20 +172,20 @@ export default function Applicants() {
                       {applicant.aiReport.overallScore}%
                     </span>
                   ) : (
-                    <span className="text-gray-600 text-sm">—</span>
+                    <span className="text-vb-text-faint text-sm">—</span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-gray-400 text-sm">
+                <td className="px-4 py-3 text-vb-text-secondary text-sm">
                   {SOURCE_LABELS[applicant.source] || applicant.source}
                 </td>
-                <td className="px-4 py-3 text-gray-400 text-sm">
+                <td className="px-4 py-3 text-vb-text-secondary text-sm">
                   {new Date(applicant.createdAt).toLocaleDateString('en-US', {
                     month: 'short',
                     day: 'numeric',
                   })}
                 </td>
                 <td className="px-4 py-3">
-                  <button className="text-gray-500 hover:text-white text-sm">
+                  <button className="text-vb-text-muted hover:text-vb-text text-sm">
                     View
                   </button>
                 </td>
@@ -196,14 +196,14 @@ export default function Applicants() {
 
         {filtered.length === 0 && (
           <div className="text-center py-12">
-            <User className="w-10 h-10 text-gray-600 mx-auto mb-2" />
-            <p className="text-gray-400 text-sm">No applicants found</p>
+            <User className="w-10 h-10 text-vb-text-faint mx-auto mb-2" />
+            <p className="text-vb-text-secondary text-sm">No applicants found</p>
           </div>
         )}
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between text-sm text-gray-500">
+      <div className="flex items-center justify-between text-sm text-vb-text-muted">
         <span>
           Showing {filtered.length} of {applicants.length} applicants
         </span>

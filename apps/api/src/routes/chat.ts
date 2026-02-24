@@ -1,0 +1,248 @@
+import { FastifyInstance } from 'fastify';
+import Groq from 'groq-sdk';
+import prisma from '../lib/prisma.js';
+import { authenticate } from '../middleware/auth.js';
+import { env } from '../config/env.js';
+
+const PLAN_LIMITS: Record<string, { dailyMessages: number; features: string[] }> = {
+  STARTER: {
+    dailyMessages: 15,
+    features: ['general_questions', 'view_stats'],
+  },
+  PROFESSIONAL: {
+    dailyMessages: 100,
+    features: ['general_questions', 'view_stats', 'manage_jobs', 'manage_applicants', 'analytics'],
+  },
+  ENTERPRISE: {
+    dailyMessages: -1, // unlimited
+    features: ['general_questions', 'view_stats', 'manage_jobs', 'manage_applicants', 'analytics', 'bulk_actions', 'reports'],
+  },
+};
+
+// In-memory daily counter (per user). Resets each calendar day.
+const usageBuckets = new Map<string, { count: number; date: string }>();
+
+function checkRateLimit(userId: string, tier: string): { allowed: boolean; remaining: number; limit: number } {
+  const today = new Date().toISOString().slice(0, 10);
+  const limit = PLAN_LIMITS[tier]?.dailyMessages ?? 15;
+  if (limit === -1) return { allowed: true, remaining: -1, limit: -1 };
+
+  const key = `${userId}:${today}`;
+  const bucket = usageBuckets.get(key);
+  if (!bucket || bucket.date !== today) {
+    usageBuckets.set(key, { count: 1, date: today });
+    return { allowed: true, remaining: limit - 1, limit };
+  }
+  if (bucket.count >= limit) {
+    return { allowed: false, remaining: 0, limit };
+  }
+  bucket.count++;
+  return { allowed: true, remaining: limit - bucket.count, limit };
+}
+
+async function gatherContext(organizationId: string) {
+  const [jobs, applicantCount, recentApplicants, interviewCount] = await Promise.all([
+    prisma.job.findMany({
+      where: { organizationId },
+      select: { id: true, title: true, status: true, department: true, location: true, type: true, _count: { select: { applicants: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    }),
+    prisma.applicant.count({ where: { organizationId } }),
+    prisma.applicant.findMany({
+      where: { organizationId },
+      select: {
+        id: true, firstName: true, lastName: true, email: true, source: true,
+        job: { select: { title: true } },
+        currentStage: { select: { name: true } },
+        aiReport: { select: { overallScore: true, recommendation: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    }),
+    prisma.interview.count({ where: { job: { organizationId }, status: 'SCHEDULED' } }),
+  ]);
+
+  const activeJobs = jobs.filter((j) => j.status === 'ACTIVE');
+  const summary = [
+    `Organization has ${jobs.length} total jobs (${activeJobs.length} active), ${applicantCount} total applicants, ${interviewCount} scheduled interviews.`,
+    '',
+    'Active jobs:',
+    ...activeJobs.map((j) => `- "${j.title}" (${j.department || 'No dept'}, ${j.location || 'Remote'}, ${j.type}) — ${j._count.applicants} applicants`),
+    '',
+    'Recent applicants:',
+    ...recentApplicants.map((a) => {
+      const score = a.aiReport ? `AI Score: ${a.aiReport.overallScore}%` : 'Not scored';
+      const stage = a.currentStage?.name || 'Applied';
+      return `- ${a.firstName} ${a.lastName} (${a.email}) — Applied to "${a.job.title}", Stage: ${stage}, ${score}`;
+    }),
+  ];
+
+  return { summary: summary.join('\n'), jobs, recentApplicants };
+}
+
+const SYSTEM_PROMPT = `You are VealAI, the intelligent AI assistant built into VealBiz — an Applicant Tracking System (ATS) for recruitment teams.
+
+Your capabilities:
+- Answer questions about the user's jobs, applicants, pipeline, interviews, and analytics
+- Help users understand their hiring metrics and provide recommendations
+- Guide users on how to use VealBiz features
+- Provide recruiting best practices and tips
+- Summarize applicant pools and pipeline status
+
+Personality:
+- Professional yet friendly — you work for a Nigerian-founded HR tech company
+- Concise and actionable — no fluff, give answers that help the user act immediately
+- When referencing data, cite specific numbers from the context provided
+- If you don't know something or don't have the data, say so honestly
+
+Rules:
+- Never make up applicant names, scores, or data not in the provided context
+- Keep responses under 300 words unless the user asks for a detailed breakdown
+- Format key info with bullet points or short paragraphs for readability
+- When suggesting actions, tell the user which page/section of VealBiz to go to
+- If the user's plan doesn't support a feature, let them know what plan they'd need`;
+
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export async function chatRoutes(app: FastifyInstance) {
+  app.addHook('preHandler', authenticate);
+
+  // POST /api/chat — Send a message to VealAI
+  app.post<{ Body: { message: string; history?: ChatMessage[] } }>('/', async (request, reply) => {
+    const { userId, organizationId } = request.user!;
+    const { message, history = [] } = request.body || {};
+
+    if (!message || typeof message !== 'string' || message.trim().length === 0) {
+      return reply.status(400).send({ error: 'Message is required' });
+    }
+
+    if (message.length > 2000) {
+      return reply.status(400).send({ error: 'Message too long (max 2000 characters)' });
+    }
+
+    // Get subscription tier
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { organization: { select: { subscriptionTier: true, name: true } } },
+    });
+
+    if (!user) return reply.status(401).send({ error: 'User not found' });
+
+    const tier = user.organization.subscriptionTier;
+    const planConfig = PLAN_LIMITS[tier] || PLAN_LIMITS.STARTER;
+
+    // Rate limit check
+    const rateCheck = checkRateLimit(userId, tier);
+    if (!rateCheck.allowed) {
+      return reply.status(429).send({
+        error: 'Daily message limit reached',
+        limit: rateCheck.limit,
+        tier,
+        upgradeMessage: tier === 'STARTER'
+          ? 'Upgrade to Professional for 100 messages/day'
+          : 'Upgrade to Enterprise for unlimited messages',
+      });
+    }
+
+    // Gather live ATS context
+    const context = await gatherContext(organizationId);
+
+    // Build messages
+    const systemMessage = [
+      SYSTEM_PROMPT,
+      '',
+      `User: ${user.firstName} ${user.lastName} (${user.role})`,
+      `Organization: ${user.organization.name}`,
+      `Plan: ${tier}`,
+      `Allowed features: ${planConfig.features.join(', ')}`,
+      '',
+      '--- LIVE ATS DATA ---',
+      context.summary,
+    ].join('\n');
+
+    const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
+      { role: 'system', content: systemMessage },
+    ];
+
+    // Include up to 10 messages of history for context
+    const trimmedHistory = history.slice(-10);
+    for (const msg of trimmedHistory) {
+      if (msg.role === 'user' || msg.role === 'assistant') {
+        messages.push({ role: msg.role, content: msg.content });
+      }
+    }
+
+    messages.push({ role: 'user', content: message });
+
+    // Call Groq
+    if (!env.GROQ_API_KEY) {
+      return reply.send({
+        reply: "I'm currently unavailable — the AI service hasn't been configured yet. Please contact your administrator.",
+        remaining: rateCheck.remaining,
+        limit: rateCheck.limit,
+        tier,
+      });
+    }
+
+    try {
+      const groq = new Groq({ apiKey: env.GROQ_API_KEY });
+      const completion = await groq.chat.completions.create({
+        model: 'llama-3.1-8b-instant',
+        messages,
+        temperature: 0.6,
+        max_tokens: 800,
+      });
+
+      const aiReply = completion.choices[0]?.message?.content?.trim() || "I couldn't generate a response. Please try again.";
+
+      return reply.send({
+        reply: aiReply,
+        remaining: rateCheck.remaining,
+        limit: rateCheck.limit,
+        tier,
+      });
+    } catch (err) {
+      console.error('VealAI chat error:', err);
+      return reply.status(500).send({
+        error: 'Failed to generate response',
+        reply: "Sorry, I'm having trouble right now. Please try again in a moment.",
+        remaining: rateCheck.remaining,
+        limit: rateCheck.limit,
+        tier,
+      });
+    }
+  });
+
+  // GET /api/chat/status — Check usage and plan limits
+  app.get('/status', async (request, reply) => {
+    const { userId, organizationId } = request.user!;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { organization: { select: { subscriptionTier: true } } },
+    });
+
+    if (!user) return reply.status(401).send({ error: 'User not found' });
+
+    const tier = user.organization.subscriptionTier;
+    const planConfig = PLAN_LIMITS[tier] || PLAN_LIMITS.STARTER;
+    const today = new Date().toISOString().slice(0, 10);
+    const bucket = usageBuckets.get(`${userId}:${today}`);
+    const used = bucket?.date === today ? bucket.count : 0;
+    const limit = planConfig.dailyMessages;
+
+    return reply.send({
+      tier,
+      features: planConfig.features,
+      daily: {
+        used,
+        limit: limit === -1 ? 'unlimited' : limit,
+        remaining: limit === -1 ? 'unlimited' : Math.max(0, limit - used),
+      },
+    });
+  });
+}

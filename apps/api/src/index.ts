@@ -14,6 +14,7 @@ import { analyticsRoutes } from './routes/analytics.js';
 import { communicationsRoutes } from './routes/communications.js';
 import { careersRoutes } from './routes/careers.js';
 import { aiRoutes } from './routes/ai.js';
+import { chatRoutes } from './routes/chat.js';
 
 const app = Fastify({
   logger: env.NODE_ENV === 'development',
@@ -43,6 +44,7 @@ await app.register(analyticsRoutes, { prefix: '/api/analytics' });
 await app.register(communicationsRoutes, { prefix: '/api/communications' });
 await app.register(careersRoutes, { prefix: '/api/careers' });
 await app.register(aiRoutes, { prefix: '/api/ai' });
+await app.register(chatRoutes, { prefix: '/api/chat' });
 
 // Health check
 app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
