@@ -86,6 +86,14 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
+    if (!stats) return;
+    // Skip AI insights request when there's no data to analyze
+    const hasData = stats.activeJobs > 0 || stats.totalApplicants > 0;
+    if (!hasData) {
+      setInsights([]);
+      setInsightsLoading(false);
+      return;
+    }
     async function loadInsights() {
       try {
         const res = await api.get('/ai/insights');
@@ -97,7 +105,7 @@ export default function Dashboard() {
       }
     }
     loadInsights();
-  }, []);
+  }, [stats]);
 
   if (loading) {
     return (

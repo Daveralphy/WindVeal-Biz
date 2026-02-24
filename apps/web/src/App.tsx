@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import AppLayout from '@/components/layout/AppLayout';
 import AdminLayout from '@/components/layout/AdminLayout';
+import MobileGuard from '@/components/layout/MobileGuard';
 import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import Dashboard from '@/pages/Dashboard';
@@ -77,7 +78,9 @@ export default function App() {
         <Route
           element={
             <ProtectedRoute>
-              <AppLayout />
+              <MobileGuard>
+                <AppLayout />
+              </MobileGuard>
             </ProtectedRoute>
           }
         >
@@ -97,7 +100,9 @@ export default function App() {
         <Route
           element={
             <SuperAdminRoute>
-              <AdminLayout />
+              <MobileGuard>
+                <AdminLayout />
+              </MobileGuard>
             </SuperAdminRoute>
           }
         >

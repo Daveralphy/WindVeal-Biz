@@ -10,6 +10,16 @@ export async function aiRoutes(app: FastifyInstance) {
   app.get('/insights', async (request) => {
     const { organizationId } = request.user!;
 
+    // Quick check: skip AI call if org has no jobs or applicants
+    const [jobCount, applicantCount] = await Promise.all([
+      prisma.job.count({ where: { organizationId } }),
+      prisma.applicant.count({ where: { organizationId } }),
+    ]);
+
+    if (jobCount === 0 && applicantCount === 0) {
+      return { insights: [], aiEnabled: true, skipped: true };
+    }
+
     // Gather context data for AI
     const [applicantsWithScores, activeJobs, pendingReview] = await Promise.all([
       prisma.applicant.findMany({
