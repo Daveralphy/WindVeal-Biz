@@ -1,0 +1,535 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ──────────────────────────────────────────────
+
+enum UserRole {
+  ADMIN
+  RECRUITER
+  HIRING_MANAGER
+  INTERVIEWER
+  VIEWER
+}
+
+enum JobStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  CLOSED
+}
+
+enum JobType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+  VOLUNTEER
+}
+
+enum ApplicantSource {
+  PORTAL
+  MANUAL
+  IMPORTED
+  REFERRAL
+}
+
+enum InterviewType {
+  PHONE_SCREEN
+  VIDEO_CALL
+  IN_PERSON
+  TECHNICAL_ASSESSMENT
+  PANEL
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum OfferStatus {
+  DRAFT
+  SENT
+  VIEWED
+  SIGNED
+  DECLINED
+  EXPIRED
+}
+
+enum SubscriptionTier {
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum NotificationType {
+  APPLICATION_RECEIVED
+  STAGE_CHANGED
+  INTERVIEW_SCHEDULED
+  INTERVIEW_CONFIRMED
+  INTERVIEW_CANCELLED
+  SCORECARD_SUBMITTED
+  COMMENT_ADDED
+  AI_ANALYSIS_COMPLETE
+  AI_CROSS_ROLE
+  OFFER_VIEWED
+  OFFER_SIGNED
+  OFFER_DECLINED
+  ONBOARDING_ITEM_COMPLETE
+  TEAM_MEMBER_JOINED
+  SUBSCRIPTION_EXPIRING
+  DEADLINE_REACHED
+}
+
+// ─── Organization ───────────────────────────────────────
+
+model Organization {
+  id               String           @id @default(cuid())
+  name             String
+  slug             String           @unique
+  logoUrl          String?
+  brandColor       String?          @default("#0D0D0D")
+  industry         String?
+  companySize      String?
+  website          String?
+  country          String?          @default("Nigeria")
+  subscriptionTier SubscriptionTier @default(STARTER)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  users            User[]
+  jobs             Job[]
+  applicants       Applicant[]
+  auditLogs        AuditLog[]
+  emailTemplates   EmailTemplate[]
+  invitations      TeamInvitation[]
+
+  @@map("organizations")
+}
+
+// ─── User ───────────────────────────────────────────────
+
+model User {
+  id             String       @id @default(cuid())
+  organizationId String
+  email          String       @unique
+  username       String?      @unique
+  passwordHash   String
+  firstName      String
+  lastName       String
+  jobTitle       String?
+  phone          String?
+  avatarUrl      String?
+  role           UserRole     @default(RECRUITER)
+  isActive       Boolean      @default(true)
+  emailVerified  Boolean      @default(false)
+  lastLoginAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  refreshTokens  RefreshToken[]
+  createdJobs    Job[]           @relation("CreatedByUser")
+  assignedJobs   JobAssignment[]
+  stageMovements StageHistory[]  @relation("MovedByUser")
+  scorecards     Scorecard[]
+  sentEmails     EmailLog[]      @relation("SentByUser")
+  notifications  Notification[]
+  auditLogs      AuditLog[]      @relation("ActorUser")
+  notes          ApplicantNote[]
+
+  @@index([organizationId])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ─── Jobs ───────────────────────────────────────────────
+
+model Job {
+  id                  String    @id @default(cuid())
+  organizationId      String
+  title               String
+  department          String?
+  type                JobType   @default(FULL_TIME)
+  location            String?
+  salaryMin           Int?
+  salaryMax           Int?
+  showSalary          Boolean   @default(false)
+  description         String
+  responsibilities    String?
+  requirements        String
+  niceToHave          String?
+  status              JobStatus @default(DRAFT)
+  deadline            DateTime?
+  aiScreeningEnabled  Boolean   @default(true)
+  aiScoreThreshold    Int?      @default(50)
+  visibility          String    @default("PORTAL")  // PORTAL, INTERNAL, DRAFT
+  createdById         String
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  organization        Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy           User            @relation("CreatedByUser", fields: [createdById], references: [id])
+
+  pipelineStages      PipelineStage[]
+  applicants          Applicant[]
+  applicationForm     ApplicationForm?
+  interviews          Interview[]
+  offers              Offer[]
+  assignments         JobAssignment[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@map("jobs")
+}
+
+model JobAssignment {
+  id     String @id @default(cuid())
+  jobId  String
+  userId String
+
+  job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, userId])
+  @@map("job_assignments")
+}
+
+// ─── Pipeline Stages ────────────────────────────────────
+
+model PipelineStage {
+  id              String  @id @default(cuid())
+  jobId           String
+  name            String
+  order           Int
+  color           String? @default("#6B7280")
+  automationRules Json?   // JSON for stage automation config
+
+  job             Job     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  applicants      Applicant[]    @relation("CurrentStage")
+  historyFrom     StageHistory[] @relation("FromStage")
+  historyTo       StageHistory[] @relation("ToStage")
+
+  @@unique([jobId, order])
+  @@index([jobId])
+  @@map("pipeline_stages")
+}
+
+// ─── Application Form ───────────────────────────────────
+
+model ApplicationForm {
+  id     String @id @default(cuid())
+  jobId  String @unique
+  fields Json   // Array of field configurations
+
+  job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("application_forms")
+}
+
+// ─── Applicants ─────────────────────────────────────────
+
+model Applicant {
+  id              String          @id @default(cuid())
+  organizationId  String
+  jobId           String
+  firstName       String
+  lastName        String
+  email           String
+  phone           String?
+  linkedinUrl     String?
+  currentStageId  String
+  source          ApplicantSource @default(PORTAL)
+  tags            String[]        @default([])
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job             Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  currentStage    PipelineStage     @relation("CurrentStage", fields: [currentStageId], references: [id])
+
+  applicationData ApplicationData[]
+  uploadedFiles   UploadedFile[]
+  stageHistory    StageHistory[]
+  aiReport        AIReport?
+  interviews      Interview[]
+  scorecards      Scorecard[]
+  emailLogs       EmailLog[]
+  notes           ApplicantNote[]
+  offer           Offer?
+
+  @@index([organizationId])
+  @@index([jobId])
+  @@index([currentStageId])
+  @@map("applicants")
+}
+
+model ApplicationData {
+  id          String @id @default(cuid())
+  applicantId String
+  fieldId     String
+  value       Json
+
+  applicant   Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@index([applicantId])
+  @@map("application_data")
+}
+
+model UploadedFile {
+  id          String   @id @default(cuid())
+  applicantId String
+  type        String   // resume, video, document, cover_letter
+  fileName    String
+  storageUrl  String
+  mimeType    String?
+  fileSize    Int?
+  createdAt   DateTime @default(now())
+
+  applicant   Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@index([applicantId])
+  @@map("uploaded_files")
+}
+
+// ─── Stage History ──────────────────────────────────────
+
+model StageHistory {
+  id          String   @id @default(cuid())
+  applicantId String
+  fromStageId String?
+  toStageId   String
+  movedById   String?
+  movedAt     DateTime @default(now())
+  note        String?
+
+  applicant   Applicant      @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  fromStage   PipelineStage? @relation("FromStage", fields: [fromStageId], references: [id])
+  toStage     PipelineStage  @relation("ToStage", fields: [toStageId], references: [id])
+  movedBy     User?          @relation("MovedByUser", fields: [movedById], references: [id])
+
+  @@index([applicantId])
+  @@map("stage_history")
+}
+
+// ─── AI Reports ─────────────────────────────────────────
+
+model AIReport {
+  id                   String   @id @default(cuid())
+  applicantId          String   @unique
+  overallScore         Int      // 0-100
+  dimensionScores      Json     // { skillsMatch: 85, careerTrajectory: 70, ... }
+  strengths            Json     // string[]
+  concerns             Json     // string[]
+  recommendation       String   // ADVANCE, REQUEST_INFO, CONSIDER_OTHER, REJECT
+  crossRoleSuggestions Json?    // [{ jobId, matchPercent }]
+  confidenceLevel      String   // HIGH, MEDIUM, LOW
+  generatedAt          DateTime @default(now())
+
+  applicant            Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@map("ai_reports")
+}
+
+// ─── Interviews ─────────────────────────────────────────
+
+model Interview {
+  id              String          @id @default(cuid())
+  applicantId     String
+  jobId           String
+  type            InterviewType
+  scheduledAt     DateTime
+  durationMinutes Int             @default(60)
+  location        String?
+  meetingLink     String?
+  interviewerIds  String[]        @default([])
+  status          InterviewStatus @default(SCHEDULED)
+  notes           String?
+  candidateNotes  String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  applicant       Applicant   @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  job             Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  scorecards      Scorecard[]
+
+  @@index([applicantId])
+  @@index([jobId])
+  @@index([scheduledAt])
+  @@map("interviews")
+}
+
+// ─── Scorecards ─────────────────────────────────────────
+
+model Scorecard {
+  id             String   @id @default(cuid())
+  interviewId    String
+  reviewerId     String
+  applicantId    String
+  responses      Json     // Array of { criterionName, rating, note }
+  recommendation String?  // STRONG_YES, YES, NEUTRAL, NO, STRONG_NO
+  submittedAt    DateTime @default(now())
+
+  interview      Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  reviewer       User      @relation(fields: [reviewerId], references: [id])
+  applicant      Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@index([interviewId])
+  @@map("scorecards")
+}
+
+// ─── Applicant Notes ────────────────────────────────────
+
+model ApplicantNote {
+  id          String   @id @default(cuid())
+  applicantId String
+  authorId    String
+  content     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  applicant   Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  author      User      @relation(fields: [authorId], references: [id])
+
+  @@index([applicantId])
+  @@map("applicant_notes")
+}
+
+// ─── Email ──────────────────────────────────────────────
+
+model EmailTemplate {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  subject        String
+  body           String
+  isSystem       Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  emailLogs      EmailLog[]
+
+  @@index([organizationId])
+  @@map("email_templates")
+}
+
+model EmailLog {
+  id          String    @id @default(cuid())
+  applicantId String
+  templateId  String?
+  subject     String
+  body        String
+  sentById    String
+  sentAt      DateTime  @default(now())
+  openedAt    DateTime?
+  clickedAt   DateTime?
+
+  applicant   Applicant      @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  template    EmailTemplate? @relation(fields: [templateId], references: [id])
+  sentBy      User           @relation("SentByUser", fields: [sentById], references: [id])
+
+  @@index([applicantId])
+  @@map("email_logs")
+}
+
+// ─── Offers ─────────────────────────────────────────────
+
+model Offer {
+  id          String      @id @default(cuid())
+  applicantId String      @unique
+  jobId       String
+  status      OfferStatus @default(DRAFT)
+  salary      Int?
+  startDate   DateTime?
+  conditions  String?
+  documentUrl String?
+  generatedAt DateTime    @default(now())
+  sentAt      DateTime?
+  viewedAt    DateTime?
+  signedAt    DateTime?
+  declinedAt  DateTime?
+
+  applicant   Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  job         Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("offers")
+}
+
+// ─── Notifications ──────────────────────────────────────
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  payload   Json
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([read])
+  @@map("notifications")
+}
+
+// ─── Team Invitations ───────────────────────────────────
+
+model TeamInvitation {
+  id             String       @id @default(cuid())
+  organizationId String
+  email          String
+  role           UserRole     @default(RECRUITER)
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("team_invitations")
+}
+
+// ─── Audit Log ──────────────────────────────────────────
+
+model AuditLog {
+  id             String       @id @default(cuid())
+  organizationId String
+  actorId        String?
+  actionType     String
+  targetEntity   String
+  targetId       String?
+  oldValue       Json?
+  newValue       Json?
+  ipAddress      String?
+  createdAt      DateTime     @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor          User?        @relation("ActorUser", fields: [actorId], references: [id])
+
+  @@index([organizationId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
