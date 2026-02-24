@@ -12,10 +12,20 @@
 
 - **AI Resume Parsing** - Automatically extract candidate information from PDFs and DOCX files
 - **Smart Candidate Ranking** - AI scores candidates against job requirements
-- **Visual Pipeline** - Drag-and-drop candidates through hiring stages
+- **AI Chat Assistant** - Built-in AI-powered chat for recruitment insights
+- **AI Dashboard Insights** - Intelligent summaries of hiring activity and trends
+- **Visual Pipeline** - Drag-and-drop candidates through customizable hiring stages
+- **Interview Scheduling** - Schedule and track interviews with scorecards
+- **Career Portal** - Public-facing career page for organizations
+- **Analytics Dashboard** - Track hiring metrics and team performance
+- **Team Collaboration** - Invite team members, assign roles, and collaborate on hiring
+- **Communications Hub** - Centralized email and messaging for candidates
 - **Multi-tenant SaaS** - Each company gets isolated, secure workspace
-- **Role-based Access** - Admin, Recruiter, and Hiring Manager permissions
-- **Freemium Model** - Free plan with upgrade options in Naira pricing
+- **Role-based Access** - Admin, Recruiter, Hiring Manager, Interviewer, and Viewer roles
+- **Super Admin Panel** - Platform-wide management for organizations, users, AI usage, and analytics
+- **Freemium Model** - Starter, Professional, and Enterprise tiers with Naira pricing
+- **Dark Mode** - Full light/dark/system theme support
+- **Mobile Guard** - Desktop-required notice for optimal experience
 - **Nigerian-focused** - Built with African business realities in mind
 
 ---
@@ -47,7 +57,7 @@ Step 5: Recruiter sees dashboard:
         ⭐ Jane - 87%
         ↓
 Step 6: Drag candidates between stages
-        Add notes, track progress
+        Add notes, schedule interviews, track progress
         ↓
 Step 7: Make hiring decisions faster and smarter!
 ```
@@ -63,7 +73,7 @@ VealBiz is built from 5 main pieces that work together:
 | **Frontend** | Website you see & click | React + TypeScript | `apps/web/` |
 | **Backend** | Brain that processes everything | Node.js + Fastify | `apps/api/` |
 | **Database** | Stores all data permanently | PostgreSQL | Docker container |
-| **AI Service** | Reads & scores resumes | Groq API (cloud) | https://groq.com |
+| **AI Service** | Reads & scores resumes, chat | Groq API (cloud) | https://groq.com |
 | **File Storage** | Saves resume PDFs | Local folder | `apps/api/uploads/` |
 
 ### **How They Talk to Each Other**
@@ -76,7 +86,7 @@ VealBiz is built from 5 main pieces that work together:
                                                      ▼
                                             ┌──────────────┐
                                             │   BACKEND    │
-                                            │  (Node.js)   │
+                                            │  (Fastify)   │
                                             └──────────────┘
                                                      │
                         ┌────────────────────────────┼────────────────┐
@@ -95,26 +105,34 @@ VealBiz is built from 5 main pieces that work together:
 ## 📋 Tech Stack
 
 ### Frontend
-- **React 18** + TypeScript
-- **Vite** - Lightning fast build tool
-- **Tailwind CSS** - Utility-first styling
-- **Shadcn/ui** - Beautiful, accessible components
-- **Zustand** - Lightweight state management
-- **React Hook Form** + Zod - Form handling and validation
+- **React 18** + TypeScript 5.7
+- **Vite 6** - Lightning fast build tool
+- **Tailwind CSS 3.4** - Utility-first styling
+- **Radix UI** - Accessible, unstyled component primitives
+- **Lucide React** - Beautiful icon library
+- **Zustand 5** - Lightweight state management
+- **React Hook Form** + **Zod** - Form handling and validation
+- **Axios** - HTTP client
+- **class-variance-authority** + **clsx** + **tailwind-merge** - Styling utilities
+- **React Router DOM 7** - Client-side routing
 
 ### Backend
-- **Node.js 18+** + TypeScript
-- **Fastify** - High-performance web framework
-- **Prisma** - Type-safe database ORM
-- **PostgreSQL** - Primary database
-- **JWT** - Authentication
-- **Groq API** - AI-powered resume parsing and ranking
+- **Node.js 18+** + TypeScript 5.7
+- **Fastify 5** - High-performance web framework
+- **Prisma 6** - Type-safe database ORM
+- **PostgreSQL 16** - Primary database
+- **JWT** + **bcrypt** - Authentication & password hashing
+- **Groq SDK** - AI-powered resume parsing, ranking, and chat
+- **pdf-parse** - PDF text extraction
+- **Zod** - Input validation
+- **@fastify/multipart** - File upload handling
+- **@fastify/cookie** - Cookie management
+- **@fastify/cors** - Cross-origin support
 
-### Infrastructure
-- **Vercel** - Frontend hosting
-- **Render/Railway** - Backend hosting
-- **Neon** - Serverless PostgreSQL
-- **Cloudflare R2** - File storage (production)
+### Development Tools
+- **Docker Compose** - PostgreSQL 16 + Redis 7 containers
+- **concurrently** - Parallel dev server execution
+- **tsx** - TypeScript execution for backend dev
 
 ---
 
@@ -126,72 +144,133 @@ VealBiz has **5 main components** working together:
 What users see and click on. Built with React.
 
 ```
-apps/web/
-├── src/
-│   ├── pages/              # Different screens
-│   │   ├── Login.tsx       # Login page
-│   │   ├── Dashboard.tsx   # Main dashboard
-│   │   ├── Jobs.tsx        # List of jobs
-│   │   └── Candidates.tsx  # Candidate pipeline
-│   │
-│   ├── components/         # Reusable UI pieces
-│   │   ├── JobCard.tsx     # Shows one job
-│   │   └── CandidateCard.tsx  # Shows one candidate
-│   │
-│   └── lib/
-│       └── api.ts          # Talks to backend
+apps/web/src/
+├── pages/                     # Application screens
+│   ├── Login.tsx              # Login page
+│   ├── Register.tsx           # Registration page
+│   ├── Dashboard.tsx          # Main dashboard with AI insights
+│   ├── Jobs.tsx               # Job listing & management
+│   ├── Applicants.tsx         # Applicant management
+│   ├── Pipeline.tsx           # Visual candidate pipeline
+│   ├── Interviews.tsx         # Interview scheduling
+│   ├── Communications.tsx     # Email & messaging hub
+│   ├── Careers.tsx            # Public career page management
+│   ├── Analytics.tsx          # Hiring analytics dashboard
+│   ├── Team.tsx               # Team management & invitations
+│   ├── Settings.tsx           # User settings (profile, theme, security)
+│   └── admin/                 # Super admin pages
+│       ├── AdminDashboard.tsx
+│       ├── AdminOrganizations.tsx
+│       ├── AdminUsers.tsx
+│       ├── AdminAIUsage.tsx
+│       ├── AdminAnalytics.tsx
+│       └── AdminSettings.tsx
 │
-├── package.json            # Frontend dependencies
-└── .env                    # Frontend secrets (API URL)
+├── components/
+│   ├── layout/
+│   │   ├── AppLayout.tsx      # User sidebar layout with profile popover
+│   │   ├── AdminLayout.tsx    # Admin sidebar layout
+│   │   └── MobileGuard.tsx    # Desktop-required screen for mobile
+│   ├── auth/
+│   │   └── AuthLayout.tsx     # Auth page wrapper
+│   └── ai/
+│       └── VealAIChat.tsx     # AI chat assistant component
+│
+├── contexts/
+│   └── ThemeContext.tsx        # Light/dark/system theme provider
+│
+├── hooks/
+│   └── useAdminMetadata.ts    # Admin metadata hook
+│
+├── lib/
+│   ├── api.ts                 # Axios instance & API client
+│   └── utils.ts               # Utility functions
+│
+├── App.tsx                    # Route definitions & auth guards
+├── main.tsx                   # Entry point
+└── index.css                  # Tailwind CSS base styles
 ```
-
-**What it does:** Login page → Dashboard → View jobs → Upload resumes → See AI scores
 
 ---
 
 ### **2. Backend (The Brain) - `apps/api/`**
-The server that processes everything. Built with Node.js.
+The server that processes everything. Built with Fastify.
 
 ```
 apps/api/
 ├── src/
-│   ├── routes/             # API endpoints (URLs)
-│   │   ├── auth.ts         # /api/auth/login, /api/auth/register
-│   │   ├── jobs.ts         # /api/jobs - create, list jobs
-│   │   └── candidates.ts   # /api/candidates - upload resumes
+│   ├── index.ts               # Server entry point & route registration
 │   │
-│   ├── services/           # Core business logic
-│   │   ├── ai/
-│   │   │   └── groq.ts     # Talks to Groq AI
-│   │   ├── resume-parser.ts  # Extracts text from PDFs
-│   │   └── auth.ts         # Password checking, JWT tokens
+│   ├── routes/                # API endpoints
+│   │   ├── auth.ts            # /api/auth - register, login, logout, refresh, change-password
+│   │   ├── jobs.ts            # /api/jobs - CRUD for job postings
+│   │   ├── applicants.ts      # /api/applicants - applicant management & resume upload
+│   │   ├── dashboard.ts       # /api/dashboard - dashboard stats
+│   │   ├── interviews.ts      # /api/interviews - interview scheduling
+│   │   ├── team.ts            # /api/team - team member management
+│   │   ├── notifications.ts   # /api/notifications - user notifications
+│   │   ├── analytics.ts       # /api/analytics - hiring analytics data
+│   │   ├── communications.ts  # /api/communications - email & messaging
+│   │   ├── careers.ts         # /api/careers - public career portal
+│   │   ├── ai.ts              # /api/ai - AI insights generation
+│   │   ├── chat.ts            # /api/chat - AI chat conversations
+│   │   └── admin.ts           # /api/admin - super admin platform management
 │   │
-│   └── middleware/
-│       └── auth.ts         # Checks if user is logged in
+│   ├── services/
+│   │   └── groqService.ts     # Groq AI integration (parsing, ranking, chat)
+│   │
+│   ├── middleware/
+│   │   ├── auth.ts            # JWT authentication middleware
+│   │   └── superAdmin.ts      # Super admin authorization check
+│   │
+│   ├── config/
+│   │   ├── env.ts             # Environment variable validation
+│   │   └── seedData.ts        # Seed data configuration
+│   │
+│   └── lib/
+│       ├── prisma.ts          # Prisma client instance
+│       └── validation.ts      # Shared validation schemas
 │
 ├── prisma/
-│   └── schema.prisma       # Database blueprint (tables)
+│   ├── schema.prisma          # Database schema (all models & enums)
+│   └── seed.ts                # Database seeder (plans, admin, platform org)
 │
-├── uploads/                # Where resume PDFs are saved
-├── package.json            # Backend dependencies
-└── .env                    # Backend secrets (API keys, DB password)
+└── uploads/                   # Resume file storage
 ```
-
-**What it does:** 
-- Receives resume → Extracts text → Sends to AI → Gets score → Saves to database → Sends back to frontend
 
 ---
 
 ### **3. Database (The Memory) - PostgreSQL**
 Where all data is stored permanently. Runs in Docker.
 
-**Tables:**
-- `organizations` - Companies using VealBiz (Acme Corp, Tech Startup, etc.)
-- `users` - People who log in (john@acme.com, jane@acme.com)
-- `jobs` - Job postings (Frontend Developer, Backend Engineer)
-- `candidates` - People who applied (with resumes, AI scores, stages)
+**Core Tables:**
+| Table | Purpose |
+|-------|---------|
+| `subscription_plans` | Starter, Professional, Enterprise tiers |
+| `organizations` | Companies using VealBiz |
+| `users` | Team members with roles |
+| `jobs` | Job postings with status & requirements |
+| `job_assignments` | User-to-job assignments |
+| `pipeline_stages` | Custom pipeline stages per job |
+| `applicants` | Candidates with source tracking |
+| `application_data` | Custom application form responses |
+| `uploaded_files` | Resume PDFs and documents |
+| `stage_history` | Candidate stage movement log |
+| `ai_reports` | AI scoring results & recommendations |
+| `interviews` | Scheduled interviews |
+| `scorecards` | Interview evaluation scorecards |
+| `applicant_notes` | Recruiter notes on candidates |
+| `email_templates` | Reusable email templates |
+| `email_logs` | Sent email tracking |
+| `offers` | Job offer management |
+| `notifications` | User notification system |
+| `team_invitations` | Team member invitations |
+| `audit_logs` | Activity audit trail |
+| `ai_usage_logs` | AI feature usage tracking |
+| `refresh_tokens` | JWT refresh token storage |
+| `password_reset_tokens` | Password reset flow |
 
-**Accessed through:** Prisma (a tool that makes database queries easy and safe)
+**Accessed through:** Prisma ORM (type-safe queries with auto-generated client)
 
 ---
 
@@ -204,8 +283,8 @@ Input:  "John Smith, 5 years React experience..."
 Output: { score: 95, summary: "Excellent match", skills: [...] }
 ```
 
-**Where it lives:** https://api.groq.com (cloud service)  
-**Cost:** Free (14,400 requests/day)
+**Where it lives:** https://api.groq.com (cloud service)
+**Cost:** Free tier (14,400 requests/day)
 
 ---
 
@@ -213,10 +292,17 @@ Output: { score: 95, summary: "Excellent match", skills: [...] }
 
 ```
 vealbiz/
-├── package.json            # Root: Lists all tools needed
-├── docker-compose.yml      # Starts PostgreSQL in Docker
-├── .gitignore              # Don't upload these files to GitHub
-└── README.md               # This file you're reading
+├── package.json            # Root: workspaces, scripts, dev tools
+├── docker-compose.yml      # PostgreSQL 16 + Redis 7 containers
+├── tsconfig.json           # Root TypeScript config
+├── tailwind.config.js      # Tailwind CSS configuration
+├── postcss.config.js       # PostCSS configuration
+├── vite.config.ts          # Vite build & dev server config
+├── nginx.conf              # Nginx config (development)
+├── nginx.prod.conf         # Nginx config (production)
+├── docker-compose.prod.yml # Production Docker setup
+├── Makefile                # Build automation commands
+└── README.md               # This file
 ```
 
 ---
@@ -224,25 +310,42 @@ vealbiz/
 ## 📁 Complete Folder Structure
 
 ```
-vealbiz/                        ← Your project folder
+vealbiz/
 │
-├── apps/                       ← The actual applications
-│   ├── web/                    ← FRONTEND (React website)
-│   │   ├── src/                ← Your React code
-│   │   ├── package.json        ← Frontend tools list
-│   │   └── .env                ← Frontend config (API URL)
+├── apps/
+│   ├── web/                       ← FRONTEND (React + Vite)
+│   │   ├── src/
+│   │   │   ├── pages/             ← 12 user pages + 6 admin pages
+│   │   │   ├── components/        ← Layout, auth, AI components
+│   │   │   ├── contexts/          ← Theme context (light/dark/system)
+│   │   │   ├── hooks/             ← Custom hooks (admin metadata)
+│   │   │   ├── lib/               ← API client, utilities
+│   │   │   ├── App.tsx            ← Routes & auth guards
+│   │   │   └── main.tsx           ← Entry point
+│   │   ├── public/                ← Static assets
+│   │   ├── package.json
+│   │   └── vite.config.ts
 │   │
-│   └── api/                    ← BACKEND (Node.js server)
-│       ├── src/                ← Your server code
-│       ├── prisma/             ← Database schema
-│       ├── uploads/            ← Resume files stored here
-│       ├── package.json        ← Backend tools list
-│       └── .env                ← Backend config (secrets, API keys)
+│   └── api/                       ← BACKEND (Fastify + Prisma)
+│       ├── src/
+│       │   ├── routes/            ← 13 route modules
+│       │   ├── services/          ← Groq AI service
+│       │   ├── middleware/        ← Auth & super admin guards
+│       │   ├── config/            ← Env validation, seed data
+│       │   ├── lib/               ← Prisma client, validation
+│       │   └── index.ts           ← Server entry point
+│       ├── prisma/
+│       │   ├── schema.prisma      ← 23 database models
+│       │   └── seed.ts            ← Database seeder
+│       └── uploads/               ← Resume file storage
 │
-├── package.json                ← Root config (manages both apps)
-├── docker-compose.yml          ← Database setup
-├── .gitignore                  ← Files to not upload
-└── README.md                   ← Instructions (this file)
+├── packages/
+│   └── shared/                    ← Shared TypeScript types
+│       └── src/types.ts
+│
+├── package.json                   ← Root workspaces config
+├── docker-compose.yml             ← Dev database containers
+└── README.md                      ← This file
 ```
 
 ---
@@ -254,7 +357,7 @@ vealbiz/                        ← Your project folder
 - **Node.js** 18 or newer ([Download here](https://nodejs.org))
 - **Docker Desktop** ([Download here](https://www.docker.com/products/docker-desktop)) - For running PostgreSQL
 - **Code Editor** - VS Code recommended ([Download here](https://code.visualstudio.com/))
-- **Groq API Key** - Free account at [console.groq.com](https://console.groq.com)
+- **Groq API Key** (optional) - Free account at [console.groq.com](https://console.groq.com)
 
 ### Installation (Step by Step)
 
@@ -267,7 +370,7 @@ cd vealbiz
 
 **2. Install all dependencies**
 
-This downloads all the tools and libraries needed (React, Node.js packages, etc.)
+This downloads all the tools and libraries needed (React, Fastify, Prisma, etc.)
 
 ```bash
 npm install
@@ -275,7 +378,7 @@ npm install
 
 This might take 2-3 minutes. You'll see a progress bar.
 
-**3. Get your Groq API key**
+**3. Get your Groq API key (optional - for AI features)**
 
 - Go to https://console.groq.com
 - Sign up (it's free)
@@ -295,8 +398,11 @@ DATABASE_URL="postgresql://vealbiz_user:vealbiz_password@localhost:5432/vealbiz"
 JWT_SECRET="your-random-secret-here-make-it-long"
 REFRESH_TOKEN_SECRET="another-random-secret"
 
-# Groq AI API key (paste your key here)
+# Groq AI API key (optional - paste your key here for AI features)
 GROQ_API_KEY="gsk_your_key_from_groq_console"
+
+# Super admin password (optional - set for initial super admin account)
+SUPER_ADMIN_PASSWORD="SuperAdmin123!"
 
 # Server settings
 PORT=8000
@@ -329,12 +435,13 @@ You should see:
 
 **6. Set up database tables**
 
-This creates all the tables (organizations, users, jobs, candidates, etc.)
+This creates all the tables and seeds initial data (subscription plans + super admin account).
 
 ```bash
 cd apps/api
-npx prisma migrate dev --name init
+npx prisma db push
 npx prisma generate
+npx prisma db seed
 cd ../..
 ```
 
@@ -356,6 +463,10 @@ Go to: http://localhost:5173
 
 You should see the VealBiz login page! 🎉
 
+**Default Super Admin Login:**
+- Email: `admin@vealbiz.com`
+- Password: `SuperAdmin123!`
+
 ---
 
 ### Troubleshooting
@@ -365,12 +476,12 @@ You should see the VealBiz login page! 🎉
 - Run `docker-compose ps` to check if PostgreSQL is up
 
 **"GROQ_API_KEY is not defined"**
-- Check that you created `apps/api/.env`
-- Make sure you pasted your actual Groq API key
+- AI features are optional. The app works without it.
+- To enable AI, create a free key at https://console.groq.com
 
 **"Port 5173 already in use"**
 - Another app is using that port
-- Kill it: `lsof -ti:5173 | xargs kill` (Mac/Linux)
+- Kill it: `npx kill-port 5173` or restart your terminal
 
 **"npm install" fails**
 - Make sure you have Node.js 18 or newer
@@ -388,7 +499,7 @@ docker-compose up -d
 
 This starts:
 - PostgreSQL on port 5432
-- Redis on port 6379 (optional, for caching)
+- Redis on port 6379
 
 ### Using Local PostgreSQL
 
@@ -401,13 +512,14 @@ CREATE USER vealbiz_user WITH PASSWORD 'your_password';
 GRANT ALL PRIVILEGES ON DATABASE vealbiz TO vealbiz_user;
 ```
 
-3. Update `DATABASE_URL` in `.env`
+3. Update `DATABASE_URL` in `apps/api/.env`
 
-### Run Migrations
+### Push Schema & Seed
 
 ```bash
 cd apps/api
-npx prisma migrate dev
+npx prisma db push
+npx prisma db seed
 ```
 
 ### Prisma Studio (Database GUI)
@@ -423,7 +535,7 @@ Opens at http://localhost:5555
 
 ## 🔑 API Keys Setup
 
-### Groq API (Required)
+### Groq API (Optional - for AI features)
 
 1. Go to https://console.groq.com
 2. Sign up for free account
@@ -436,32 +548,7 @@ Opens at http://localhost:5555
 ### Free Tier Limits
 - 14,400 requests per day
 - 6,000 requests per minute
-- Sufficient for MVP and testing
-
----
-
-## 🧪 Testing
-
-### Run Tests
-
-```bash
-# Backend tests
-cd apps/api
-npm run test
-
-# Frontend tests
-cd apps/web
-npm run test
-
-# E2E tests
-npm run test:e2e
-```
-
-### Test Coverage
-
-```bash
-npm run test:coverage
-```
+- Sufficient for development and small teams
 
 ---
 
@@ -477,48 +564,34 @@ npm run build
 
 ```bash
 # Frontend
-cd apps/web
-npm run build
+npm run build:web
 
 # Backend
-cd apps/api
-npm run build
+npm run build:api
 ```
 
 ---
 
-## 🚀 Deployment
-
-### Frontend (Vercel)
-
-1. Push code to GitHub
-2. Import repository in [Vercel](https://vercel.com)
-3. Set environment variables:
-   - `VITE_API_URL` = your backend URL
-4. Deploy
-
-### Backend (Render)
-
-1. Create new Web Service on [Render](https://render.com)
-2. Connect GitHub repository
-3. Set build command: `cd apps/api && npm install && npm run build`
-4. Set start command: `cd apps/api && npm start`
-5. Add environment variables (see `.env.example`)
-6. Deploy
-
-### Database (Neon)
-
-1. Create database at [Neon](https://neon.tech)
-2. Copy connection string
-3. Update `DATABASE_URL` in production environment
-4. Run migrations:
-   ```bash
-   npx prisma migrate deploy
-   ```
-
----
-
 ## 📚 API Documentation
+
+### Route Prefixes
+
+| Prefix | Description |
+|--------|-------------|
+| `/api/auth` | Authentication (register, login, logout, refresh, change-password) |
+| `/api/jobs` | Job posting CRUD |
+| `/api/applicants` | Applicant management & resume upload |
+| `/api/dashboard` | Dashboard statistics |
+| `/api/interviews` | Interview scheduling & management |
+| `/api/team` | Team member management & invitations |
+| `/api/notifications` | User notifications |
+| `/api/analytics` | Hiring analytics data |
+| `/api/communications` | Email & messaging |
+| `/api/careers` | Public career portal |
+| `/api/ai` | AI-powered insights |
+| `/api/chat` | AI chat conversations |
+| `/api/admin` | Super admin platform management |
+| `/api/health` | Health check endpoint |
 
 ### Authentication
 
@@ -551,7 +624,6 @@ Content-Type: application/json
 ```json
 {
   "accessToken": "eyJhbGc...",
-  "refreshToken": "eyJhbGc...",
   "user": {
     "id": "clx...",
     "email": "admin@acme.com",
@@ -560,6 +632,20 @@ Content-Type: application/json
     "role": "ADMIN",
     "organizationId": "clx..."
   }
+}
+```
+
+> Refresh token is set as an httpOnly cookie (30-day expiry).
+
+**Change Password**
+```bash
+PATCH /api/auth/change-password
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{
+  "currentPassword": "OldPass123!",
+  "newPassword": "NewPass456!"
 }
 ```
 
@@ -587,38 +673,59 @@ GET /api/jobs
 Authorization: Bearer {token}
 ```
 
-### Candidates
+### Applicants
 
 **Upload Resume**
 ```bash
-POST /api/jobs/{jobId}/candidates
+POST /api/applicants
 Authorization: Bearer {token}
 Content-Type: multipart/form-data
 
 {
   "resume": (file),
-  "email": "candidate@email.com" (optional)
+  "jobId": "clx...",
+  "email": "candidate@email.com"
 }
 ```
 
-**Get Candidate Details**
+**Get Applicant Details**
 ```bash
-GET /api/candidates/{candidateId}
+GET /api/applicants/{applicantId}
 Authorization: Bearer {token}
 ```
 
-**Update Candidate Stage**
+### AI Endpoints
+
+**Get AI Insights**
 ```bash
-PUT /api/candidates/{candidateId}/stage
+GET /api/ai/insights
+Authorization: Bearer {token}
+```
+
+**AI Chat**
+```bash
+POST /api/chat
 Authorization: Bearer {token}
 Content-Type: application/json
 
 {
-  "stage": "INTERVIEW"
+  "message": "What are the top candidates for the Frontend Developer role?"
 }
 ```
 
-Full API documentation available at `/api/docs` when running in development mode.
+### Admin Endpoints
+
+**Get Admin Dashboard**
+```bash
+GET /api/admin/dashboard
+Authorization: Bearer {token}  (super admin only)
+```
+
+**List All Organizations**
+```bash
+GET /api/admin/organizations
+Authorization: Bearer {token}  (super admin only)
+```
 
 ---
 
@@ -627,11 +734,9 @@ Full API documentation available at `/api/docs` when running in development mode
 ### Code Style
 
 - **ESLint** for linting
-- **Prettier** for formatting
 - Run before commit:
   ```bash
   npm run lint
-  npm run format
   ```
 
 ### Commit Convention
@@ -644,7 +749,6 @@ fix: resolve resume parsing error
 docs: update API documentation
 style: format code with prettier
 refactor: restructure candidate service
-test: add unit tests for AI ranking
 chore: update dependencies
 ```
 
@@ -661,35 +765,39 @@ refactor/database-schema
 
 1. Create feature branch from `main`
 2. Make changes and commit
-3. Write/update tests
-4. Update documentation
-5. Submit PR with clear description
-6. Wait for review and approval
+3. Update documentation if needed
+4. Submit PR with clear description
+5. Wait for review and approval
 
 ---
 
 ## 🗺️ Roadmap
 
-### MVP (Week 1-3) ✅
+### MVP ✅
 - [x] Authentication & Organizations
 - [x] Job posting management
 - [x] Resume upload & parsing
 - [x] AI candidate ranking
 - [x] Candidate pipeline
+- [x] Dashboard with AI insights
+- [x] Dark mode / theme support
 
-### Phase 2 (Week 4-6)
+### Phase 2 ✅
+- [x] Interview scheduling & scorecards
+- [x] Career page (public job portal)
+- [x] Analytics & reporting dashboard
+- [x] Team collaboration & invitations
+- [x] Communications hub
+- [x] Super admin panel
+- [x] Subscription tier management
+- [x] AI chat assistant
+
+### Phase 3
+- [ ] Email notifications (SMTP integration)
 - [ ] Video interview link analysis
-- [ ] Email notifications
 - [ ] Advanced search & filtering
-- [ ] Team collaboration features
-- [ ] Interview scheduling
-
-### Phase 3 (Week 7-12)
-- [ ] Career page builder (public job board)
-- [ ] Applicant portal
-- [ ] Advanced analytics & reporting
+- [ ] Mobile-responsive design
 - [ ] Integration APIs
-- [ ] Mobile app (React Native)
 
 ### Future
 - [ ] Chrome extension for LinkedIn
@@ -701,20 +809,17 @@ refactor/database-schema
 
 ## 🔐 Security
 
-### Reporting Security Issues
-
-If you discover a security vulnerability, please email security@windveal.com. Do not create public GitHub issues for security vulnerabilities.
-
 ### Security Features
 
 - Passwords hashed with bcrypt (12 rounds)
-- JWT token authentication
+- JWT access token + httpOnly refresh cookie authentication
 - SQL injection prevention (Prisma ORM)
 - XSS protection (React auto-escaping)
-- CSRF tokens
-- Rate limiting
-- File upload validation
-- Role-based access control
+- CORS configuration
+- File upload validation (type & size limits)
+- Role-based access control (5 roles)
+- Super admin authorization layer
+- Input validation with Zod schemas
 
 ---
 
@@ -750,7 +855,8 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for deta
 ## 🙏 Acknowledgments
 
 - [Groq](https://groq.com) for fast, free AI inference
-- [Shadcn/ui](https://ui.shadcn.com) for beautiful components
+- [Radix UI](https://www.radix-ui.com) for accessible component primitives
+- [Lucide](https://lucide.dev) for beautiful icons
 - [Prisma](https://prisma.io) for excellent ORM
 - Nigerian tech community for inspiration
 
@@ -758,7 +864,6 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for deta
 
 ## 📞 Support
 
-- **Documentation:** [docs.vealbiz.com](https://docs.vealbiz.com) (coming soon)
 - **Email:** support@windveal.com
 - **GitHub Issues:** [Create an issue](https://github.com/windveal/vealbiz/issues)
 
@@ -766,9 +871,8 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for deta
 
 ## 📊 Project Status
 
-**Current Version:** 0.1.0 (MVP)  
-**Status:** 🚧 In Development  
-**Last Updated:** February 2026
+**Current Version:** 1.0.0
+**Last Updated:** June 2025
 
 ---
 
@@ -776,36 +880,28 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for deta
 
 ```bash
 # Development
-npm run dev              # Start all services
-npm run dev:web          # Frontend only
-npm run dev:api          # Backend only
+npm run dev              # Start all services (frontend + backend)
+npm run dev:web          # Frontend only (port 5173)
+npm run dev:api          # Backend only (port 8000)
 
 # Database
-npm run db:migrate       # Run migrations
-npm run db:studio        # Open Prisma Studio
-npm run db:seed          # Seed database
+npm run db:migrate       # Run Prisma migrations
+npm run db:studio        # Open Prisma Studio (port 5555)
+npm run db:seed          # Seed database (plans + super admin)
 npm run db:reset         # Reset database
 
-# Testing
-npm run test             # Run all tests
-npm run test:watch       # Watch mode
-npm run test:coverage    # Coverage report
-
 # Building
-npm run build            # Build all
-npm run build:web        # Build frontend
-npm run build:api        # Build backend
+npm run build            # Build all apps
+npm run build:web        # Build frontend only
+npm run build:api        # Build backend only
 
 # Code Quality
-npm run lint             # Lint code
-npm run lint:fix         # Fix linting issues
-npm run format           # Format with Prettier
-npm run type-check       # TypeScript check
+npm run lint             # Lint all code
 
 # Docker
-docker-compose up -d     # Start services
-docker-compose down      # Stop services
-docker-compose logs -f   # View logs
+docker-compose up -d     # Start database containers
+docker-compose down      # Stop containers
+docker-compose logs -f   # View container logs
 ```
 
 ---
