@@ -209,6 +209,7 @@ model Job {
   location            String?
   salaryMin           Int?
   salaryMax           Int?
+  salaryCurrency      String    @default("NGN")
   showSalary          Boolean   @default(false)
   description         String
   responsibilities    String?

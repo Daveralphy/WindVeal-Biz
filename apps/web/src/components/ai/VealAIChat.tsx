@@ -2,6 +2,98 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { X, Send, Sparkles, ArrowUp, Zap, Loader2, AlertCircle } from 'lucide-react';
 import api from '@/lib/api';
 
+function renderMarkdown(text: string): React.ReactNode[] {
+  const lines = text.split('\n');
+  const elements: React.ReactNode[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Headings
+    if (line.startsWith('### ')) {
+      elements.push(<h4 key={i} className="font-semibold mt-2 mb-1">{formatInline(line.slice(4))}</h4>);
+    } else if (line.startsWith('## ')) {
+      elements.push(<h3 key={i} className="font-semibold text-base mt-2 mb-1">{formatInline(line.slice(3))}</h3>);
+    } else if (line.startsWith('# ')) {
+      elements.push(<h2 key={i} className="font-bold text-base mt-2 mb-1">{formatInline(line.slice(2))}</h2>);
+    } else if (line.startsWith('- ') || line.startsWith('* ')) {
+      elements.push(
+        <div key={i} className="flex gap-1.5 ml-1">
+          <span className="mt-0.5">•</span>
+          <span>{formatInline(line.slice(2))}</span>
+        </div>
+      );
+    } else if (/^\d+\.\s/.test(line)) {
+      const match = line.match(/^(\d+)\.\s(.*)/);
+      if (match) {
+        elements.push(
+          <div key={i} className="flex gap-1.5 ml-1">
+            <span className="mt-0.5">{match[1]}.</span>
+            <span>{formatInline(match[2])}</span>
+          </div>
+        );
+      }
+    } else if (line.trim() === '') {
+      elements.push(<div key={i} className="h-1.5" />);
+    } else {
+      elements.push(<p key={i}>{formatInline(line)}</p>);
+    }
+  }
+
+  return elements;
+}
+
+function formatInline(text: string): React.ReactNode {
+  // Process bold, italic, and inline code
+  const parts: React.ReactNode[] = [];
+  let remaining = text;
+  let key = 0;
+
+  while (remaining.length > 0) {
+    // Bold: **text**
+    const boldMatch = remaining.match(/^(.*?)\*\*(.+?)\*\*(.*)/s);
+    // Inline code: `text`
+    const codeMatch = remaining.match(/^(.*?)`(.+?)`(.*)/s);
+    // Italic: *text* (single asterisks, not inside bold)
+    const italicMatch = remaining.match(/^(.*?)(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)(.*)/s);
+
+    // Find earliest match
+    let earliest: { type: string; match: RegExpMatchArray } | null = null;
+    const candidates = [
+      boldMatch && { type: 'bold', match: boldMatch },
+      codeMatch && { type: 'code', match: codeMatch },
+      italicMatch && { type: 'italic', match: italicMatch },
+    ].filter(Boolean) as { type: string; match: RegExpMatchArray }[];
+
+    for (const c of candidates) {
+      if (!earliest || c.match[1].length < earliest.match[1].length) {
+        earliest = c;
+      }
+    }
+
+    if (!earliest) {
+      parts.push(remaining);
+      break;
+    }
+
+    if (earliest.match[1]) {
+      parts.push(earliest.match[1]);
+    }
+
+    if (earliest.type === 'bold') {
+      parts.push(<strong key={key++}>{earliest.match[2]}</strong>);
+    } else if (earliest.type === 'code') {
+      parts.push(<code key={key++} className="bg-vb-bg/50 px-1 py-0.5 rounded text-xs">{earliest.match[2]}</code>);
+    } else {
+      parts.push(<em key={key++}>{earliest.match[2]}</em>);
+    }
+
+    remaining = earliest.match[3];
+  }
+
+  return parts.length === 1 ? parts[0] : <>{parts}</>;
+}
+
 interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -16,9 +108,9 @@ interface ChatStatus {
 }
 
 const QUICK_PROMPTS = [
+  'I want to add a job',
   'How many active jobs do I have?',
   'Summarize my top applicants',
-  'What interviews are coming up?',
   'Show pipeline health overview',
 ];
 
@@ -74,10 +166,39 @@ export default function VealAIChat() {
       const history = messages.map((m) => ({ role: m.role, content: m.content }));
       const res = await api.post('/chat', { message: trimmed, history });
 
+      let reply = res.data.reply as string;
+
+      // Check for job creation command in AI response
+      const jobMatch = reply.match(/<<<CREATE_JOB>>>([\s\S]*?)<<<END_JOB>>>/);
+      if (jobMatch) {
+        try {
+          const jobData = JSON.parse(jobMatch[1].trim());
+          // Remove null/undefined values
+          const cleanData: Record<string, unknown> = {};
+          for (const [k, v] of Object.entries(jobData)) {
+            if (v != null && v !== 'null') cleanData[k] = v;
+          }
+          // Add required defaults
+          if (!cleanData.description) cleanData.description = 'No description provided';
+          if (!cleanData.requirements) cleanData.requirements = 'No requirements specified';
+
+          await api.post('/jobs', cleanData);
+
+          // Remove the raw command from the displayed message
+          reply = reply.replace(/<<<CREATE_JOB>>>[\s\S]*?<<<END_JOB>>>/, '').trim();
+          if (!reply) reply = 'Job created successfully! You can view it on the Jobs page.';
+          else reply += '\n\n✅ Job created successfully!';
+        } catch (jobErr) {
+          console.error('Failed to create job via chat:', jobErr);
+          reply = reply.replace(/<<<CREATE_JOB>>>[\s\S]*?<<<END_JOB>>>/, '').trim();
+          reply += '\n\n❌ Failed to create the job. Please try creating it manually on the Create Job page.';
+        }
+      }
+
       const aiMsg: Message = {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: res.data.reply,
+        content: reply,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, aiMsg]);
@@ -197,13 +318,13 @@ export default function VealAIChat() {
                   className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
+                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                       msg.role === 'user'
-                        ? 'bg-brand text-white rounded-br-md'
+                        ? 'bg-brand text-white rounded-br-md whitespace-pre-wrap'
                         : 'bg-vb-card border border-vb-border text-vb-text rounded-bl-md'
                     }`}
                   >
-                    {msg.content}
+                    {msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content}
                   </div>
                 </div>
               ))

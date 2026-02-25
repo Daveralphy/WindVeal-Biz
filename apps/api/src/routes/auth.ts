@@ -73,13 +73,19 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     const passwordHash = await bcrypt.hash(data.password, 12);
-    const slug = generateSlug(data.organizationName);
+    let slug = generateSlug(data.organizationName);
+
+    // Ensure slug is unique — append short suffix only on collision
+    const existingSlug = await prisma.organization.findUnique({ where: { slug } });
+    if (existingSlug) {
+      slug = slug + '-' + Math.random().toString(36).slice(2, 6);
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       const organization = await tx.organization.create({
         data: {
           name: data.organizationName,
-          slug: slug + '-' + Date.now().toString(36),
+          slug,
           industry: data.industry,
           companySize: data.companySize,
           website: data.website,

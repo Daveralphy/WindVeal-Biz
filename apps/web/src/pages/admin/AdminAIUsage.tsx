@@ -6,16 +6,16 @@ import {
   DollarSign,
   TrendingUp,
   Building2,
+  Calendar,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAdminMetadata } from '@/hooks/useAdminMetadata';
 
 interface AIUsageData {
+  period: string;
   totalRequests: number;
-  requestsThisMonth: number;
-  requestsThisWeek: number;
   failedRequests: number;
-  rateLimitHits: number;
+  successRate: number;
   totalTokensUsed: number;
   estimatedCost: number;
   requestsByType: Record<string, number>;
@@ -27,15 +27,55 @@ interface AIUsageData {
 export default function AdminAIUsage() {
   const [data, setData] = useState<AIUsageData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState<'daily' | 'weekly' | 'monthly' | 'all' | 'range'>('monthly');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const { tiers, tierBadge, tierColor, aiTypeLabel } = useAdminMetadata();
 
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      let url = '/admin/ai-usage-filtered?period=' + period;
+      if (period === 'range' && startDate && endDate) {
+        url += `&startDate=${startDate}&endDate=${endDate}`;
+      }
+      const res = await api.get(url);
+      setData(res.data);
+    } catch (err) {
+      console.error('Failed to load AI usage data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    api
-      .get('/admin/ai-usage')
-      .then((res) => setData(res.data))
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    fetchData();
   }, []);
+
+  const handlePeriodChange = (newPeriod: 'daily' | 'weekly' | 'monthly' | 'all' | 'range') => {
+    setPeriod(newPeriod);
+    setStartDate('');
+    setEndDate('');
+  };
+
+  const handleApplyDateRange = () => {
+    if (startDate && endDate) {
+      setPeriod('range');
+      fetchData();
+    }
+  };
+
+  const handleQuickFilter = (p: 'daily' | 'weekly' | 'monthly' | 'all') => {
+    setPeriod(p);
+    setStartDate('');
+    setEndDate('');
+  };
+
+  useEffect(() => {
+    if (period !== 'range' || (startDate && endDate)) {
+      fetchData();
+    }
+  }, [period, startDate, endDate]);
 
   if (loading) {
     return (
@@ -47,10 +87,6 @@ export default function AdminAIUsage() {
 
   if (!data) return <p className="text-vb-text-muted">Failed to load AI usage data.</p>;
 
-  const successRate = data.totalRequests > 0
-    ? Math.round(((data.totalRequests - data.failedRequests) / data.totalRequests) * 100)
-    : 100;
-
   return (
     <div className="space-y-6">
       <div>
@@ -58,6 +94,81 @@ export default function AdminAIUsage() {
         <p className="text-vb-text-muted text-sm mt-1">
           Track AI request volume, costs, and usage patterns across all customers
         </p>
+      </div>
+
+      {/* Date Filters */}
+      <div className="bg-vb-card rounded-xl border border-vb-border p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => handleQuickFilter('daily')}
+            className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+              period === 'daily'
+                ? 'bg-red-500 text-white'
+                : 'bg-vb-surface text-vb-text-secondary hover:text-vb-text border border-vb-border'
+            }`}
+          >
+            Daily
+          </button>
+          <button
+            onClick={() => handleQuickFilter('weekly')}
+            className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+              period === 'weekly'
+                ? 'bg-red-500 text-white'
+                : 'bg-vb-surface text-vb-text-secondary hover:text-vb-text border border-vb-border'
+            }`}
+          >
+            Weekly
+          </button>
+          <button
+            onClick={() => handleQuickFilter('monthly')}
+            className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+              period === 'monthly'
+                ? 'bg-red-500 text-white'
+                : 'bg-vb-surface text-vb-text-secondary hover:text-vb-text border border-vb-border'
+            }`}
+          >
+            Monthly
+          </button>
+          <button
+            onClick={() => handleQuickFilter('all')}
+            className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+              period === 'all'
+                ? 'bg-red-500 text-white'
+                : 'bg-vb-surface text-vb-text-secondary hover:text-vb-text border border-vb-border'
+            }`}
+          >
+            All Time
+          </button>
+
+          <div className="flex-1" />
+
+          {/* Custom Date Range */}
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-vb-text-muted" />
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="bg-vb-surface border border-vb-border text-vb-text text-sm rounded-lg px-2 py-1 outline-none"
+              placeholder="Start date"
+            />
+            <span className="text-vb-text-muted text-sm">to</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="bg-vb-surface border border-vb-border text-vb-text text-sm rounded-lg px-2 py-1 outline-none"
+              placeholder="End date"
+            />
+            <button
+              onClick={handleApplyDateRange}
+              disabled={!startDate || !endDate}
+              className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
+            >
+              Apply
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Top KPIs */}
@@ -70,18 +181,18 @@ export default function AdminAIUsage() {
             </div>
           </div>
           <p className="text-2xl font-bold text-vb-text mt-2">{data.totalRequests.toLocaleString()}</p>
-          <p className="text-xs text-vb-text-muted mt-1">{data.requestsThisWeek} this week</p>
+          <p className="text-xs text-vb-text-muted mt-1">{data.failedRequests} failed</p>
         </div>
 
         <div className="bg-vb-card rounded-xl border border-vb-border p-5">
           <div className="flex items-center justify-between">
             <p className="text-vb-text-muted text-sm">Success Rate</p>
-            <div className={`p-2 rounded-lg ${successRate >= 95 ? 'text-emerald-500 bg-emerald-500/10' : 'text-amber-500 bg-amber-500/10'}`}>
+            <div className={`p-2 rounded-lg ${data.successRate >= 95 ? 'text-emerald-500 bg-emerald-500/10' : 'text-amber-500 bg-amber-500/10'}`}>
               <CheckCircle className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-bold text-vb-text mt-2">{successRate}%</p>
-          <p className="text-xs text-red-400 mt-1">{data.failedRequests} failed</p>
+          <p className="text-2xl font-bold text-vb-text mt-2">{data.successRate}%</p>
+          <p className="text-xs text-vb-text-muted mt-1">{period}</p>
         </div>
 
         <div className="bg-vb-card rounded-xl border border-vb-border p-5">
@@ -92,7 +203,7 @@ export default function AdminAIUsage() {
             </div>
           </div>
           <p className="text-2xl font-bold text-vb-text mt-2">{data.totalTokensUsed.toLocaleString()}</p>
-          <p className="text-xs text-vb-text-muted mt-1">All time</p>
+          <p className="text-xs text-vb-text-muted mt-1">{period}</p>
         </div>
 
         <div className="bg-vb-card rounded-xl border border-vb-border p-5">
@@ -103,7 +214,7 @@ export default function AdminAIUsage() {
             </div>
           </div>
           <p className="text-2xl font-bold text-vb-text mt-2">${data.estimatedCost.toFixed(2)}</p>
-          <p className="text-xs text-amber-400 mt-1">{data.rateLimitHits} rate limit hits today</p>
+          <p className="text-xs text-vb-text-muted mt-1">{period}</p>
         </div>
       </div>
 
@@ -218,7 +329,7 @@ export default function AdminAIUsage() {
         <div className="bg-vb-card rounded-xl border border-vb-border p-5">
           <h3 className="text-vb-text font-semibold mb-4 flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-vb-text-muted" />
-            Daily AI Requests (Last 30 Days)
+            Daily AI Requests
           </h3>
           <div className="flex items-end gap-1 h-32">
             {data.dailyUsage.map((d) => {
@@ -239,8 +350,8 @@ export default function AdminAIUsage() {
             })}
           </div>
           <div className="flex justify-between mt-2">
-            <span className="text-vb-text-muted text-[10px]">30 days ago</span>
-            <span className="text-vb-text-muted text-[10px]">Today</span>
+            <span className="text-vb-text-muted text-[10px]">{data.dailyUsage[0]?.day.split('T')[0]}</span>
+            <span className="text-vb-text-muted text-[10px]">{data.dailyUsage[data.dailyUsage.length - 1]?.day.split('T')[0]}</span>
           </div>
         </div>
       )}

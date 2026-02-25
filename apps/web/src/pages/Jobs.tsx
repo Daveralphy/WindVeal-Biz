@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Briefcase,
   MapPin,
@@ -8,6 +8,11 @@ import {
   Search,
   Plus,
   Clock,
+  Edit3,
+  Pause,
+  Play,
+  XCircle,
+  Trash2,
 } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -48,14 +53,49 @@ function timeAgo(dateStr: string) {
 }
 
 export default function Jobs() {
+  const navigate = useNavigate();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     api.get('/jobs').then((res) => setJobs(res.data)).catch(console.error).finally(() => setLoading(false));
   }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenu(null);
+      }
+    }
+    if (openMenu) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [openMenu]);
+
+  async function updateJobStatus(jobId: string, status: string) {
+    try {
+      await api.patch(`/jobs/${jobId}`, { status });
+      setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, status } : j)));
+    } catch (err) {
+      console.error('Failed to update job status:', err);
+    }
+    setOpenMenu(null);
+  }
+
+  async function deleteJob(jobId: string) {
+    if (!window.confirm('Are you sure you want to delete this job? This action cannot be undone.')) return;
+    try {
+      await api.delete(`/jobs/${jobId}`);
+      setJobs((prev) => prev.filter((j) => j.id !== jobId));
+    } catch (err) {
+      console.error('Failed to delete job:', err);
+    }
+    setOpenMenu(null);
+  }
 
   const filtered = jobs.filter((job) => {
     const matchesSearch =
@@ -163,15 +203,76 @@ export default function Jobs() {
                 <Users className="w-4 h-4" />
                 <span className="text-sm">{job.applicantCount}</span>
               </div>
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                className="text-vb-text-muted hover:text-vb-text p-1"
-              >
-                <MoreHorizontal className="w-4 h-4" />
-              </button>
+              <div className="relative" ref={openMenu === job.id ? menuRef : undefined}>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setOpenMenu(openMenu === job.id ? null : job.id);
+                  }}
+                  className="text-vb-text-muted hover:text-vb-text p-1 rounded-lg hover:bg-vb-bg transition-colors"
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </button>
+                {openMenu === job.id && (
+                  <div
+                    className="absolute right-0 top-full mt-1 w-44 bg-vb-card border border-vb-border rounded-lg shadow-xl z-50 py-1 overflow-hidden"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  >
+                    <button
+                      onClick={() => { setOpenMenu(null); navigate(`/jobs/${job.id}/edit`); }}
+                      className="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-vb-text hover:bg-vb-bg transition-colors"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      Edit Job
+                    </button>
+                    {job.status === 'ACTIVE' && (
+                      <button
+                        onClick={() => updateJobStatus(job.id, 'PAUSED')}
+                        className="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-vb-text hover:bg-vb-bg transition-colors"
+                      >
+                        <Pause className="w-3.5 h-3.5" />
+                        Pause Job
+                      </button>
+                    )}
+                    {job.status === 'PAUSED' && (
+                      <button
+                        onClick={() => updateJobStatus(job.id, 'ACTIVE')}
+                        className="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-vb-text hover:bg-vb-bg transition-colors"
+                      >
+                        <Play className="w-3.5 h-3.5" />
+                        Resume Job
+                      </button>
+                    )}
+                    {(job.status === 'ACTIVE' || job.status === 'PAUSED') && (
+                      <button
+                        onClick={() => updateJobStatus(job.id, 'CLOSED')}
+                        className="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-vb-text hover:bg-vb-bg transition-colors"
+                      >
+                        <XCircle className="w-3.5 h-3.5" />
+                        Close Job
+                      </button>
+                    )}
+                    {job.status === 'CLOSED' && (
+                      <button
+                        onClick={() => updateJobStatus(job.id, 'ACTIVE')}
+                        className="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-vb-text hover:bg-vb-bg transition-colors"
+                      >
+                        <Play className="w-3.5 h-3.5" />
+                        Reopen Job
+                      </button>
+                    )}
+                    <div className="border-t border-vb-border my-1" />
+                    <button
+                      onClick={() => deleteJob(job.id)}
+                      className="flex items-center gap-2.5 w-full px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Delete Job
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </Link>
         ))}

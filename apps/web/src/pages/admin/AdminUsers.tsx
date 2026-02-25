@@ -10,6 +10,8 @@ import {
   X,
   AlertTriangle,
   CheckCircle2,
+  Trash2,
+  Globe,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAdminMetadata } from '@/hooks/useAdminMetadata';
@@ -57,6 +59,13 @@ export default function AdminUsers() {
   const [loading, setLoading] = useState(true);
   const { roles, roleBadge, roleLabel } = useAdminMetadata();
 
+  // Subscription tiers
+  const tiers = [
+    { value: 'STARTER', label: 'Starter', monthlyPrice: 0 },
+    { value: 'PROFESSIONAL', label: 'Professional', monthlyPrice: 99 },
+    { value: 'ENTERPRISE', label: 'Enterprise', monthlyPrice: 299 },
+  ];
+
   // Action menu
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
@@ -66,10 +75,15 @@ export default function AdminUsers() {
 
   // Confirmation dialog
   const [confirmAction, setConfirmAction] = useState<{
-    type: 'reset-password' | 'toggle-active';
+    type: 'reset-password' | 'toggle-active' | 'delete';
     user: UserRow;
   } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Tier update modal
+  const [tierUpdate, setTierUpdate] = useState<{ userId: string; orgId: string; currentTier: string } | null>(null);
+  const [newTier, setNewTier] = useState('');
+  const [tierUpdating, setTierUpdating] = useState(false);
 
   // Toast
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -155,6 +169,52 @@ export default function AdminUsers() {
     }
   };
 
+  const handleDeleteUser = async (user: UserRow) => {
+    setActionLoading(true);
+    try {
+      await api.delete(`/admin/users/${user.id}`);
+      setToast({ message: `User ${user.email} has been deleted`, type: 'success' });
+      fetchUsers();
+      setSelectedUser(null);
+    } catch {
+      setToast({ message: 'Failed to delete user', type: 'error' });
+    } finally {
+      setActionLoading(false);
+      setConfirmAction(null);
+    }
+  };
+
+  const openCareerSite = async (userId: string) => {
+    try {
+      const user = await api.get(`/admin/users/${userId}`);
+      const org = await api.get(`/admin/organizations/${user.data.organization.id}`);
+      const slug = org.data.slug;
+      const careerSiteUrl = `${window.location.origin}/careers/${slug}`;
+      window.open(careerSiteUrl, '_blank');
+    } catch {
+      setToast({ message: 'Failed to open career site', type: 'error' });
+    }
+  };
+
+  const handleUpdateTier = async () => {
+    if (!tierUpdate || !newTier) return;
+    setTierUpdating(true);
+    try {
+      await api.patch(`/admin/organizations/${tierUpdate.orgId}/tier`, { tier: newTier });
+      setToast({ message: `User subscription updated to ${newTier}`, type: 'success' });
+      fetchUsers();
+      if (selectedUser?.id === tierUpdate.userId) {
+        setSelectedUser({ ...selectedUser, organization: { ...selectedUser.organization, subscriptionTier: newTier } });
+      }
+      setTierUpdate(null);
+      setNewTier('');
+    } catch {
+      setToast({ message: 'Failed to update subscription', type: 'error' });
+    } finally {
+      setTierUpdating(false);
+    }
+  };
+
   const totalPages = Math.ceil(total / limit);
 
   return (
@@ -197,151 +257,140 @@ export default function AdminUsers() {
         </span>
       </div>
 
-      {/* Table */}
-      <div className="bg-vb-card rounded-xl border border-vb-border overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-vb-border">
-                <th className="text-left text-vb-text-muted font-medium px-4 py-3">User</th>
-                <th className="text-left text-vb-text-muted font-medium px-4 py-3">Organization</th>
-                <th className="text-left text-vb-text-muted font-medium px-4 py-3">Role</th>
-                <th className="text-left text-vb-text-muted font-medium px-4 py-3">Status</th>
-                <th className="text-left text-vb-text-muted font-medium px-4 py-3">Last Login</th>
-                <th className="text-left text-vb-text-muted font-medium px-4 py-3">Joined</th>
-                <th className="text-right text-vb-text-muted font-medium px-4 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-8 text-vb-text-muted">
-                    Loading...
-                  </td>
-                </tr>
-              ) : users.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="text-center py-8 text-vb-text-muted">
-                    No users found.
-                  </td>
-                </tr>
-              ) : (
-                users.map((u) => (
-                  <tr
-                    key={u.id}
-                    className="border-b border-vb-border last:border-0 hover:bg-vb-surface transition-colors"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-vb-surface flex items-center justify-center text-vb-text-secondary text-xs font-semibold">
-                          {u.firstName[0]}{u.lastName[0]}
-                        </div>
-                        <div>
-                          <p className="text-vb-text font-medium">
-                            {u.firstName} {u.lastName}
-                            {u.isSuperAdmin && (
-                              <span className="ml-1.5 text-[10px] bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded-full border border-red-500/20">
-                                SUPER
-                              </span>
-                            )}
-                          </p>
-                          <p className="text-vb-text-muted text-xs">{u.email}</p>
-                        </div>
+      {/* Users List */}
+      <div className="space-y-3">
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : users.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-vb-text-muted">No users found.</p>
+          </div>
+        ) : (
+          users.map((u) => (
+            <div
+              key={u.id}
+              className="bg-vb-card rounded-lg border border-vb-border p-4 hover:border-vb-text-secondary transition-colors"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3 flex-1">
+                  <div className="w-10 h-10 rounded-full bg-vb-surface flex items-center justify-center text-vb-text-secondary text-sm font-semibold flex-shrink-0">
+                    {u.firstName[0]}{u.lastName[0]}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-vb-text font-semibold">
+                        {u.firstName} {u.lastName}
+                      </p>
+                      {u.isSuperAdmin && (
+                        <span className="text-[10px] bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full border border-red-500/20">
+                          SUPER
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-vb-text-muted text-sm">{u.email}</p>
+                    <div className="flex items-center gap-3 mt-2 flex-wrap">
+                      <div className="text-xs text-vb-text-secondary">
+                        <span className="text-vb-text-muted">Org:</span> {u.organization.name}
                       </div>
-                    </td>
-                    <td className="px-4 py-3 text-vb-text-secondary">{u.organization.name}</td>
-                    <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${roleBadge(u.role)}`}>
                         {roleLabel(u.role)}
                       </span>
-                    </td>
-                    <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         <div className={`w-2 h-2 rounded-full ${u.isActive ? 'bg-green-500' : 'bg-gray-500'}`} />
-                        <span className="text-vb-text-secondary text-xs">
+                        <span className="text-xs text-vb-text-secondary">
                           {u.isActive ? 'Active' : 'Inactive'}
                         </span>
                       </div>
-                    </td>
-                    <td className="px-4 py-3 text-vb-text-muted text-xs">
-                      {u.lastLoginAt
-                        ? new Date(u.lastLoginAt).toLocaleDateString()
-                        : 'Never'}
-                    </td>
-                    <td className="px-4 py-3 text-vb-text-muted text-xs">
-                      {new Date(u.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {!u.isSuperAdmin && (
-                        <div className="relative inline-block">
-                          <button
-                            onClick={() => setOpenMenuId(openMenuId === u.id ? null : u.id)}
-                            className="p-1.5 rounded-lg text-vb-text-secondary hover:text-vb-text hover:bg-vb-surface transition-colors"
-                          >
-                            <MoreHorizontal className="w-4 h-4" />
-                          </button>
+                    </div>
+                    <div className="flex items-center gap-3 mt-2 text-xs text-vb-text-muted flex-wrap">
+                      <span>Last Login: {u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : 'Never'}</span>
+                      <span>Joined: {new Date(u.createdAt).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                </div>
 
-                          {openMenuId === u.id && (
-                            <div className="absolute right-0 mt-1 w-48 bg-vb-card rounded-lg border border-vb-border shadow-lg z-20 py-1">
-                              <button
-                                onClick={() => { openDetail(u.id); }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-vb-text-secondary hover:text-vb-text hover:bg-vb-surface transition-colors"
-                              >
-                                <Eye className="w-4 h-4" /> View Details
-                              </button>
-                              <button
-                                onClick={() => { setConfirmAction({ type: 'reset-password', user: u }); setOpenMenuId(null); }}
-                                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-vb-text-secondary hover:text-vb-text hover:bg-vb-surface transition-colors"
-                              >
-                                <KeyRound className="w-4 h-4" /> Reset Password
-                              </button>
-                              <button
-                                onClick={() => { setConfirmAction({ type: 'toggle-active', user: u }); setOpenMenuId(null); }}
-                                className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
-                                  u.isActive
-                                    ? 'text-red-400 hover:text-red-300 hover:bg-vb-surface'
-                                    : 'text-emerald-400 hover:text-emerald-300 hover:bg-vb-surface'
-                                }`}
-                              >
-                                <Power className="w-4 h-4" />
-                                {u.isActive ? 'Deactivate Account' : 'Activate Account'}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                {!u.isSuperAdmin && (
+                  <div className="relative flex-shrink-0">
+                    <button
+                      onClick={() => setOpenMenuId(openMenuId === u.id ? null : u.id)}
+                      className="p-2 rounded-lg text-vb-text-secondary hover:text-vb-text hover:bg-vb-surface transition-colors"
+                    >
+                      <MoreHorizontal className="w-5 h-5" />
+                    </button>
 
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-vb-border">
-            <span className="text-vb-text-muted text-sm">
-              Page {page} of {totalPages}
-            </span>
-            <div className="flex gap-1">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="p-1.5 rounded-lg text-vb-text-secondary hover:text-vb-text hover:bg-vb-surface disabled:opacity-30 transition-colors"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="p-1.5 rounded-lg text-vb-text-secondary hover:text-vb-text hover:bg-vb-surface disabled:opacity-30 transition-colors"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
+                    {openMenuId === u.id && (
+                      <div className="absolute right-0 top-full mt-1 w-48 bg-vb-card rounded-lg border border-vb-border shadow-2xl z-50 py-1">
+                        <button
+                          onClick={() => { openDetail(u.id); }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-vb-text-secondary hover:text-vb-text hover:bg-vb-surface transition-colors"
+                        >
+                          <Eye className="w-4 h-4" /> View Details
+                        </button>
+                        <button
+                          onClick={() => { openCareerSite(u.id); setOpenMenuId(null); }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-vb-text-secondary hover:text-vb-text hover:bg-vb-surface transition-colors"
+                        >
+                          <Globe className="w-4 h-4" /> Career Site
+                        </button>
+                        <button
+                          onClick={() => { setConfirmAction({ type: 'reset-password', user: u }); setOpenMenuId(null); }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-vb-text-secondary hover:text-vb-text hover:bg-vb-surface transition-colors"
+                        >
+                          <KeyRound className="w-4 h-4" /> Reset Password
+                        </button>
+                        <button
+                          onClick={() => { setConfirmAction({ type: 'toggle-active', user: u }); setOpenMenuId(null); }}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
+                            u.isActive
+                              ? 'text-red-400 hover:text-red-300 hover:bg-vb-surface'
+                              : 'text-emerald-400 hover:text-emerald-300 hover:bg-vb-surface'
+                          }`}
+                        >
+                          <Power className="w-4 h-4" />
+                          {u.isActive ? 'Deactivate Account' : 'Activate Account'}
+                        </button>
+                        <button
+                          onClick={() => { setConfirmAction({ type: 'delete', user: u }); setOpenMenuId(null); }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-vb-surface transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" /> Delete User
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          ))
         )}
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <span className="text-vb-text-muted text-sm">
+            Page {page} of {totalPages}
+          </span>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="p-1.5 rounded-lg text-vb-text-secondary hover:text-vb-text hover:bg-vb-surface disabled:opacity-30 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="p-1.5 rounded-lg text-vb-text-secondary hover:text-vb-text hover:bg-vb-surface disabled:opacity-30 transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Click-outside handler for action menus */}
       {openMenuId && (
@@ -424,6 +473,21 @@ export default function AdminUsers() {
                   <div className="space-y-2 pt-2">
                     <h3 className="text-vb-text font-semibold text-sm">Quick Actions</h3>
                     <button
+                      onClick={() => openCareerSite(selectedUser.id)}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-vb-text-secondary hover:text-vb-text bg-vb-surface rounded-lg hover:bg-vb-border transition-colors"
+                    >
+                      <Globe className="w-4 h-4" /> View Career Site
+                    </button>
+                    <button
+                      onClick={() => { 
+                        setTierUpdate({ userId: selectedUser.id, orgId: selectedUser.organization.id, currentTier: selectedUser.organization.subscriptionTier });
+                        setNewTier(selectedUser.organization.subscriptionTier);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-vb-text-secondary hover:text-vb-text bg-vb-surface rounded-lg hover:bg-vb-border transition-colors"
+                    >
+                      Update Subscription
+                    </button>
+                    <button
                       onClick={() => setConfirmAction({
                         type: 'reset-password',
                         user: { ...selectedUser, organization: selectedUser.organization } as UserRow,
@@ -446,6 +510,15 @@ export default function AdminUsers() {
                       <Power className="w-4 h-4" />
                       {selectedUser.isActive ? 'Deactivate Account' : 'Activate Account'}
                     </button>
+                    <button
+                      onClick={() => setConfirmAction({
+                        type: 'delete',
+                        user: { ...selectedUser, organization: selectedUser.organization } as UserRow,
+                      })}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-400 bg-red-500/5 hover:bg-red-500/10 rounded-lg transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" /> Delete Account
+                    </button>
                   </div>
                 )}
               </div>
@@ -461,27 +534,33 @@ export default function AdminUsers() {
           <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[420px] bg-vb-card rounded-xl border border-vb-border shadow-2xl p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className={`p-2 rounded-lg ${
-                confirmAction.type === 'toggle-active' && confirmAction.user.isActive
+                confirmAction.type === 'delete'
                   ? 'text-red-500 bg-red-500/10'
-                  : 'text-amber-500 bg-amber-500/10'
+                  : confirmAction.type === 'toggle-active' && confirmAction.user.isActive
+                    ? 'text-red-500 bg-red-500/10'
+                    : 'text-amber-500 bg-amber-500/10'
               }`}>
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <h3 className="text-vb-text font-semibold text-lg">
                 {confirmAction.type === 'reset-password'
                   ? 'Reset Password'
-                  : confirmAction.user.isActive
-                    ? 'Deactivate Account'
-                    : 'Activate Account'}
+                  : confirmAction.type === 'delete'
+                    ? 'Delete User Account'
+                    : confirmAction.user.isActive
+                      ? 'Deactivate Account'
+                      : 'Activate Account'}
               </h3>
             </div>
 
             <p className="text-vb-text-secondary text-sm mb-6">
               {confirmAction.type === 'reset-password'
                 ? `This will generate a password reset link for ${confirmAction.user.firstName} ${confirmAction.user.lastName} (${confirmAction.user.email}). They will need to use the link to set a new password.`
-                : confirmAction.user.isActive
-                  ? `This will deactivate ${confirmAction.user.firstName} ${confirmAction.user.lastName}'s account. They will not be able to log in until reactivated.`
-                  : `This will reactivate ${confirmAction.user.firstName} ${confirmAction.user.lastName}'s account, allowing them to log in again.`}
+                : confirmAction.type === 'delete'
+                  ? `This will permanently delete ${confirmAction.user.firstName} ${confirmAction.user.lastName}'s account (${confirmAction.user.email}). This action cannot be undone.`
+                  : confirmAction.user.isActive
+                    ? `This will deactivate ${confirmAction.user.firstName} ${confirmAction.user.lastName}'s account. They will not be able to log in until reactivated.`
+                    : `This will reactivate ${confirmAction.user.firstName} ${confirmAction.user.lastName}'s account, allowing them to log in again.`}
             </p>
 
             <div className="flex gap-3 justify-end">
@@ -493,26 +572,82 @@ export default function AdminUsers() {
                 Cancel
               </button>
               <button
-                onClick={() =>
-                  confirmAction.type === 'reset-password'
-                    ? handleResetPassword(confirmAction.user)
-                    : handleToggleActive(confirmAction.user)
-                }
+                onClick={() => {
+                  if (confirmAction.type === 'reset-password') handleResetPassword(confirmAction.user);
+                  else if (confirmAction.type === 'delete') handleDeleteUser(confirmAction.user);
+                  else handleToggleActive(confirmAction.user);
+                }}
                 disabled={actionLoading}
                 className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors disabled:opacity-50 ${
-                  confirmAction.type === 'toggle-active' && confirmAction.user.isActive
+                  confirmAction.type === 'delete' || (confirmAction.type === 'toggle-active' && confirmAction.user.isActive)
                     ? 'bg-red-500 text-white hover:bg-red-600'
-                    : 'bg-red-500 text-white hover:bg-red-600'
+                    : 'bg-emerald-500 text-white hover:bg-emerald-600'
                 }`}
               >
                 {actionLoading
                   ? 'Processing...'
                   : confirmAction.type === 'reset-password'
                     ? 'Send Reset Link'
-                    : confirmAction.user.isActive
-                      ? 'Deactivate'
-                      : 'Activate'}
+                    : confirmAction.type === 'delete'
+                      ? 'Delete Account'
+                      : confirmAction.user.isActive
+                        ? 'Deactivate'
+                        : 'Activate'}
               </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Tier Update Modal */}
+      {tierUpdate && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-50" onClick={() => { setTierUpdate(null); setNewTier(''); }} />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[420px] bg-vb-card rounded-xl border border-vb-border shadow-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-vb-text font-semibold text-lg">Update Subscription Tier</h3>
+              <button onClick={() => { setTierUpdate(null); setNewTier(''); }} className="p-1 rounded-lg text-vb-text-secondary hover:text-vb-text hover:bg-vb-surface transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <p className="text-vb-text-muted text-sm mb-2">Current Tier</p>
+                <p className="text-vb-text font-semibold">{tierUpdate.currentTier}</p>
+              </div>
+
+              <div>
+                <p className="text-vb-text-muted text-sm mb-2">Choose New Tier</p>
+                <select
+                  value={newTier}
+                  onChange={(e) => setNewTier(e.target.value)}
+                  className="w-full bg-vb-surface border border-vb-border text-vb-text rounded-lg px-3 py-2 outline-none"
+                >
+                  {tiers.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label} {t.monthlyPrice === 0 ? '(Free)' : `($${t.monthlyPrice}/mo)`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => { setTierUpdate(null); setNewTier(''); }}
+                  disabled={tierUpdating}
+                  className="px-4 py-2 text-sm rounded-lg text-vb-text-secondary hover:text-vb-text bg-vb-surface hover:bg-vb-border transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateTier}
+                  disabled={tierUpdating || newTier === tierUpdate.currentTier}
+                  className="px-4 py-2 text-sm rounded-lg font-medium bg-blue-500 text-white hover:bg-blue-600 transition-colors disabled:opacity-50"
+                >
+                  {tierUpdating ? 'Updating...' : 'Update Tier'}
+                </button>
+              </div>
             </div>
           </div>
         </>

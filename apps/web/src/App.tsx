@@ -7,6 +7,9 @@ import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import Dashboard from '@/pages/Dashboard';
 import Jobs from '@/pages/Jobs';
+import JobNew from '@/pages/JobNew';
+import JobDetail from '@/pages/JobDetail';
+import JobEdit from '@/pages/JobEdit';
 import Applicants from '@/pages/Applicants';
 import Pipeline from '@/pages/Pipeline';
 import Interviews from '@/pages/Interviews';
@@ -21,6 +24,8 @@ import AdminUsers from '@/pages/admin/AdminUsers';
 import AdminSettings from '@/pages/admin/AdminSettings';
 import AdminAIUsage from '@/pages/admin/AdminAIUsage';
 import AdminAnalytics from '@/pages/admin/AdminAnalytics';
+import PublicCareers from '@/pages/public/PublicCareers';
+import PublicJobApply from '@/pages/public/PublicJobApply';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -86,6 +91,9 @@ export default function App() {
         >
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/jobs" element={<Jobs />} />
+          <Route path="/jobs/new" element={<JobNew />} />
+          <Route path="/jobs/:id" element={<JobDetail />} />
+          <Route path="/jobs/:id/edit" element={<JobEdit />} />
           <Route path="/applicants" element={<Applicants />} />
           <Route path="/pipeline" element={<Pipeline />} />
           <Route path="/interviews" element={<Interviews />} />
@@ -113,6 +121,10 @@ export default function App() {
           <Route path="/admin/analytics" element={<AdminAnalytics />} />
           <Route path="/admin/settings" element={<AdminSettings />} />
         </Route>
+
+        {/* Public careers pages — no auth */}
+        <Route path="/:slug/careers" element={<PublicCareers />} />
+        <Route path="/:slug/careers/:jobId" element={<PublicJobApply />} />
 
         {/* Default redirect */}
         <Route path="*" element={<DefaultRedirect />} />

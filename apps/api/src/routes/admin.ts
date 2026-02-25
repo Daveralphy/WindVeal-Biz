@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
+import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
 import { requireSuperAdmin } from '../middleware/superAdmin.js';
@@ -69,6 +70,9 @@ export async function adminRoutes(app: FastifyInstance) {
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
 
+    // Exclude orgs that belong to super admin accounts
+    const customerOrgFilter = { users: { none: { isSuperAdmin: true } } };
+
     const [
       totalOrgs,
       totalUsers,
@@ -81,15 +85,17 @@ export async function adminRoutes(app: FastifyInstance) {
       newOrgsWeek,
       newOrgsMonth,
     ] = await Promise.all([
-      prisma.organization.count(),
-      prisma.user.count(),
-      prisma.job.count(),
-      prisma.applicant.count(),
+      prisma.organization.count({ where: customerOrgFilter }),
+      prisma.user.count({ where: { isSuperAdmin: false } }),
+      prisma.job.count({ where: { organization: customerOrgFilter } }),
+      prisma.applicant.count({ where: { organization: customerOrgFilter } }),
       prisma.organization.groupBy({
         by: ['subscriptionTier'],
+        where: customerOrgFilter,
         _count: true,
       }),
       prisma.organization.findMany({
+        where: customerOrgFilter,
         orderBy: { createdAt: 'desc' },
         take: 10,
         select: {
@@ -102,13 +108,13 @@ export async function adminRoutes(app: FastifyInstance) {
         },
       }),
       prisma.organization.count({
-        where: { users: { some: { lastLoginAt: { gte: thirtyDaysAgo } } } },
+        where: { ...customerOrgFilter, users: { some: { lastLoginAt: { gte: thirtyDaysAgo }, isSuperAdmin: false } } },
       }),
       prisma.user.count({
-        where: { lastLoginAt: { gte: thirtyDaysAgo } },
+        where: { lastLoginAt: { gte: thirtyDaysAgo }, isSuperAdmin: false },
       }),
-      prisma.organization.count({ where: { createdAt: { gte: weekAgo } } }),
-      prisma.organization.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
+      prisma.organization.count({ where: { ...customerOrgFilter, createdAt: { gte: weekAgo } } }),
+      prisma.organization.count({ where: { ...customerOrgFilter, createdAt: { gte: thirtyDaysAgo } } }),
     ]);
 
     const tierBreakdown = Object.fromEntries(
@@ -130,6 +136,7 @@ export async function adminRoutes(app: FastifyInstance) {
     // Churn indicator: orgs with no logins in 60 days
     const inactiveOrgs = await prisma.organization.count({
       where: {
+        ...customerOrgFilter,
         users: { every: { OR: [{ lastLoginAt: null }, { lastLoginAt: { lt: sixtyDaysAgo } }] } },
       },
     });
@@ -139,7 +146,7 @@ export async function adminRoutes(app: FastifyInstance) {
     twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
 
     const monthlySignups = await prisma.organization.findMany({
-      where: { createdAt: { gte: twelveMonthsAgo } },
+      where: { ...customerOrgFilter, createdAt: { gte: twelveMonthsAgo } },
       select: { createdAt: true },
       orderBy: { createdAt: 'asc' },
     });
@@ -174,7 +181,8 @@ export async function adminRoutes(app: FastifyInstance) {
     const { search, tier, page = '1', limit = '20' } = request.query as Record<string, string>;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    const where: Record<string, unknown> = {};
+    // Exclude orgs that belong to super admin accounts
+    const where: Record<string, unknown> = { users: { none: { isSuperAdmin: true } } };
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
@@ -275,7 +283,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const { search, role, active, page = '1', limit = '20' } = request.query as Record<string, string>;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = { isSuperAdmin: false };
     if (search) {
       where.OR = [
         { email: { contains: search, mode: 'insensitive' } },
@@ -320,6 +328,9 @@ export async function adminRoutes(app: FastifyInstance) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    // Exclude usage from super admin's org
+    const customerUsageFilter = { organization: { users: { none: { isSuperAdmin: true } } } };
+
     const [
       totalRequests,
       requestsThisMonth,
@@ -328,48 +339,53 @@ export async function adminRoutes(app: FastifyInstance) {
       requestsByType,
       totalTokens,
     ] = await Promise.all([
-      prisma.aIUsageLog.count(),
-      prisma.aIUsageLog.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
-      prisma.aIUsageLog.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
-      prisma.aIUsageLog.count({ where: { success: false } }),
-      prisma.aIUsageLog.groupBy({ by: ['type'], _count: true }),
-      prisma.aIUsageLog.aggregate({ _sum: { tokensUsed: true } }),
+      prisma.aIUsageLog.count({ where: customerUsageFilter }),
+      prisma.aIUsageLog.count({ where: { ...customerUsageFilter, createdAt: { gte: thirtyDaysAgo } } }),
+      prisma.aIUsageLog.count({ where: { ...customerUsageFilter, createdAt: { gte: sevenDaysAgo } } }),
+      prisma.aIUsageLog.count({ where: { ...customerUsageFilter, success: false } }),
+      prisma.aIUsageLog.groupBy({ by: ['type'], where: customerUsageFilter, _count: true }),
+      prisma.aIUsageLog.aggregate({ where: customerUsageFilter, _sum: { tokensUsed: true } }),
     ]);
 
-    // Requests by subscription tier
+    // Requests by subscription tier (exclude super admin orgs)
     const requestsByTier = await prisma.$queryRaw<Array<{ tier: string; count: bigint }>>`
       SELECT o."subscriptionTier" as tier, COUNT(a.id)::bigint as count
       FROM ai_usage_logs a
       JOIN organizations o ON a."organizationId" = o.id
+      WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u."organizationId" = o.id AND u."isSuperAdmin" = true)
       GROUP BY o."subscriptionTier"
     `;
 
-    // Top 10 orgs by usage
+    // Top 10 orgs by usage (exclude super admin orgs)
     const topOrgsByUsage = await prisma.$queryRaw<Array<{ id: string; name: string; tier: string; count: bigint }>>`
       SELECT o.id, o.name, o."subscriptionTier" as tier, COUNT(a.id)::bigint as count
       FROM ai_usage_logs a
       JOIN organizations o ON a."organizationId" = o.id
+      WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u."organizationId" = o.id AND u."isSuperAdmin" = true)
       GROUP BY o.id, o.name, o."subscriptionTier"
       ORDER BY count DESC
       LIMIT 10
     `;
 
-    // Daily usage last 30 days
+    // Daily usage last 30 days (exclude super admin orgs)
     const dailyUsage = await prisma.$queryRaw<Array<{ day: string; count: bigint }>>`
       SELECT DATE(a."createdAt") as day, COUNT(a.id)::bigint as count
       FROM ai_usage_logs a
+      JOIN organizations o ON a."organizationId" = o.id
       WHERE a."createdAt" >= ${thirtyDaysAgo}
+        AND NOT EXISTS (SELECT 1 FROM users u WHERE u."organizationId" = o.id AND u."isSuperAdmin" = true)
       GROUP BY DATE(a."createdAt")
       ORDER BY day ASC
     `;
 
-    // Rate limit hits (users who hit daily cap today)
+    // Rate limit hits (users who hit daily cap today, exclude super admin)
     const todayUsagePerUser = await prisma.$queryRaw<Array<{ tier: string; cnt: bigint }>>`
       SELECT o."subscriptionTier" as tier, COUNT(a.id)::bigint as cnt
       FROM ai_usage_logs a
       JOIN users u ON a."userId" = u.id
       JOIN organizations o ON u."organizationId" = o.id
       WHERE a."createdAt" >= ${today}
+        AND u."isSuperAdmin" = false
       GROUP BY a."userId", o."subscriptionTier"
     `;
 
@@ -406,33 +422,39 @@ export async function adminRoutes(app: FastifyInstance) {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    const totalOrgs = await prisma.organization.count();
+    // Exclude orgs that belong to super admin accounts
+    const customerOrgFilter = { users: { none: { isSuperAdmin: true } } };
+    const totalOrgs = await prisma.organization.count({ where: customerOrgFilter });
 
-    // Feature adoption: count distinct orgs using each feature
+    // Feature adoption: count distinct customer orgs using each feature
+    const customerJobFilter = { organization: customerOrgFilter };
     const [
       orgsWithJobs,
       orgsWithApplicants,
       orgsWithCareersPage,
     ] = await Promise.all([
-      prisma.job.groupBy({ by: ['organizationId'] }).then((r) => r.length),
-      prisma.applicant.groupBy({ by: ['organizationId'] }).then((r) => r.length),
-      prisma.job.groupBy({ by: ['organizationId'], where: { visibility: 'PORTAL' } }).then((r) => r.length),
+      prisma.job.groupBy({ by: ['organizationId'], where: customerJobFilter }).then((r) => r.length),
+      prisma.applicant.groupBy({ by: ['organizationId'], where: { organization: customerOrgFilter } }).then((r) => r.length),
+      prisma.job.groupBy({ by: ['organizationId'], where: { ...customerJobFilter, visibility: 'PORTAL' } }).then((r) => r.length),
     ]);
 
     const [orgsWithInterviews, orgsWithAIReports, orgsWithEmails] = await Promise.all([
       prisma.$queryRaw<[{ count: bigint }]>`
         SELECT COUNT(DISTINCT j."organizationId")::bigint as count
         FROM interviews i JOIN jobs j ON i."jobId" = j.id
+        WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u."organizationId" = j."organizationId" AND u."isSuperAdmin" = true)
       `.then((r) => Number(r[0]?.count || 0)),
       prisma.$queryRaw<[{ count: bigint }]>`
         SELECT COUNT(DISTINCT a."organizationId")::bigint as count
         FROM ai_reports ar JOIN applicants a ON ar."applicantId" = a.id
+        WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u."organizationId" = a."organizationId" AND u."isSuperAdmin" = true)
       `.then((r) => Number(r[0]?.count || 0)),
       prisma.$queryRaw<[{ count: bigint }]>`
         SELECT COUNT(DISTINCT j."organizationId")::bigint as count
         FROM email_logs el
         JOIN applicants a ON el."applicantId" = a.id
         JOIN jobs j ON a."jobId" = j.id
+        WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u."organizationId" = j."organizationId" AND u."isSuperAdmin" = true)
       `.then((r) => Number(r[0]?.count || 0)),
     ]);
 
@@ -446,18 +468,18 @@ export async function adminRoutes(app: FastifyInstance) {
       communications: { count: orgsWithEmails, pct: pct(orgsWithEmails) },
     };
 
-    // DAU / WAU / MAU
+    // DAU / WAU / MAU (exclude super admin)
     const [dau, wau, mau, totalUsers] = await Promise.all([
-      prisma.user.count({ where: { lastLoginAt: { gte: oneDayAgo } } }),
-      prisma.user.count({ where: { lastLoginAt: { gte: sevenDaysAgo } } }),
-      prisma.user.count({ where: { lastLoginAt: { gte: thirtyDaysAgo } } }),
-      prisma.user.count(),
+      prisma.user.count({ where: { lastLoginAt: { gte: oneDayAgo }, isSuperAdmin: false } }),
+      prisma.user.count({ where: { lastLoginAt: { gte: sevenDaysAgo }, isSuperAdmin: false } }),
+      prisma.user.count({ where: { lastLoginAt: { gte: thirtyDaysAgo }, isSuperAdmin: false } }),
+      prisma.user.count({ where: { isSuperAdmin: false } }),
     ]);
 
-    // Average metrics per org
+    // Average metrics per org (customer orgs only)
     const [totalJobsCount, totalApplicantsCount] = await Promise.all([
-      prisma.job.count(),
-      prisma.applicant.count(),
+      prisma.job.count({ where: { organization: customerOrgFilter } }),
+      prisma.applicant.count({ where: { organization: customerOrgFilter } }),
     ]);
 
     const averages = {
@@ -466,11 +488,11 @@ export async function adminRoutes(app: FastifyInstance) {
       usersPerOrg: totalOrgs ? Math.round((totalUsers / totalOrgs) * 10) / 10 : 0,
     };
 
-    // User growth over the last 12 months
+    // User growth over the last 12 months (exclude super admin)
     const twelveMonthsAgo = new Date();
     twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
     const userGrowth = await prisma.user.findMany({
-      where: { createdAt: { gte: twelveMonthsAgo } },
+      where: { createdAt: { gte: twelveMonthsAgo }, isSuperAdmin: false },
       select: { createdAt: true },
       orderBy: { createdAt: 'asc' },
     });
@@ -480,8 +502,9 @@ export async function adminRoutes(app: FastifyInstance) {
       usersByMonth[key] = (usersByMonth[key] || 0) + 1;
     }
 
-    // Most & least active orgs
+    // Most & least active orgs (customer orgs only)
     const orgActivity = await prisma.organization.findMany({
+      where: customerOrgFilter,
       select: {
         id: true,
         name: true,
@@ -642,6 +665,143 @@ export async function adminRoutes(app: FastifyInstance) {
       message: `Password reset initiated for ${user.email}. Reset link has been generated.`,
       // In production, don't return the token — it would be emailed
       resetToken: process.env.NODE_ENV !== 'production' ? token : undefined,
+    };
+  });
+
+  // ─── Delete user ────────────────────────────────────
+  app.delete('/users/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      return reply.status(404).send({ error: 'User not found' });
+    }
+    if (user.isSuperAdmin) {
+      return reply.status(403).send({ error: 'Cannot delete super admin accounts' });
+    }
+
+    await prisma.user.delete({ where: { id } });
+    return { message: `User ${user.email} has been deleted` };
+  });
+
+  // ─── Delete organization ────────────────────────────
+  app.delete('/organizations/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+
+    const org = await prisma.organization.findUnique({ where: { id } });
+    if (!org) {
+      return reply.status(404).send({ error: 'Organization not found' });
+    }
+
+    // Check if org belongs to super admin
+    const superAdminCount = await prisma.user.count({
+      where: { organizationId: id, isSuperAdmin: true },
+    });
+    if (superAdminCount > 0) {
+      return reply.status(403).send({ error: 'Cannot delete VealBiz platform account' });
+    }
+
+    await prisma.organization.delete({ where: { id } });
+    return { message: `Organization ${org.name} has been deleted` };
+  });
+
+  // ─── AI & API Usage with date filters ───────────────
+  app.get('/ai-usage-filtered', async (request) => {
+    const { period = 'all', startDate, endDate } = request.query as Record<string, string>;
+
+    let dateFilter: { gte?: Date; lte?: Date } = {};
+
+    if (period === 'daily') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      dateFilter.gte = today;
+    } else if (period === 'weekly') {
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      dateFilter.gte = weekAgo;
+    } else if (period === 'monthly') {
+      const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      dateFilter.gte = monthAgo;
+    } else if (period === 'range' && startDate && endDate) {
+      dateFilter.gte = new Date(startDate);
+      dateFilter.lte = new Date(endDate);
+    }
+
+    const customerUsageFilter = { organization: { users: { none: { isSuperAdmin: true } } } };
+    const where: Record<string, unknown> = { ...customerUsageFilter };
+    if (Object.keys(dateFilter).length > 0) {
+      where.createdAt = dateFilter;
+    }
+
+    const [totalRequests, failedRequests, requestsByType, totalTokens] = await Promise.all([
+      prisma.aIUsageLog.count({ where }),
+      prisma.aIUsageLog.count({ where: { ...where, success: false } }),
+      prisma.aIUsageLog.groupBy({ by: ['type'], where, _count: true }),
+      prisma.aIUsageLog.aggregate({ where, _sum: { tokensUsed: true } }),
+    ]);
+
+    // Requests by subscription tier - using raw SQL with proper parameters
+    const requestsByTier = await prisma.$queryRaw<Array<{ tier: string; count: bigint }>>(
+      // Using template literals with Prisma parameter syntax
+      Prisma.sql`
+        SELECT o."subscriptionTier" as tier, COUNT(a.id)::bigint as count
+        FROM ai_usage_logs a
+        JOIN organizations o ON a."organizationId" = o.id
+        WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u."organizationId" = o.id AND u."isSuperAdmin" = true)
+        ${Object.keys(dateFilter).length > 0 ? Prisma.sql`AND a."createdAt" >= ${dateFilter.gte}` : Prisma.empty}
+        ${dateFilter.lte ? Prisma.sql`AND a."createdAt" <= ${dateFilter.lte}` : Prisma.empty}
+        GROUP BY o."subscriptionTier"
+      `
+    );
+
+    // Top 10 orgs by usage
+    const topOrgsByUsage = await prisma.$queryRaw<Array<{ id: string; name: string; tier: string; count: bigint }>>(
+      Prisma.sql`
+        SELECT o.id, o.name, o."subscriptionTier" as tier, COUNT(a.id)::bigint as count
+        FROM ai_usage_logs a
+        JOIN organizations o ON a."organizationId" = o.id
+        WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u."organizationId" = o.id AND u."isSuperAdmin" = true)
+        ${Object.keys(dateFilter).length > 0 ? Prisma.sql`AND a."createdAt" >= ${dateFilter.gte}` : Prisma.empty}
+        ${dateFilter.lte ? Prisma.sql`AND a."createdAt" <= ${dateFilter.lte}` : Prisma.empty}
+        GROUP BY o.id, o.name, o."subscriptionTier"
+        ORDER BY count DESC
+        LIMIT 10
+      `
+    );
+
+    // Daily usage breakdown
+    const dailyUsage = await prisma.$queryRaw<Array<{ day: string; count: bigint }>>(
+      Prisma.sql`
+        SELECT DATE(a."createdAt") as day, COUNT(a.id)::bigint as count
+        FROM ai_usage_logs a
+        JOIN organizations o ON a."organizationId" = o.id
+        WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u."organizationId" = o.id AND u."isSuperAdmin" = true)
+        ${Object.keys(dateFilter).length > 0 ? Prisma.sql`AND a."createdAt" >= ${dateFilter.gte}` : Prisma.empty}
+        ${dateFilter.lte ? Prisma.sql`AND a."createdAt" <= ${dateFilter.lte}` : Prisma.empty}
+        GROUP BY DATE(a."createdAt")
+        ORDER BY day ASC
+      `
+    );
+
+    const totalTokensUsed = totalTokens._sum.tokensUsed || 0;
+    const estimatedCost = Math.round(((totalTokensUsed / 1000) * 0.0001) * 100) / 100;
+    const successRate = totalRequests > 0 ? Math.round(((totalRequests - failedRequests) / totalRequests) * 100) : 100;
+
+    return {
+      period,
+      totalRequests,
+      failedRequests,
+      successRate,
+      totalTokensUsed,
+      estimatedCost,
+      requestsByType: Object.fromEntries(requestsByType.map((r) => [r.type, r._count])),
+      requestsByTier: Object.fromEntries(requestsByTier.map((r) => [r.tier, Number(r.count)])),
+      topOrgsByUsage: topOrgsByUsage.map((o) => ({
+        id: o.id,
+        name: o.name,
+        tier: o.tier,
+        count: Number(o.count),
+      })),
+      dailyUsage: dailyUsage.map((d) => ({ day: d.day, count: Number(d.count) })),
     };
   });
 }

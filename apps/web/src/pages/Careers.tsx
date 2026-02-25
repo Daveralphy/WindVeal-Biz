@@ -68,10 +68,15 @@ export default function Careers() {
             <Eye className="w-4 h-4" />
             Preview
           </button>
-          <button className="flex items-center gap-2 px-4 py-2 bg-brand text-sm text-white rounded-lg hover:bg-brand-dark transition-colors">
+          <a
+            href={data ? `/${data.slug}/careers` : '#'}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2 bg-brand text-sm text-white rounded-lg hover:bg-brand-dark transition-colors"
+          >
             <ExternalLink className="w-4 h-4" />
             Visit Page
-          </button>
+          </a>
         </div>
       </div>
 

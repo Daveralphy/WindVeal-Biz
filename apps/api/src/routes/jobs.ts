@@ -10,6 +10,7 @@ const createJobSchema = z.object({
   location: z.string().optional(),
   salaryMin: z.number().optional(),
   salaryMax: z.number().optional(),
+  salaryCurrency: z.string().min(1).max(5).default('NGN'),
   showSalary: z.boolean().default(false),
   description: z.string().min(1),
   responsibilities: z.string().optional(),

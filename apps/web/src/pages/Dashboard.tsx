@@ -9,7 +9,9 @@ import {
   Calendar,
   TrendingUp,
   ArrowUpRight,
+  Sparkles,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import api from '@/lib/api';
 
 const METRIC_CONFIG = [
@@ -64,7 +66,8 @@ export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [activity, setActivity] = useState<Activity[]>([]);
   const [insights, setInsights] = useState<AIInsight[]>([]);
-  const [insightsLoading, setInsightsLoading] = useState(true);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [insightsFetched, setInsightsFetched] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -85,27 +88,24 @@ export default function Dashboard() {
     load();
   }, []);
 
-  useEffect(() => {
+  const fetchInsights = async () => {
     if (!stats) return;
-    // Skip AI insights request when there's no data to analyze
     const hasData = stats.activeJobs > 0 || stats.totalApplicants > 0;
     if (!hasData) {
       setInsights([]);
-      setInsightsLoading(false);
       return;
     }
-    async function loadInsights() {
-      try {
-        const res = await api.get('/ai/insights');
-        setInsights(res.data.insights);
-      } catch (err) {
-        console.error('Failed to load AI insights:', err);
-      } finally {
-        setInsightsLoading(false);
-      }
+    setInsightsLoading(true);
+    try {
+      const res = await api.get('/ai/insights');
+      setInsights(res.data.insights);
+      setInsightsFetched(true);
+    } catch (err) {
+      console.error('Failed to load AI insights:', err);
+    } finally {
+      setInsightsLoading(false);
     }
-    loadInsights();
-  }, [stats]);
+  };
 
   if (loading) {
     return (
@@ -127,9 +127,12 @@ export default function Dashboard() {
           <button className="px-4 py-2 bg-vb-card text-sm text-vb-text-secondary rounded-lg hover:bg-vb-muted transition-colors">
             Export Report
           </button>
-          <button className="px-4 py-2 bg-brand text-sm text-white rounded-lg hover:bg-brand-dark transition-colors">
+          <Link
+            to="/jobs/new"
+            className="px-4 py-2 bg-brand text-sm text-white rounded-lg hover:bg-brand-dark transition-colors"
+          >
             + Create Job
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -210,6 +213,23 @@ export default function Dashboard() {
                   priority={insight.priority}
                 />
               ))
+            ) : !insightsFetched ? (
+              <div className="flex flex-col items-center py-6">
+                <div className="w-12 h-12 rounded-xl bg-brand/10 flex items-center justify-center mb-3">
+                  <Sparkles className="w-6 h-6 text-brand" />
+                </div>
+                <p className="text-vb-text-muted text-sm text-center mb-4">
+                  Click below to get AI-powered insights about your recruitment data
+                </p>
+                <button
+                  onClick={fetchInsights}
+                  disabled={!stats || (stats.activeJobs === 0 && stats.totalApplicants === 0)}
+                  className="px-4 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand-dark transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Generate Insights
+                </button>
+              </div>
             ) : (
               <p className="text-vb-text-muted text-sm text-center py-4">No insights available</p>
             )}
