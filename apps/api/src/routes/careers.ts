@@ -277,7 +277,7 @@ export async function publicCareersRoutes(app: FastifyInstance) {
           uploadedFiles.push({
             fieldId,
             fileName: part.filename || safeName,
-            storageUrl: filePath,
+            storageUrl: safeName,
             mimeType: part.mimetype || null,
           });
         } else {

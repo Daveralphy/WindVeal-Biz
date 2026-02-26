@@ -189,6 +189,8 @@ export default function Applicants() {
   const [manualForm, setManualForm] = useState<ManualForm>(EMPTY_MANUAL_FORM);
   const [manualSubmitting, setManualSubmitting] = useState(false);
   const [manualError, setManualError] = useState('');
+  const [manualResume, setManualResume] = useState<File | null>(null);
+  const [manualVideo, setManualVideo] = useState<File | null>(null);
   const [jobs, setJobs] = useState<JobOption[]>([]);
 
   // Import state
@@ -324,20 +326,35 @@ export default function Applicants() {
     setManualSubmitting(true);
     setManualError('');
     try {
-      await api.post('/applicants', {
+      const payload = {
         firstName: manualForm.firstName,
         lastName: manualForm.lastName,
         email: manualForm.email,
         phone: manualForm.phone || undefined,
         linkedinUrl: manualForm.linkedinUrl || undefined,
         jobId: manualForm.jobId,
-        source: 'MANUAL',
+        source: 'MANUAL' as const,
         customFields: manualForm.customFields
           .filter((f) => f.label.trim() && f.value.trim())
           .map((f) => ({ label: f.label.trim(), value: f.value.trim() })),
-      });
+      };
+
+      if (manualResume || manualVideo) {
+        const formData = new FormData();
+        formData.append('data', JSON.stringify(payload));
+        if (manualResume) formData.append('resume', manualResume);
+        if (manualVideo) formData.append('video', manualVideo);
+        await api.post('/applicants', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      } else {
+        await api.post('/applicants', payload);
+      }
+
       setShowManualModal(false);
       setManualForm(EMPTY_MANUAL_FORM);
+      setManualResume(null);
+      setManualVideo(null);
       fetchApplicants();
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to add applicant';
@@ -832,22 +849,36 @@ export default function Applicants() {
                             Files
                           </h3>
                           <div className="space-y-2">
-                            {detail.uploadedFiles.map((file) => (
-                              <a
-                                key={file.id}
-                                href={`/api/uploads/${file.storageUrl.split('/').pop()}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-3 bg-vb-surface border border-vb-border rounded-lg px-4 py-3 hover:bg-vb-card transition-colors"
-                              >
-                                <FileText className="w-5 h-5 text-brand flex-shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm text-vb-text truncate">{file.fileName}</p>
-                                  <p className="text-xs text-vb-text-muted capitalize">{file.type.replace('_', ' ')}</p>
+                            {detail.uploadedFiles.map((file) => {
+                              const fileUrl = `/api/uploads/${file.storageUrl.replace(/.*[/\\]/, '')}`;
+                              const isVideo = file.mimeType?.startsWith('video/') || /\.(mp4|webm|mov|avi|mkv|ogg)$/i.test(file.fileName);
+                              return (
+                                <div key={file.id}>
+                                  {isVideo && (
+                                    <video
+                                      controls
+                                      className="w-full rounded-lg border border-vb-border mb-2"
+                                      preload="metadata"
+                                    >
+                                      <source src={fileUrl} type={file.mimeType || 'video/mp4'} />
+                                    </video>
+                                  )}
+                                  <a
+                                    href={fileUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-3 bg-vb-surface border border-vb-border rounded-lg px-4 py-3 hover:bg-vb-card transition-colors"
+                                  >
+                                    <FileText className="w-5 h-5 text-brand flex-shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm text-vb-text truncate">{file.fileName}</p>
+                                      <p className="text-xs text-vb-text-muted capitalize">{file.type.replace('_', ' ')}</p>
+                                    </div>
+                                    <ExternalLink className="w-4 h-4 text-vb-text-muted" />
+                                  </a>
                                 </div>
-                                <ExternalLink className="w-4 h-4 text-vb-text-muted" />
-                              </a>
-                            ))}
+                              );
+                            })}
                           </div>
                         </section>
                       )}
@@ -1088,19 +1119,19 @@ export default function Applicants() {
       {/* ─── MANUAL ADD MODAL ─── */}
       {showManualModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={() => { setShowManualModal(false); setManualError(''); }} />
-          <div className="relative bg-vb-bg border border-vb-border rounded-xl w-full max-w-lg mx-4 shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-vb-border">
+          <div className="absolute inset-0 bg-black/40" onClick={() => { setShowManualModal(false); setManualError(''); setManualResume(null); setManualVideo(null); }} />
+          <div className="relative bg-vb-bg border border-vb-border rounded-xl w-full max-w-lg mx-4 shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-vb-border flex-shrink-0">
               <h2 className="text-lg font-semibold text-vb-text flex items-center gap-2">
                 <UserPlus className="w-5 h-5 text-brand" />
                 Add Applicant Manually
               </h2>
-              <button onClick={() => { setShowManualModal(false); setManualError(''); }} className="p-1 text-vb-text-muted hover:text-vb-text rounded">
+              <button onClick={() => { setShowManualModal(false); setManualError(''); setManualResume(null); setManualVideo(null); }} className="p-1 text-vb-text-muted hover:text-vb-text rounded">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="px-6 py-4 space-y-4">
+            <div className="px-6 py-4 space-y-4 overflow-y-auto">
               {manualError && (
                 <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400">
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -1174,6 +1205,56 @@ export default function Applicants() {
                 </select>
               </div>
 
+              {/* Resume Upload */}
+              <div>
+                <label className="block text-xs font-medium text-vb-text-muted mb-1">Resume</label>
+                {manualResume ? (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-vb-card border border-vb-border rounded-lg">
+                    <FileText className="w-4 h-4 text-brand flex-shrink-0" />
+                    <span className="text-sm text-vb-text truncate flex-1">{manualResume.name}</span>
+                    <button onClick={() => setManualResume(null)} className="p-0.5 text-vb-text-muted hover:text-red-400">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-2 px-3 py-2 bg-vb-card border border-dashed border-vb-border rounded-lg cursor-pointer hover:border-brand transition-colors">
+                    <Upload className="w-4 h-4 text-vb-text-muted" />
+                    <span className="text-sm text-vb-text-muted">Upload resume (PDF, DOC, DOCX)</span>
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx"
+                      className="hidden"
+                      onChange={(e) => setManualResume(e.target.files?.[0] || null)}
+                    />
+                  </label>
+                )}
+              </div>
+
+              {/* Video Upload */}
+              <div>
+                <label className="block text-xs font-medium text-vb-text-muted mb-1">Video Introduction</label>
+                {manualVideo ? (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-vb-card border border-vb-border rounded-lg">
+                    <FileText className="w-4 h-4 text-brand flex-shrink-0" />
+                    <span className="text-sm text-vb-text truncate flex-1">{manualVideo.name}</span>
+                    <button onClick={() => setManualVideo(null)} className="p-0.5 text-vb-text-muted hover:text-red-400">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-2 px-3 py-2 bg-vb-card border border-dashed border-vb-border rounded-lg cursor-pointer hover:border-brand transition-colors">
+                    <Upload className="w-4 h-4 text-vb-text-muted" />
+                    <span className="text-sm text-vb-text-muted">Upload video (MP4, WebM, MOV)</span>
+                    <input
+                      type="file"
+                      accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                      className="hidden"
+                      onChange={(e) => setManualVideo(e.target.files?.[0] || null)}
+                    />
+                  </label>
+                )}
+              </div>
+
               {/* Custom Fields */}
               {manualForm.customFields.length > 0 && (
                 <div className="space-y-3 pt-2">
@@ -1234,7 +1315,7 @@ export default function Applicants() {
 
             <div className="flex justify-end gap-2 px-6 py-4 border-t border-vb-border">
               <button
-                onClick={() => { setShowManualModal(false); setManualError(''); }}
+                onClick={() => { setShowManualModal(false); setManualError(''); setManualResume(null); setManualVideo(null); }}
                 className="px-4 py-2 text-sm text-vb-text-secondary hover:text-vb-text rounded-lg border border-vb-border hover:bg-vb-card transition-colors"
               >
                 Cancel

@@ -11,7 +11,7 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
   UPLOAD_DIR: z.string().default('./uploads'),
-  MAX_FILE_SIZE: z.coerce.number().default(5242880),
+  MAX_FILE_SIZE: z.coerce.number().default(104857600),
 });
 
 export const env = envSchema.parse(process.env);

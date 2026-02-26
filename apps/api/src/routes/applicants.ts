@@ -1,8 +1,14 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import * as XLSX from 'xlsx';
+import { randomUUID } from 'node:crypto';
+import { createWriteStream } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
+import { pipeline } from 'node:stream/promises';
+import path from 'node:path';
 import prisma from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
+import { env } from '../config/env.js';
 
 const addApplicantSchema = z.object({
   firstName: z.string().min(1),
@@ -95,15 +101,49 @@ export async function applicantRoutes(app: FastifyInstance) {
     return applicant;
   });
 
-  // Add applicant manually
+  // Add applicant manually (supports multipart with file uploads)
   app.post('/', async (request, reply) => {
-    const parsed = addApplicantSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply.status(400).send({ error: 'Validation failed', details: parsed.error.flatten() });
-    }
-
     const { organizationId } = request.user!;
-    const data = parsed.data;
+
+    let data: z.infer<typeof addApplicantSchema>;
+    const uploadedFiles: Array<{ type: string; fileName: string; storageUrl: string; mimeType: string | null }> = [];
+
+    if (request.isMultipart()) {
+      const fields: Record<string, string> = {};
+      await mkdir(env.UPLOAD_DIR, { recursive: true });
+
+      for await (const part of request.parts()) {
+        if (part.type === 'file') {
+          const fieldType = part.fieldname; // 'resume' or 'video'
+          const ext = path.extname(part.filename || '') || '';
+          const safeName = `${randomUUID()}${ext}`;
+          const filePath = path.join(env.UPLOAD_DIR, safeName);
+          await pipeline(part.file, createWriteStream(filePath));
+          uploadedFiles.push({
+            type: fieldType,
+            fileName: part.filename || safeName,
+            storageUrl: safeName,
+            mimeType: part.mimetype || null,
+          });
+        } else {
+          fields[part.fieldname] = String(part.value ?? '');
+        }
+      }
+
+      // Parse JSON body from the 'data' field
+      const bodyData = fields.data ? JSON.parse(fields.data) : fields;
+      const parsed = addApplicantSchema.safeParse(bodyData);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'Validation failed', details: parsed.error.flatten() });
+      }
+      data = parsed.data;
+    } else {
+      const parsed = addApplicantSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'Validation failed', details: parsed.error.flatten() });
+      }
+      data = parsed.data;
+    }
 
     // Find the first pipeline stage (Applied) for this job
     const firstStage = await prisma.pipelineStage.findFirst({
@@ -137,6 +177,19 @@ export async function applicantRoutes(app: FastifyInstance) {
           applicantId: applicant.id,
           fieldId: `custom_${cf.label.toLowerCase().replace(/\s+/g, '_')}`,
           value: cf.value,
+        })),
+      });
+    }
+
+    // Store uploaded files
+    if (uploadedFiles.length > 0) {
+      await prisma.uploadedFile.createMany({
+        data: uploadedFiles.map((file) => ({
+          applicantId: applicant.id,
+          type: file.type,
+          fileName: file.fileName,
+          storageUrl: file.storageUrl,
+          mimeType: file.mimeType,
         })),
       });
     }

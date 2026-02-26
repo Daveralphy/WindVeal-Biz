@@ -73,6 +73,9 @@ app.get<{ Params: { filename: string } }>('/api/uploads/:filename', async (reque
     '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
     '.gif': 'image/gif', '.webp': 'image/webp', '.pdf': 'application/pdf',
     '.svg': 'image/svg+xml',
+    '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime',
+    '.avi': 'video/x-msvideo', '.mkv': 'video/x-matroska', '.ogg': 'video/ogg',
+    '.doc': 'application/msword', '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   };
   reply.header('Content-Type', mimeMap[ext] || 'application/octet-stream');
   reply.header('Cache-Control', 'public, max-age=86400');
