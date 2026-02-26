@@ -116,7 +116,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
       })),
     ]
       .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
-      .slice(0, 10);
+      .slice(0, 3);
 
     return activities;
   });

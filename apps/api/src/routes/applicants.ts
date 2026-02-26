@@ -225,6 +225,36 @@ export async function applicantRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Applicant not found' });
     }
 
+    // Determine if this is a backward move
+    const allStages = await prisma.pipelineStage.findMany({
+      where: { jobId: applicant.jobId },
+      orderBy: { order: 'asc' },
+    });
+    const currentOrder = allStages.find((s) => s.id === applicant.currentStageId)?.order ?? 0;
+    const targetOrder = allStages.find((s) => s.id === stageId)?.order ?? 0;
+    const isMovingBack = targetOrder < currentOrder;
+
+    if (isMovingBack) {
+      // Remove the most recent forward history entry instead of adding a new one
+      const lastForward = await prisma.stageHistory.findFirst({
+        where: { applicantId: applicant.id, toStageId: applicant.currentStageId },
+        orderBy: { movedAt: 'desc' },
+      });
+
+      const [updated] = await prisma.$transaction([
+        prisma.applicant.update({
+          where: { id: applicant.id },
+          data: { currentStageId: stageId },
+          include: { currentStage: true },
+        }),
+        ...(lastForward
+          ? [prisma.stageHistory.delete({ where: { id: lastForward.id } })]
+          : []),
+      ]);
+
+      return updated;
+    }
+
     const [updated] = await prisma.$transaction([
       prisma.applicant.update({
         where: { id: applicant.id },
