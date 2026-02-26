@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -23,10 +23,9 @@ interface JobDetail {
   salaryMax: number | null;
   salaryCurrency: string;
   showSalary: boolean;
+  companyDescription: string | null;
   description: string;
-  responsibilities: string | null;
-  requirements: string;
-  niceToHave: string | null;
+  applicationForm?: { fields: ApplicantField[] } | null;
   deadline: string | null;
   createdAt: string;
 }
@@ -36,6 +35,25 @@ interface OrgInfo {
   slug: string;
   website?: string | null;
 }
+
+type ApplicantFieldType = 'short_text' | 'long_text' | 'email' | 'url' | 'phone' | 'file';
+
+interface ApplicantField {
+  id: string;
+  label: string;
+  type: ApplicantFieldType;
+  required: boolean;
+}
+
+const DEFAULT_APPLICANT_FIELDS: ApplicantField[] = [
+  { id: 'first_name', label: 'First Name', type: 'short_text', required: true },
+  { id: 'last_name', label: 'Last Name', type: 'short_text', required: true },
+  { id: 'email', label: 'Email', type: 'email', required: true },
+  { id: 'phone', label: 'Phone', type: 'phone', required: false },
+  { id: 'linkedin_url', label: 'LinkedIn URL', type: 'url', required: false },
+  { id: 'resume', label: 'Resume', type: 'file', required: false },
+  { id: 'cover_letter', label: 'Cover Letter', type: 'long_text', required: false },
+];
 
 const TYPE_LABELS: Record<string, string> = {
   FULL_TIME: 'Full-time',
@@ -66,19 +84,20 @@ export default function PublicJobApply() {
   const [org, setOrg] = useState<OrgInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const formRef = useRef<HTMLDivElement | null>(null);
 
   // Form state
-  const [form, setForm] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    linkedinUrl: '',
-    coverLetter: '',
-  });
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [fileValues, setFileValues] = useState<Record<string, File | null>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState('');
+
+  useEffect(() => {
+    if (!showForm || !formRef.current) return;
+    formRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [showForm]);
 
   useEffect(() => {
     axios
@@ -91,15 +110,57 @@ export default function PublicJobApply() {
       .finally(() => setLoading(false));
   }, [slug, jobId]);
 
+  useEffect(() => {
+    if (!job) return;
+    const fields = job.applicationForm?.fields?.length ? job.applicationForm.fields : DEFAULT_APPLICANT_FIELDS;
+    const nextValues: Record<string, string> = {};
+    const nextFiles: Record<string, File | null> = {};
+    fields.forEach((field) => {
+      nextValues[field.id] = fieldValues[field.id] || '';
+      if (field.type === 'file') nextFiles[field.id] = fileValues[field.id] || null;
+    });
+    setFieldValues(nextValues);
+    setFileValues(nextFiles);
+  }, [job]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.firstName || !form.lastName || !form.email) return;
+    if (!job) return;
+
+    const fields = job.applicationForm?.fields?.length ? job.applicationForm.fields : DEFAULT_APPLICANT_FIELDS;
+    const missingRequired = fields.some((field) => {
+      if (!field.required) return false;
+      if (field.type === 'file') return !fileValues[field.id];
+      return !fieldValues[field.id]?.trim();
+    });
+
+    if (missingRequired) return;
 
     setSubmitting(true);
     setSubmitError('');
 
     try {
-      await axios.post(`${API_BASE}/public/careers/${slug}/jobs/${jobId}/apply`, form);
+      const payloadFields: Record<string, string> = {};
+      fields.forEach((field) => {
+        if (field.type === 'file') return;
+        payloadFields[field.id] = fieldValues[field.id] || '';
+      });
+
+      const hasFiles = Object.values(fileValues).some((file) => file);
+      if (hasFiles) {
+        const formData = new FormData();
+        formData.append('fields', JSON.stringify(payloadFields));
+        Object.entries(fileValues).forEach(([fieldId, file]) => {
+          if (!file) return;
+          formData.append(`file_${fieldId}`, file);
+        });
+        await axios.post(`${API_BASE}/public/careers/${slug}/jobs/${jobId}/apply`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      } else {
+        await axios.post(`${API_BASE}/public/careers/${slug}/jobs/${jobId}/apply`, { fields: payloadFields });
+      }
+
       setSubmitted(true);
     } catch (err: unknown) {
       const errObj = err as { response?: { data?: { error?: string } } };
@@ -110,6 +171,14 @@ export default function PublicJobApply() {
   };
 
   const orgName = org?.name || '';
+  const applicantFields = job?.applicationForm?.fields?.length
+    ? job.applicationForm.fields
+    : DEFAULT_APPLICANT_FIELDS;
+  const isSubmitDisabled = applicantFields.some((field) => {
+    if (!field.required) return false;
+    if (field.type === 'file') return !fileValues[field.id];
+    return !fieldValues[field.id]?.trim();
+  });
 
   if (loading) {
     return (
@@ -238,104 +307,89 @@ export default function PublicJobApply() {
 
       {/* ───── Content: Details + Form ───── */}
       <main className="flex-1 max-w-6xl mx-auto px-4 sm:px-6 py-8 w-full">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="space-y-6">
           {/* Job Details */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="space-y-6">
+            {job.companyDescription && (
+              <section className="bg-white rounded-xl border border-gray-200 p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-3">About {org?.name || 'the Company'}</h2>
+                <div 
+                  className="text-gray-600 text-sm leading-relaxed prose prose-sm max-w-none"
+                  dangerouslySetInnerHTML={{ __html: job.companyDescription }}
+                />
+              </section>
+            )}
+
             <section className="bg-white rounded-xl border border-gray-200 p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-3">About the Role</h2>
-              <div className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">{job.description}</div>
+              <div 
+                className="text-gray-600 text-sm leading-relaxed prose prose-sm max-w-none"
+                dangerouslySetInnerHTML={{ __html: job.description }}
+              />
             </section>
 
-            {job.responsibilities && (
-              <section className="bg-white rounded-xl border border-gray-200 p-6">
-                <h2 className="text-lg font-semibold text-gray-900 mb-3">Responsibilities</h2>
-                <div className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">{job.responsibilities}</div>
-              </section>
-            )}
-
-            <section className="bg-white rounded-xl border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-3">Requirements</h2>
-              <div className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">{job.requirements}</div>
-            </section>
-
-            {job.niceToHave && (
-              <section className="bg-white rounded-xl border border-gray-200 p-6">
-                <h2 className="text-lg font-semibold text-gray-900 mb-3">Nice to Have</h2>
-                <div className="text-gray-600 text-sm leading-relaxed whitespace-pre-line">{job.niceToHave}</div>
-              </section>
-            )}
+            <div className="flex justify-start">
+              <button
+                type="button"
+                onClick={() => setShowForm(true)}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
+              >
+                Apply for Job
+              </button>
+            </div>
           </div>
 
           {/* Application Form */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-xl border border-gray-200 p-5 sticky top-24">
+          {showForm && (
+            <div ref={formRef} className="bg-white rounded-xl border border-gray-200 p-6">
               <h3 className="text-gray-900 font-semibold mb-4">Apply for this role</h3>
 
               <form onSubmit={handleSubmit} className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">First Name *</label>
-                    <input
-                      type="text"
-                      required
-                      value={form.firstName}
-                      onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:border-gray-500 focus:ring-1 focus:ring-gray-500 outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Last Name *</label>
-                    <input
-                      type="text"
-                      required
-                      value={form.lastName}
-                      onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:border-gray-500 focus:ring-1 focus:ring-gray-500 outline-none"
-                    />
-                  </div>
-                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {applicantFields.map((field) => {
+                    const isLongText = field.type === 'long_text';
+                    const isFile = field.type === 'file';
+                    const inputType = field.type === 'email'
+                      ? 'email'
+                      : field.type === 'url'
+                        ? 'url'
+                        : field.type === 'phone'
+                          ? 'tel'
+                          : 'text';
 
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Email *</label>
-                  <input
-                    type="email"
-                    required
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:border-gray-500 focus:ring-1 focus:ring-gray-500 outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Phone</label>
-                  <input
-                    type="tel"
-                    value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:border-gray-500 focus:ring-1 focus:ring-gray-500 outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">LinkedIn URL</label>
-                  <input
-                    type="url"
-                    value={form.linkedinUrl}
-                    onChange={(e) => setForm({ ...form, linkedinUrl: e.target.value })}
-                    placeholder="https://linkedin.com/in/..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:border-gray-500 focus:ring-1 focus:ring-gray-500 outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Cover Letter</label>
-                  <textarea
-                    value={form.coverLetter}
-                    onChange={(e) => setForm({ ...form, coverLetter: e.target.value })}
-                    rows={4}
-                    placeholder="Tell us why you're a great fit..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 resize-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500 outline-none"
-                  />
+                    return (
+                      <div key={field.id} className={isLongText ? 'sm:col-span-2' : ''}>
+                        <label className="block text-xs text-gray-500 mb-1">
+                          {field.label}{field.required ? ' *' : ''}
+                        </label>
+                        {isLongText ? (
+                          <textarea
+                            value={fieldValues[field.id] || ''}
+                            onChange={(e) => setFieldValues({ ...fieldValues, [field.id]: e.target.value })}
+                            rows={4}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 resize-none focus:border-gray-500 focus:ring-1 focus:ring-gray-500 outline-none"
+                          />
+                        ) : isFile ? (
+                          <input
+                            type="file"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0] || null;
+                              setFileValues({ ...fileValues, [field.id]: file });
+                            }}
+                            className="w-full text-sm text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-xs file:font-medium file:text-gray-700 hover:file:bg-gray-200"
+                          />
+                        ) : (
+                          <input
+                            type={inputType}
+                            required={field.required}
+                            value={fieldValues[field.id] || ''}
+                            onChange={(e) => setFieldValues({ ...fieldValues, [field.id]: e.target.value })}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:border-gray-500 focus:ring-1 focus:ring-gray-500 outline-none"
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {submitError && (
@@ -344,7 +398,7 @@ export default function PublicJobApply() {
 
                 <button
                   type="submit"
-                  disabled={submitting || !form.firstName || !form.lastName || !form.email}
+                  disabled={submitting || isSubmitDisabled}
                   className="w-full py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
                 >
                   {submitting ? (
@@ -358,7 +412,7 @@ export default function PublicJobApply() {
                 </button>
               </form>
             </div>
-          </div>
+          )}
         </div>
       </main>
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import RichTextEditor from '@/components/editor/RichTextEditor';
 import {
   ArrowLeft,
   Briefcase,
@@ -8,6 +9,9 @@ import {
   Sparkles,
   Eye,
   Loader2,
+  GripVertical,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -38,11 +42,32 @@ const VISIBILITY_OPTIONS = [
   { value: 'DRAFT', label: 'Draft', desc: 'Save as draft, publish later' },
 ];
 
-type Section = 'basic' | 'description' | 'settings';
+type Section = 'basic' | 'description' | 'applicants' | 'settings';
+
+type ApplicantFieldType = 'short_text' | 'long_text' | 'email' | 'url' | 'phone' | 'file';
+
+interface ApplicantField {
+  id: string;
+  label: string;
+  type: ApplicantFieldType;
+  required: boolean;
+  system?: boolean;
+}
+
+const DEFAULT_APPLICANT_FIELDS: ApplicantField[] = [
+  { id: 'first_name', label: 'First Name', type: 'short_text', required: true, system: true },
+  { id: 'last_name', label: 'Last Name', type: 'short_text', required: true, system: true },
+  { id: 'email', label: 'Email', type: 'email', required: true, system: true },
+  { id: 'phone', label: 'Phone', type: 'phone', required: false, system: true },
+  { id: 'linkedin_url', label: 'LinkedIn URL', type: 'url', required: false, system: true },
+  { id: 'resume', label: 'Resume', type: 'file', required: false },
+  { id: 'cover_letter', label: 'Cover Letter', type: 'long_text', required: false },
+];
 
 const SECTIONS = [
   { key: 'basic' as Section, label: 'Basic Info' },
   { key: 'description' as Section, label: 'Description' },
+  { key: 'applicants' as Section, label: 'Applicant Fields' },
   { key: 'settings' as Section, label: 'Settings' },
 ];
 
@@ -66,15 +91,54 @@ export default function JobEdit() {
   const [deadline, setDeadline] = useState('');
 
   // Description
+  const [companyDescription, setCompanyDescription] = useState('');
   const [description, setDescription] = useState('');
-  const [responsibilities, setResponsibilities] = useState('');
-  const [requirements, setRequirements] = useState('');
-  const [niceToHave, setNiceToHave] = useState('');
+
+  // Applicant Fields
+  const [applicantFields, setApplicantFields] = useState<ApplicantField[]>([...DEFAULT_APPLICANT_FIELDS]);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [newFieldLabel, setNewFieldLabel] = useState('');
+  const [newFieldType, setNewFieldType] = useState<ApplicantFieldType>('short_text');
+  const [newFieldRequired, setNewFieldRequired] = useState(false);
 
   // Settings
   const [visibility, setVisibility] = useState('PORTAL');
   const [aiScreeningEnabled, setAiScreeningEnabled] = useState(true);
   const [aiScoreThreshold, setAiScoreThreshold] = useState('50');
+
+  function normalizeApplicantFields(fields: ApplicantField[] | undefined) {
+    if (!fields || fields.length === 0) return [...DEFAULT_APPLICANT_FIELDS];
+    return fields.map((field) => ({
+      ...field,
+      required: Boolean(field.required),
+    }));
+  }
+
+  function createFieldId(label: string, existing: ApplicantField[]) {
+    const base = label
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s_-]/g, '')
+      .replace(/[\s_-]+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'custom_field';
+    let next = base;
+    let counter = 1;
+    while (existing.some((field) => field.id === next)) {
+      next = `${base}_${counter}`;
+      counter += 1;
+    }
+    return next;
+  }
+
+  function reorderFields(fromIndex: number, toIndex: number) {
+    if (fromIndex === toIndex) return;
+    setApplicantFields((current) => {
+      const copy = [...current];
+      const [moved] = copy.splice(fromIndex, 1);
+      copy.splice(toIndex, 0, moved);
+      return copy;
+    });
+  }
 
   useEffect(() => {
     if (!id) return;
@@ -90,10 +154,9 @@ export default function JobEdit() {
         setSalaryCurrency(j.salaryCurrency || 'NGN');
         setShowSalary(j.showSalary);
         setDeadline(j.deadline ? j.deadline.slice(0, 10) : '');
+        setCompanyDescription(j.companyDescription || '');
         setDescription(j.description);
-        setResponsibilities(j.responsibilities || '');
-        setRequirements(j.requirements);
-        setNiceToHave(j.niceToHave || '');
+        setApplicantFields(normalizeApplicantFields(j.applicationForm?.fields));
         setVisibility(j.visibility);
         setAiScreeningEnabled(j.aiScreeningEnabled);
         setAiScoreThreshold(j.aiScoreThreshold != null ? String(j.aiScoreThreshold) : '50');
@@ -103,10 +166,18 @@ export default function JobEdit() {
   }, [id, navigate]);
 
   async function handleSave() {
-    if (!title.trim() || !description.trim() || !requirements.trim()) {
-      setError('Title, description, and requirements are required.');
+    if (!title.trim() || !description.trim()) {
+      setError('Title and description are required.');
       return;
     }
+
+    const requiredIds = ['first_name', 'last_name', 'email'];
+    const missingRequired = requiredIds.filter((reqId) => !applicantFields.some((f) => f.id === reqId));
+    if (missingRequired.length > 0) {
+      setError('First name, last name, and email fields are required for applicants.');
+      return;
+    }
+
     setError('');
     setSaving(true);
 
@@ -114,7 +185,7 @@ export default function JobEdit() {
       const payload: Record<string, unknown> = {
         title: title.trim(),
         description: description.trim(),
-        requirements: requirements.trim(),
+        companyDescription: companyDescription.trim() || null,
         department: department.trim() || null,
         location: location.trim() || null,
         type,
@@ -122,12 +193,11 @@ export default function JobEdit() {
         aiScreeningEnabled,
         showSalary,
         salaryCurrency,
-        responsibilities: responsibilities.trim() || null,
-        niceToHave: niceToHave.trim() || null,
         salaryMin: salaryMin ? parseInt(salaryMin) : null,
         salaryMax: salaryMax ? parseInt(salaryMax) : null,
         deadline: deadline ? new Date(deadline).toISOString() : null,
         aiScoreThreshold: aiScoreThreshold ? parseInt(aiScoreThreshold) : null,
+        applicationForm: { fields: applicantFields },
       };
 
       await api.patch(`/jobs/${id}`, payload);
@@ -341,50 +411,198 @@ export default function JobEdit() {
         <div className="bg-vb-card border border-vb-border rounded-xl p-6 space-y-5">
           <div>
             <label className="block text-sm font-medium text-vb-text mb-1.5">
-              Job Description <span className="text-red-400">*</span>
+              About Company
             </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe the role, what the candidate will be doing, and what makes this opportunity exciting..."
-              rows={5}
-              className="w-full px-4 py-2.5 bg-vb-bg border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand resize-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-vb-text mb-1.5">Responsibilities</label>
-            <textarea
-              value={responsibilities}
-              onChange={(e) => setResponsibilities(e.target.value)}
-              placeholder="List the key responsibilities for this role (one per line)..."
-              rows={4}
-              className="w-full px-4 py-2.5 bg-vb-bg border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand resize-none"
-            />
+            <p className="text-xs text-vb-text-muted mb-2">
+              Tell candidates about your organization. This will appear before the job description.
+            </p>
+            <div className="rich-editor-wrapper rounded-lg overflow-hidden border border-vb-border focus-within:border-brand">
+              <RichTextEditor
+                value={companyDescription}
+                onChange={setCompanyDescription}
+                placeholder="Describe your company, mission, culture, benefits, or what makes your organization a great place to work..."
+              />
+            </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-vb-text mb-1.5">
-              Requirements <span className="text-red-400">*</span>
+              Job Description <span className="text-red-400">*</span>
             </label>
-            <textarea
-              value={requirements}
-              onChange={(e) => setRequirements(e.target.value)}
-              placeholder="List the must-have qualifications and experience (one per line)..."
-              rows={4}
-              className="w-full px-4 py-2.5 bg-vb-bg border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand resize-none"
-            />
+            <p className="text-xs text-vb-text-muted mb-2">
+              Use the editor below to format your job description. Include responsibilities, requirements, and any other relevant information.
+            </p>
+            <div className="rich-editor-wrapper rounded-lg overflow-hidden border border-vb-border focus-within:border-brand">
+              <RichTextEditor
+                value={description}
+                onChange={setDescription}
+                placeholder="Describe the role in detail - include responsibilities, requirements, qualifications, and any other relevant information..."
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Applicant Fields */}
+      {section === 'applicants' && (
+        <div className="bg-vb-card border border-vb-border rounded-xl p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-vb-text">Applicant Fields</h3>
+              <p className="text-xs text-vb-text-muted mt-1">
+                Customize what applicants see. Drag to reorder fields.
+              </p>
+            </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-vb-text mb-1.5">Nice to Have</label>
-            <textarea
-              value={niceToHave}
-              onChange={(e) => setNiceToHave(e.target.value)}
-              placeholder="Optional skills or experience that would be a bonus..."
-              rows={3}
-              className="w-full px-4 py-2.5 bg-vb-bg border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand resize-none"
-            />
+          <div className="space-y-3">
+            {applicantFields.map((field, index) => (
+              <div
+                key={field.id}
+                draggable
+                onDragStart={() => setDragIndex(index)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => {
+                  if (dragIndex === null) return;
+                  reorderFields(dragIndex, index);
+                  setDragIndex(null);
+                }}
+                className="flex items-center gap-3 p-3 rounded-lg border border-vb-border bg-vb-bg/60"
+              >
+                <GripVertical className="w-4 h-4 text-vb-text-muted" />
+                <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wide text-vb-text-muted mb-1">
+                      Label
+                    </label>
+                    <input
+                      type="text"
+                      value={field.label}
+                      onChange={(e) => {
+                        const label = e.target.value;
+                        setApplicantFields((current) => current.map((f, idx) => (
+                          idx === index ? { ...f, label } : f
+                        )));
+                      }}
+                      className="w-full px-3 py-2 bg-vb-bg border border-vb-border rounded-lg text-xs text-vb-text outline-none focus:border-brand"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-wide text-vb-text-muted mb-1">
+                      Input Type
+                    </label>
+                    <select
+                      value={field.type}
+                      onChange={(e) => {
+                        const type = e.target.value as ApplicantFieldType;
+                        setApplicantFields((current) => current.map((f, idx) => (
+                          idx === index ? { ...f, type } : f
+                        )));
+                      }}
+                      className="w-full px-3 py-2 bg-vb-bg border border-vb-border rounded-lg text-xs text-vb-text outline-none focus:border-brand"
+                    >
+                      <option value="short_text">Short text</option>
+                      <option value="long_text">Long text</option>
+                      <option value="email">Email</option>
+                      <option value="url">URL</option>
+                      <option value="phone">Phone</option>
+                      <option value="file">File upload</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-3 pt-6">
+                    <label className="flex items-center gap-2 text-xs text-vb-text-secondary">
+                      <input
+                        type="checkbox"
+                        checked={field.required}
+                        onChange={(e) => {
+                          const required = e.target.checked;
+                          setApplicantFields((current) => current.map((f, idx) => (
+                            idx === index ? { ...f, required } : f
+                          )));
+                        }}
+                        className="rounded border-vb-border text-brand focus:ring-brand"
+                      />
+                      Required
+                    </label>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const ok = window.confirm('Are you sure you want to delete this field?');
+                    if (!ok) return;
+                    setApplicantFields((current) => current.filter((_, idx) => idx !== index));
+                  }}
+                  className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg"
+                  title="Delete field"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="border-t border-vb-border pt-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[10px] uppercase tracking-wide text-vb-text-muted mb-1">
+                  New Field Label
+                </label>
+                <input
+                  type="text"
+                  value={newFieldLabel}
+                  onChange={(e) => setNewFieldLabel(e.target.value)}
+                  className="w-full px-3 py-2 bg-vb-bg border border-vb-border rounded-lg text-xs text-vb-text outline-none focus:border-brand"
+                  placeholder="e.g. Portfolio link"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] uppercase tracking-wide text-vb-text-muted mb-1">
+                  Input Type
+                </label>
+                <select
+                  value={newFieldType}
+                  onChange={(e) => setNewFieldType(e.target.value as ApplicantFieldType)}
+                  className="w-full px-3 py-2 bg-vb-bg border border-vb-border rounded-lg text-xs text-vb-text outline-none focus:border-brand"
+                >
+                  <option value="short_text">Short text</option>
+                  <option value="long_text">Long text</option>
+                  <option value="email">Email</option>
+                  <option value="url">URL</option>
+                  <option value="phone">Phone</option>
+                  <option value="file">File upload</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-3 pt-6">
+                <label className="flex items-center gap-2 text-xs text-vb-text-secondary">
+                  <input
+                    type="checkbox"
+                    checked={newFieldRequired}
+                    onChange={(e) => setNewFieldRequired(e.target.checked)}
+                    className="rounded border-vb-border text-brand focus:ring-brand"
+                  />
+                  Required
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const label = newFieldLabel.trim();
+                    if (!label) return;
+                    const id = createFieldId(label, applicantFields);
+                    setApplicantFields((current) => ([
+                      ...current,
+                      { id, label, type: newFieldType, required: newFieldRequired },
+                    ]));
+                    setNewFieldLabel('');
+                    setNewFieldType('short_text');
+                    setNewFieldRequired(false);
+                  }}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-brand/10 text-brand text-xs font-medium hover:bg-brand/20"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Field
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

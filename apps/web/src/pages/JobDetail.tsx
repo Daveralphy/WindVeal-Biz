@@ -59,10 +59,8 @@ interface Job {
   salaryMax: number | null;
   salaryCurrency: string;
   showSalary: boolean;
+  companyDescription: string | null;
   description: string;
-  responsibilities: string | null;
-  requirements: string;
-  niceToHave: string | null;
   deadline: string | null;
   aiScreeningEnabled: boolean;
   aiScoreThreshold: number | null;
@@ -268,29 +266,23 @@ export default function JobDetail() {
       {tab === 'overview' && (
         <div className="grid grid-cols-3 gap-5">
           <div className="col-span-2 space-y-4">
+            {job.companyDescription && (
+              <div className="bg-vb-card border border-vb-border rounded-xl p-5">
+                <h3 className="text-sm font-medium text-vb-text mb-3">About Company</h3>
+                <div 
+                  className="text-xs text-vb-text-secondary leading-relaxed prose prose-sm prose-invert max-w-none"
+                  dangerouslySetInnerHTML={{ __html: job.companyDescription }}
+                />
+              </div>
+            )}
+
             <div className="bg-vb-card border border-vb-border rounded-xl p-5">
               <h3 className="text-sm font-medium text-vb-text mb-3">Description</h3>
-              <p className="text-xs text-vb-text-secondary whitespace-pre-line leading-relaxed">{job.description}</p>
+              <div 
+                className="text-xs text-vb-text-secondary leading-relaxed prose prose-sm prose-invert max-w-none"
+                dangerouslySetInnerHTML={{ __html: job.description }}
+              />
             </div>
-
-            {job.responsibilities && (
-              <div className="bg-vb-card border border-vb-border rounded-xl p-5">
-                <h3 className="text-sm font-medium text-vb-text mb-3">Responsibilities</h3>
-                <p className="text-xs text-vb-text-secondary whitespace-pre-line leading-relaxed">{job.responsibilities}</p>
-              </div>
-            )}
-
-            <div className="bg-vb-card border border-vb-border rounded-xl p-5">
-              <h3 className="text-sm font-medium text-vb-text mb-3">Requirements</h3>
-              <p className="text-xs text-vb-text-secondary whitespace-pre-line leading-relaxed">{job.requirements}</p>
-            </div>
-
-            {job.niceToHave && (
-              <div className="bg-vb-card border border-vb-border rounded-xl p-5">
-                <h3 className="text-sm font-medium text-vb-text mb-3">Nice to Have</h3>
-                <p className="text-xs text-vb-text-secondary whitespace-pre-line leading-relaxed">{job.niceToHave}</p>
-              </div>
-            )}
           </div>
 
           <div className="space-y-4">

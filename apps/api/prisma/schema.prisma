@@ -211,9 +211,10 @@ model Job {
   salaryMax           Int?
   salaryCurrency      String    @default("NGN")
   showSalary          Boolean   @default(false)
+  companyDescription  String?
   description         String
   responsibilities    String?
-  requirements        String
+  requirements        String?
   niceToHave          String?
   status              JobStatus @default(DRAFT)
   deadline            DateTime?

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import RichTextEditor from '@/components/editor/RichTextEditor';
 import {
   ArrowLeft,
   Briefcase,
@@ -73,10 +74,8 @@ export default function JobNew() {
   const [deadline, setDeadline] = useState('');
 
   // Step 2: Description
+  const [companyDescription, setCompanyDescription] = useState('');
   const [description, setDescription] = useState('');
-  const [responsibilities, setResponsibilities] = useState('');
-  const [requirements, setRequirements] = useState('');
-  const [niceToHave, setNiceToHave] = useState('');
 
   // Step 3: Settings
   const [visibility, setVisibility] = useState('PORTAL');
@@ -88,7 +87,7 @@ export default function JobNew() {
 
   function canProceed(): boolean {
     if (step === 1) return title.trim().length > 0;
-    if (step === 2) return description.trim().length > 0 && requirements.trim().length > 0;
+    if (step === 2) return description.trim().length > 0;
     return true;
   }
 
@@ -123,7 +122,6 @@ export default function JobNew() {
       const payload: Record<string, unknown> = {
         title: title.trim(),
         description: description.trim(),
-        requirements: requirements.trim(),
         type,
         visibility,
         aiScreeningEnabled,
@@ -131,10 +129,9 @@ export default function JobNew() {
         salaryCurrency,
       };
 
+      if (companyDescription.trim()) payload.companyDescription = companyDescription.trim();
       if (department.trim()) payload.department = department.trim();
       if (location.trim()) payload.location = location.trim();
-      if (responsibilities.trim()) payload.responsibilities = responsibilities.trim();
-      if (niceToHave.trim()) payload.niceToHave = niceToHave.trim();
       if (salaryMin) payload.salaryMin = parseInt(salaryMin);
       if (salaryMax) payload.salaryMax = parseInt(salaryMax);
       if (deadline) payload.deadline = new Date(deadline).toISOString();
@@ -349,50 +346,34 @@ export default function JobNew() {
         <div className="bg-vb-card border border-vb-border rounded-xl p-6 space-y-5">
           <div>
             <label className="block text-sm font-medium text-vb-text mb-1.5">
-              Job Description <span className="text-red-400">*</span>
+              About Company
             </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe the role, what the candidate will be doing, and what makes this opportunity exciting..."
-              rows={5}
-              className="w-full px-4 py-2.5 bg-vb-bg border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand resize-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-vb-text mb-1.5">Responsibilities</label>
-            <textarea
-              value={responsibilities}
-              onChange={(e) => setResponsibilities(e.target.value)}
-              placeholder="List the key responsibilities for this role (one per line)..."
-              rows={4}
-              className="w-full px-4 py-2.5 bg-vb-bg border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand resize-none"
-            />
+            <p className="text-xs text-vb-text-muted mb-2">
+              Tell candidates about your organization. This will appear before the job description.
+            </p>
+            <div className="rich-editor-wrapper rounded-lg overflow-hidden border border-vb-border focus-within:border-brand">
+              <RichTextEditor
+                value={companyDescription}
+                onChange={setCompanyDescription}
+                placeholder="Describe your company, mission, culture, benefits, or what makes your organization a great place to work..."
+              />
+            </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-vb-text mb-1.5">
-              Requirements <span className="text-red-400">*</span>
+              Job Description <span className="text-red-400">*</span>
             </label>
-            <textarea
-              value={requirements}
-              onChange={(e) => setRequirements(e.target.value)}
-              placeholder="List the must-have qualifications and experience (one per line)..."
-              rows={4}
-              className="w-full px-4 py-2.5 bg-vb-bg border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand resize-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-vb-text mb-1.5">Nice to Have</label>
-            <textarea
-              value={niceToHave}
-              onChange={(e) => setNiceToHave(e.target.value)}
-              placeholder="Optional skills or experience that would be a bonus..."
-              rows={3}
-              className="w-full px-4 py-2.5 bg-vb-bg border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand resize-none"
-            />
+            <p className="text-xs text-vb-text-muted mb-2">
+              Use the editor below to format your job description. Include responsibilities, requirements, and any other relevant information.
+            </p>
+            <div className="rich-editor-wrapper rounded-lg overflow-hidden border border-vb-border focus-within:border-brand">
+              <RichTextEditor
+                value={description}
+                onChange={setDescription}
+                placeholder="Describe the role in detail - include responsibilities, requirements, qualifications, and any other relevant information..."
+              />
+            </div>
           </div>
         </div>
       )}

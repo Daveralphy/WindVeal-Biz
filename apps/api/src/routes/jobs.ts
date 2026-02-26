@@ -12,9 +12,10 @@ const createJobSchema = z.object({
   salaryMax: z.number().optional(),
   salaryCurrency: z.string().min(1).max(5).default('NGN'),
   showSalary: z.boolean().default(false),
+  companyDescription: z.string().optional(),
   description: z.string().min(1),
   responsibilities: z.string().optional(),
-  requirements: z.string().min(1),
+  requirements: z.string().optional(),
   niceToHave: z.string().optional(),
   deadline: z.string().datetime().optional(),
   aiScreeningEnabled: z.boolean().default(true),
@@ -79,6 +80,7 @@ export async function jobRoutes(app: FastifyInstance) {
           include: { currentStage: true, aiReport: true },
           orderBy: { createdAt: 'desc' },
         },
+        applicationForm: true,
         _count: { select: { applicants: true } },
       },
     });
@@ -133,9 +135,27 @@ export async function jobRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Job not found' });
     }
 
-    const updated = await prisma.job.update({
+    const body = request.body as Record<string, unknown>;
+    const applicationForm = body.applicationForm as { fields?: unknown } | undefined;
+    const jobData = { ...body };
+    delete jobData.applicationForm;
+
+    await prisma.job.update({
       where: { id: job.id },
-      data: request.body as Record<string, unknown>,
+      data: jobData,
+    });
+
+    if (applicationForm?.fields) {
+      await prisma.applicationForm.upsert({
+        where: { jobId: job.id },
+        update: { fields: applicationForm.fields },
+        create: { jobId: job.id, fields: applicationForm.fields },
+      });
+    }
+
+    const updated = await prisma.job.findFirst({
+      where: { id: job.id, organizationId },
+      include: { applicationForm: true },
     });
 
     return updated;

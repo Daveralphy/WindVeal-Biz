@@ -73,3 +73,81 @@ html.light {
     border-radius: 3px;
   }
 }
+
+/* ─── Rich Text Editor (TipTap) ─── */
+.rich-editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  background-color: var(--vb-surface);
+  border-bottom: 1px solid var(--vb-border);
+  padding: 8px 12px;
+}
+
+.rich-editor-divider {
+  width: 1px;
+  height: 18px;
+  background-color: var(--vb-border);
+  align-self: center;
+}
+
+.tiptap-editor {
+  background-color: var(--vb-bg);
+  color: var(--vb-text);
+  min-height: 200px;
+  padding: 16px;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 14px;
+  outline: none;
+}
+
+.tiptap-editor p,
+.tiptap-editor ol,
+.tiptap-editor ul {
+  margin-bottom: 12px;
+}
+
+.tiptap-editor p.is-editor-empty:first-child::before {
+  color: var(--vb-text-muted);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* ─── Prose Styling for Rich Text Content ─── */
+.prose {
+  color: inherit;
+}
+
+.prose p {
+  margin-bottom: 1em;
+}
+
+.prose ul,
+.prose ol {
+  margin-top: 0.5em;
+  margin-bottom: 1em;
+  padding-left: 1.5em;
+}
+
+.prose li {
+  margin-bottom: 0.25em;
+}
+
+.prose strong {
+  font-weight: 600;
+  color: inherit;
+}
+
+.prose em {
+  font-style: italic;
+}
+
+.prose blockquote {
+  border-left: 3px solid var(--vb-muted);
+  padding-left: 1em;
+  font-style: italic;
+  color: var(--vb-text-secondary);
+  margin: 1em 0;
+}

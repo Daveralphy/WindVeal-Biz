@@ -1,4 +1,9 @@
 import { FastifyInstance } from 'fastify';
+import { createWriteStream, promises as fs } from 'node:fs';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { pipeline } from 'node:stream/promises';
+import { env } from '../config/env.js';
 import prisma from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
 
@@ -75,6 +80,7 @@ export async function publicCareersRoutes(app: FastifyInstance) {
         salaryMax: true,
         salaryCurrency: true,
         showSalary: true,
+        companyDescription: true,
         description: true,
         requirements: true,
         niceToHave: true,
@@ -120,10 +126,12 @@ export async function publicCareersRoutes(app: FastifyInstance) {
         salaryMax: true,
         salaryCurrency: true,
         showSalary: true,
+        companyDescription: true,
         description: true,
         responsibilities: true,
         requirements: true,
         niceToHave: true,
+        applicationForm: { select: { fields: true } },
         deadline: true,
         createdAt: true,
       },
@@ -158,22 +166,56 @@ export async function publicCareersRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Job not found or no longer accepting applications' });
     }
 
-    const body = request.body as {
-      firstName: string;
-      lastName: string;
-      email: string;
-      phone?: string;
-      linkedinUrl?: string;
-      coverLetter?: string;
-    };
+    const systemFieldIds = ['first_name', 'last_name', 'email', 'phone', 'linkedin_url', 'cover_letter'];
+    let formValues: Record<string, string> = {};
+    const uploadedFiles: Array<{ fieldId: string; fileName: string; storageUrl: string; mimeType?: string | null }> = [];
 
-    if (!body.firstName || !body.lastName || !body.email) {
+    if (request.isMultipart()) {
+      const fields: Record<string, string> = {};
+      await fs.mkdir(env.UPLOAD_DIR, { recursive: true });
+
+      for await (const part of request.parts()) {
+        if (part.type === 'file') {
+          const fieldId = part.fieldname.replace(/^file_/, '');
+          const ext = path.extname(part.filename || '') || '';
+          const safeName = `${randomUUID()}${ext}`;
+          const filePath = path.join(env.UPLOAD_DIR, safeName);
+          await pipeline(part.file, createWriteStream(filePath));
+          uploadedFiles.push({
+            fieldId,
+            fileName: part.filename || safeName,
+            storageUrl: filePath,
+            mimeType: part.mimetype || null,
+          });
+        } else {
+          fields[part.fieldname] = String(part.value ?? '');
+        }
+      }
+
+      if (fields.fields) {
+        formValues = JSON.parse(fields.fields);
+      } else {
+        formValues = fields;
+      }
+    } else {
+      const body = request.body as { fields?: Record<string, string> };
+      formValues = body.fields || (body as Record<string, string>);
+    }
+
+    const firstName = formValues.first_name?.trim();
+    const lastName = formValues.last_name?.trim();
+    const email = formValues.email?.trim();
+    const phone = formValues.phone?.trim();
+    const linkedinUrl = formValues.linkedin_url?.trim();
+    const coverLetter = formValues.cover_letter?.trim();
+
+    if (!firstName || !lastName || !email) {
       return reply.status(400).send({ error: 'First name, last name, and email are required' });
     }
 
     // Check for duplicate application
     const existing = await prisma.applicant.findFirst({
-      where: { jobId, email: body.email },
+      where: { jobId, email },
     });
 
     if (existing) {
@@ -189,24 +231,49 @@ export async function publicCareersRoutes(app: FastifyInstance) {
       data: {
         organizationId: org.id,
         jobId,
-        firstName: body.firstName,
-        lastName: body.lastName,
-        email: body.email,
-        phone: body.phone || null,
-        linkedinUrl: body.linkedinUrl || null,
+        firstName,
+        lastName,
+        email,
+        phone: phone || null,
+        linkedinUrl: linkedinUrl || null,
         source: 'PORTAL',
         currentStageId: firstStageId,
       },
     });
 
-    // Store cover letter as application data if provided
-    if (body.coverLetter) {
+    if (coverLetter) {
       await prisma.applicationData.create({
         data: {
           applicantId: applicant.id,
           fieldId: 'cover_letter',
-          value: body.coverLetter,
+          value: coverLetter,
         },
+      });
+    }
+
+    const extraFieldEntries = Object.entries(formValues)
+      .filter(([fieldId, value]) => !systemFieldIds.includes(fieldId) && value?.trim())
+      .map(([fieldId, value]) => ({ fieldId, value }));
+
+    if (extraFieldEntries.length > 0) {
+      await prisma.applicationData.createMany({
+        data: extraFieldEntries.map((entry) => ({
+          applicantId: applicant.id,
+          fieldId: entry.fieldId,
+          value: entry.value,
+        })),
+      });
+    }
+
+    if (uploadedFiles.length > 0) {
+      await prisma.uploadedFile.createMany({
+        data: uploadedFiles.map((file) => ({
+          applicantId: applicant.id,
+          type: file.fieldId,
+          fileName: file.fileName,
+          storageUrl: file.storageUrl,
+          mimeType: file.mimeType || null,
+        })),
       });
     }
 

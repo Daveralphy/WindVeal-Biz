@@ -180,7 +180,6 @@ export default function VealAIChat() {
           }
           // Add required defaults
           if (!cleanData.description) cleanData.description = 'No description provided';
-          if (!cleanData.requirements) cleanData.requirements = 'No requirements specified';
 
           await api.post('/jobs', cleanData);
 
