@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Clock, Video, User, MapPin, MoreHorizontal, Phone } from 'lucide-react';
+import { Calendar, Clock, Video, User, MapPin, MoreHorizontal } from 'lucide-react';
 import api from '@/lib/api';
 
 interface Interview {
@@ -18,7 +18,6 @@ interface Interview {
 const TYPE_ICONS: Record<string, typeof Video> = {
   VIDEO: Video,
   IN_PERSON: MapPin,
-  PHONE_SCREEN: Phone,
   TECHNICAL: Clock,
   PANEL: Clock,
 };

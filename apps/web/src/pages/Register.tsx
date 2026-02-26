@@ -10,7 +10,6 @@ const STEPS = ['Personal Info', 'Pipeline', 'Company', 'Account'];
 const DEFAULT_STAGES = [
   'Applied',
   'Screening',
-  'Phone Screen',
   'Interview',
   'Technical Assessment',
   'Final Interview',

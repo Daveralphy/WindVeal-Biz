@@ -30,6 +30,9 @@ import {
   Sparkles,
   Play,
   Video,
+  Users,
+  Link2,
+  Undo2,
 } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -171,6 +174,12 @@ interface ImportResult {
   errors: string[];
 }
 
+interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+}
+
 export default function Applicants() {
   const [applicants, setApplicants] = useState<Applicant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -187,6 +196,13 @@ export default function Applicants() {
   const [stageMoving, setStageMoving] = useState(false);
   const [aiScreening, setAiScreening] = useState(false);
   const [showNotesPanel, setShowNotesPanel] = useState(false);
+
+  // Meeting / interview state
+  const [meetingPlatform, setMeetingPlatform] = useState<'google_meet' | 'microsoft_teams'>('google_meet');
+  const [meetingLink, setMeetingLink] = useState('');
+  const [interviewQuestions, setInterviewQuestions] = useState<string[]>(['']);
+  const [selectedTeamMembers, setSelectedTeamMembers] = useState<string[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
   // Add contact state
   const [addDropdownOpen, setAddDropdownOpen] = useState(false);
@@ -224,6 +240,11 @@ export default function Applicants() {
     api.get('/jobs').then((res) => setJobs(res.data.map((j: JobOption) => ({ id: j.id, title: j.title })))).catch(console.error);
   }, []);
 
+  // Fetch team members for interview CC
+  useEffect(() => {
+    api.get('/team').then((res) => setTeamMembers(res.data.members || [])).catch(console.error);
+  }, []);
+
   // Close dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -243,6 +264,9 @@ export default function Applicants() {
     }
     setDetailLoading(true);
     setShowNotesPanel(false);
+    setMeetingLink('');
+    setInterviewQuestions(['']);
+    setSelectedTeamMembers([]);
     api.get(`/applicants/${selectedId}`)
       .then((res) => {
         setDetail(res.data);
@@ -294,6 +318,34 @@ export default function Applicants() {
     if (nextStage) {
       await handleStageMove(nextStage.id);
     }
+  };
+
+  const handleMoveToPrevious = async () => {
+    if (!detail) return;
+    const stages = detail.job.pipelineStages;
+    const currentIdx = stages.findIndex((s) => s.id === detail.currentStage.id);
+    const prevStage = stages[currentIdx - 1];
+    if (prevStage) {
+      await handleStageMove(prevStage.id);
+    }
+  };
+
+  const handleSendEmail = () => {
+    if (!detail || !meetingLink.trim()) return;
+    const platformName = meetingPlatform === 'google_meet' ? 'Google Meet' : 'Microsoft Teams';
+    const subject = `Interview Invitation - ${detail.job.title}`;
+
+    let body = `Dear ${detail.firstName},\n\nWe would like to invite you for an interview for the ${detail.job.title} position.\n\nPlease join using the following ${platformName} link:\n${meetingLink}\n\n`;
+    const validQuestions = interviewQuestions.filter((q) => q.trim());
+    if (validQuestions.length > 0) {
+      body += `Topics we plan to discuss:\n${validQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}\n\n`;
+    }
+    body += 'We look forward to speaking with you.\n\nBest regards';
+
+    const ccEmails = selectedTeamMembers.map((id) => teamMembers.find((m) => m.id === id)?.email).filter(Boolean).join(',');
+
+    const mailto = `mailto:${encodeURIComponent(detail.email)}?${ccEmails ? `cc=${encodeURIComponent(ccEmails)}&` : ''}subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.location.href = mailto;
   };
 
   const handleAiScreen = async () => {
@@ -694,8 +746,10 @@ export default function Applicants() {
               const currentStageIdx = stages.findIndex((s) => s.id === detail.currentStage.id);
               const viewingStage = stages[reviewStepIndex];
               const nextStage = stages[currentStageIdx + 1];
+              const prevStage = stages[currentStageIdx - 1];
               const isFirstStep = reviewStepIndex === 0;
               const isScreeningStep = reviewStepIndex === 1;
+              const isInterviewStep = viewingStage?.name === 'Interview' || viewingStage?.name === 'Final Interview';
               const isAtOrBeyondCurrent = reviewStepIndex >= currentStageIdx;
 
               // Check qualification — are all required fields filled?
@@ -775,9 +829,8 @@ export default function Applicants() {
                         return (
                           <button
                             key={stage.id}
-                            onClick={() => i <= currentStageIdx && setReviewStepIndex(i)}
-                            disabled={i > currentStageIdx}
-                            className={`flex-1 relative group ${i > currentStageIdx ? 'cursor-default' : 'cursor-pointer'}`}
+                            onClick={() => setReviewStepIndex(i)}
+                            className="flex-1 relative group cursor-pointer"
                           >
                             <div
                               className={`h-1.5 rounded-full transition-all ${
@@ -827,7 +880,8 @@ export default function Applicants() {
                           <p className="text-xs text-vb-text-muted mt-0.5">
                             {isFirstStep && 'Review submitted application details'}
                             {isScreeningStep && 'AI-powered screening and document review'}
-                            {!isFirstStep && !isScreeningStep && `Stage ${reviewStepIndex + 1} of ${stages.length}`}
+                            {isInterviewStep && 'Schedule a one-on-one interview with the applicant'}
+                            {!isFirstStep && !isScreeningStep && !isInterviewStep && `Stage ${reviewStepIndex + 1} of ${stages.length}`}
                           </p>
                         </div>
                         <span className="text-xs text-vb-text-muted flex items-center gap-1">
@@ -1193,8 +1247,224 @@ export default function Applicants() {
                         </>
                       )}
 
+                      {/* ── INTERVIEW STEP ── */}
+                      {isInterviewStep && (
+                        <>
+                          {/* Meeting Setup */}
+                          <section className="space-y-3">
+                            <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Interview Setup</h4>
+                            <div className="bg-vb-surface border border-vb-border rounded-xl p-5 space-y-4">
+                              <div>
+                                <label className="block text-xs font-medium text-vb-text-secondary mb-1.5">Platform</label>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => setMeetingPlatform('google_meet')}
+                                    className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm border transition-colors ${
+                                      meetingPlatform === 'google_meet'
+                                        ? 'border-brand bg-brand/10 text-brand'
+                                        : 'border-vb-border text-vb-text-secondary hover:bg-vb-card'
+                                    }`}
+                                  >
+                                    <Video className="w-4 h-4" />
+                                    Google Meet
+                                  </button>
+                                  <button
+                                    onClick={() => setMeetingPlatform('microsoft_teams')}
+                                    className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm border transition-colors ${
+                                      meetingPlatform === 'microsoft_teams'
+                                        ? 'border-brand bg-brand/10 text-brand'
+                                        : 'border-vb-border text-vb-text-secondary hover:bg-vb-card'
+                                    }`}
+                                  >
+                                    <Users className="w-4 h-4" />
+                                    Microsoft Teams
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-medium text-vb-text-secondary mb-1.5">Meeting Link</label>
+                                <div className="relative">
+                                  <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-vb-text-muted" />
+                                  <input
+                                    type="url"
+                                    value={meetingLink}
+                                    onChange={(e) => setMeetingLink(e.target.value)}
+                                    placeholder={meetingPlatform === 'google_meet' ? 'https://meet.google.com/...' : 'https://teams.microsoft.com/...'}
+                                    className="w-full pl-10 pr-4 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand"
+                                  />
+                                </div>
+                              </div>
+
+                              <button
+                                onClick={() => handleSendEmail()}
+                                disabled={!meetingLink.trim()}
+                                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-brand text-white text-sm rounded-lg hover:bg-brand/90 disabled:opacity-40 transition-colors font-medium"
+                              >
+                                <Send className="w-4 h-4" />
+                                Send Interview Invite
+                              </button>
+                            </div>
+                          </section>
+
+                          {/* Team Members */}
+                          <section className="space-y-3">
+                            <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">
+                              Include Team Members
+                              {selectedTeamMembers.length > 0 && (
+                                <span className="ml-2 text-brand font-normal">({selectedTeamMembers.length} selected)</span>
+                              )}
+                            </h4>
+                            {teamMembers.length > 0 ? (
+                              <div className="bg-vb-surface border border-vb-border rounded-xl divide-y divide-vb-border max-h-48 overflow-y-auto">
+                                {teamMembers.map((member) => (
+                                  <label
+                                    key={member.id}
+                                    className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-vb-card transition-colors"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedTeamMembers.includes(member.id)}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setSelectedTeamMembers([...selectedTeamMembers, member.id]);
+                                        } else {
+                                          setSelectedTeamMembers(selectedTeamMembers.filter((id) => id !== member.id));
+                                        }
+                                      }}
+                                      className="w-4 h-4 rounded border-vb-border text-brand focus:ring-brand/30"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm text-vb-text">{member.name}</p>
+                                      <p className="text-xs text-vb-text-muted">{member.email}</p>
+                                    </div>
+                                  </label>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-vb-text-muted bg-vb-surface border border-vb-border rounded-lg p-4">
+                                No team members found. Invite team members from the Team page.
+                              </p>
+                            )}
+                          </section>
+
+                          {/* Interview Questions */}
+                          <section className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Interview Questions</h4>
+                              <button
+                                onClick={() => setInterviewQuestions([...interviewQuestions, ''])}
+                                className="flex items-center gap-1 text-xs text-brand hover:text-brand/80 transition-colors"
+                              >
+                                <Plus className="w-3 h-3" />
+                                Add Question
+                              </button>
+                            </div>
+                            <div className="space-y-2">
+                              {interviewQuestions.map((q, i) => (
+                                <div key={i} className="flex gap-2 items-start">
+                                  <span className="text-xs text-vb-text-muted mt-2.5 w-5 text-right flex-shrink-0">{i + 1}.</span>
+                                  <input
+                                    type="text"
+                                    value={q}
+                                    onChange={(e) => {
+                                      const updated = [...interviewQuestions];
+                                      updated[i] = e.target.value;
+                                      setInterviewQuestions(updated);
+                                    }}
+                                    placeholder="Enter a question..."
+                                    className="flex-1 px-3 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand"
+                                  />
+                                  {interviewQuestions.length > 1 && (
+                                    <button
+                                      onClick={() => setInterviewQuestions(interviewQuestions.filter((_, idx) => idx !== i))}
+                                      className="p-2 text-vb-text-muted hover:text-red-400 rounded-lg hover:bg-vb-card transition-colors flex-shrink-0"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </section>
+
+                          {/* Interview Notes */}
+                          <section className="space-y-3">
+                            <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Interview Notes</h4>
+                            <div className="flex gap-2">
+                              <textarea
+                                value={newNote}
+                                onChange={(e) => setNewNote(e.target.value)}
+                                placeholder="Add notes about the interview..."
+                                rows={3}
+                                className="flex-1 px-3 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand resize-none"
+                              />
+                              <button
+                                onClick={handleAddNote}
+                                disabled={!newNote.trim() || noteSubmitting}
+                                className="self-end px-3 py-2 bg-brand text-white rounded-lg text-sm hover:bg-brand/90 disabled:opacity-40 transition-colors"
+                              >
+                                <Send className="w-4 h-4" />
+                              </button>
+                            </div>
+                            {detail.notes.length > 0 && (
+                              <div className="space-y-2 max-h-48 overflow-y-auto">
+                                {detail.notes.map((note) => (
+                                  <div key={note.id} className="bg-vb-surface border border-vb-border rounded-lg p-3">
+                                    <p className="text-sm text-vb-text whitespace-pre-wrap">{note.content}</p>
+                                    <p className="text-xs text-vb-text-muted mt-1.5">
+                                      {note.author.firstName} {note.author.lastName} · {new Date(note.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </section>
+
+                          {/* Contact quick-view */}
+                          <section className="space-y-3">
+                            <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Applicant</h4>
+                            <div className="bg-vb-surface border border-vb-border rounded-lg p-4">
+                              <div className="flex items-center gap-3 text-sm mb-2">
+                                <Mail className="w-4 h-4 text-vb-text-muted" />
+                                <a href={`mailto:${detail.email}`} className="text-brand hover:underline">{detail.email}</a>
+                              </div>
+                              {detail.phone && (
+                                <div className="flex items-center gap-3 text-sm">
+                                  <Phone className="w-4 h-4 text-vb-text-muted" />
+                                  <span className="text-vb-text">{detail.phone}</span>
+                                </div>
+                              )}
+                            </div>
+                          </section>
+
+                          {/* AI Score if available */}
+                          {detail.aiReport && (
+                            <section className="space-y-3">
+                              <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">AI Score</h4>
+                              <div className="flex items-center gap-4 bg-vb-surface border border-vb-border rounded-lg p-4">
+                                <div className={`text-2xl font-bold ${
+                                  detail.aiReport.overallScore >= 80 ? 'text-green-400' :
+                                  detail.aiReport.overallScore >= 50 ? 'text-amber-400' : 'text-red-400'
+                                }`}>
+                                  {detail.aiReport.overallScore}%
+                                </div>
+                                <div>
+                                  <span className={`text-sm font-medium ${
+                                    RECOMMENDATION_LABELS[detail.aiReport.recommendation]?.color ?? 'text-vb-text'
+                                  }`}>
+                                    {RECOMMENDATION_LABELS[detail.aiReport.recommendation]?.label ?? detail.aiReport.recommendation}
+                                  </span>
+                                  <p className="text-xs text-vb-text-muted">{detail.aiReport.confidenceLevel} confidence</p>
+                                </div>
+                              </div>
+                            </section>
+                          )}
+                        </>
+                      )}
+
                       {/* ── GENERIC STAGE (Step 2+): Activity, interviews, etc. ── */}
-                      {!isFirstStep && !isScreeningStep && (
+                      {!isFirstStep && !isScreeningStep && !isInterviewStep && (
                         <>
                           {/* Contact quick-view */}
                           <section className="space-y-3">
@@ -1311,14 +1581,29 @@ export default function Applicants() {
 
                   {/* ── Bottom Bar: Navigation ── */}
                   <div className="sticky bottom-0 bg-vb-bg border-t border-vb-border px-6 py-4 flex items-center justify-between flex-shrink-0">
-                    <button
-                      onClick={() => setReviewStepIndex(Math.max(0, reviewStepIndex - 1))}
-                      disabled={reviewStepIndex === 0}
-                      className="flex items-center gap-1.5 px-3 py-2 text-sm text-vb-text-secondary hover:text-vb-text rounded-lg hover:bg-vb-card disabled:opacity-30 disabled:cursor-default transition-colors"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                      Back
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setReviewStepIndex(Math.max(0, reviewStepIndex - 1))}
+                        disabled={reviewStepIndex === 0}
+                        className="flex items-center gap-1.5 px-3 py-2 text-sm text-vb-text-secondary hover:text-vb-text rounded-lg hover:bg-vb-card disabled:opacity-30 disabled:cursor-default transition-colors"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                        Back
+                      </button>
+
+                      {/* Move to previous stage */}
+                      {prevStage && (
+                        <button
+                          onClick={handleMoveToPrevious}
+                          disabled={stageMoving}
+                          className="flex items-center gap-1.5 px-3 py-2 text-sm text-amber-400 hover:text-amber-300 rounded-lg hover:bg-amber-500/10 disabled:opacity-50 transition-colors"
+                          title={`Move applicant back to ${prevStage.name}`}
+                        >
+                          <Undo2 className="w-3.5 h-3.5" />
+                          Move to {prevStage.name}
+                        </button>
+                      )}
+                    </div>
 
                     <div className="flex items-center gap-2">
                       {isAtOrBeyondCurrent && nextStage ? (

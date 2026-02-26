@@ -40,7 +40,6 @@ enum ApplicantSource {
 }
 
 enum InterviewType {
-  PHONE_SCREEN
   VIDEO_CALL
   IN_PERSON
   TECHNICAL_ASSESSMENT

@@ -25,14 +25,13 @@ const createJobSchema = z.object({
 });
 
 const DEFAULT_STAGES = [
-  'Applied', 'Screening', 'Phone Screen', 'Interview',
+  'Applied', 'Screening', 'Interview',
   'Technical Assessment', 'Final Interview', 'Offer Sent', 'Hired', 'Rejected',
 ];
 
 const STAGE_COLORS: Record<string, string> = {
   'Applied': '#6B7280',
   'Screening': '#3B82F6',
-  'Phone Screen': '#8B5CF6',
   'Interview': '#F59E0B',
   'Technical Assessment': '#EC4899',
   'Final Interview': '#F97316',

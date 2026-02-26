@@ -48,7 +48,7 @@ function generateTokens(userId: string, organizationId: string, role: string, is
   return { accessToken, refreshToken };
 }
 
-const DEFAULT_STAGES = ['Applied', 'Screening', 'Phone Screen', 'Interview', 'Technical Assessment', 'Final Interview', 'Offer Sent', 'Hired', 'Rejected'];
+const DEFAULT_STAGES = ['Applied', 'Screening', 'Interview', 'Technical Assessment', 'Final Interview', 'Offer Sent', 'Hired', 'Rejected'];
 
 export async function authRoutes(app: FastifyInstance) {
   // Register
