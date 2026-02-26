@@ -2,6 +2,8 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
+import { createReadStream, promises as fsPromises } from 'node:fs';
+import path from 'node:path';
 import { env } from './config/env.js';
 import { authRoutes } from './routes/auth.js';
 import { jobRoutes } from './routes/jobs.js';
@@ -51,6 +53,31 @@ await app.register(adminRoutes, { prefix: '/api/admin' });
 
 // Health check
 app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+
+// Serve uploaded files
+app.get<{ Params: { filename: string } }>('/api/uploads/:filename', async (request, reply) => {
+  const { filename } = request.params;
+  // Only allow safe filenames
+  if (/[/\\]/.test(filename) || filename.includes('..')) {
+    return reply.status(400).send({ error: 'Invalid filename' });
+  }
+  const filePath = path.join(env.UPLOAD_DIR, filename);
+  try {
+    const stat = await fsPromises.stat(filePath);
+    if (!stat.isFile()) throw new Error('Not a file');
+  } catch {
+    return reply.status(404).send({ error: 'File not found' });
+  }
+  const ext = path.extname(filename).toLowerCase();
+  const mimeMap: Record<string, string> = {
+    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+    '.gif': 'image/gif', '.webp': 'image/webp', '.pdf': 'application/pdf',
+    '.svg': 'image/svg+xml',
+  };
+  reply.header('Content-Type', mimeMap[ext] || 'application/octet-stream');
+  reply.header('Cache-Control', 'public, max-age=86400');
+  return reply.send(createReadStream(filePath));
+});
 
 // Start server
 try {

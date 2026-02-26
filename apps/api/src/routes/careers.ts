@@ -7,6 +7,13 @@ import { env } from '../config/env.js';
 import prisma from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
 
+interface CareerDesignPayload {
+  heroTitle?: string;
+  heroDescription?: string;
+  heroImageUrl?: string | null;
+  theme?: string;
+}
+
 export async function careersRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate);
 
@@ -51,6 +58,91 @@ export async function careersRoutes(app: FastifyInstance) {
       })),
     };
   });
+
+  // GET /api/careers/design — get career design settings
+  app.get('/design', async (request) => {
+    const { organizationId } = request.user!;
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { careerDesign: true, slug: true, name: true },
+    });
+    return {
+      design: org?.careerDesign || null,
+      slug: org?.slug || '',
+      name: org?.name || '',
+    };
+  });
+
+  // PUT /api/careers/design — save career design settings
+  app.put('/design', async (request) => {
+    const { organizationId } = request.user!;
+    const body = request.body as CareerDesignPayload;
+
+    const design: CareerDesignPayload = {
+      heroTitle: typeof body.heroTitle === 'string' ? body.heroTitle.slice(0, 200) : undefined,
+      heroDescription: typeof body.heroDescription === 'string' ? body.heroDescription.slice(0, 500) : undefined,
+      heroImageUrl: body.heroImageUrl === null ? null : (typeof body.heroImageUrl === 'string' ? body.heroImageUrl : undefined),
+      theme: typeof body.theme === 'string' ? body.theme.slice(0, 50) : undefined,
+    };
+
+    // Merge with existing design
+    const existing = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { careerDesign: true },
+    });
+    const current = (existing?.careerDesign as CareerDesignPayload) || {};
+    const merged = { ...current };
+    if (design.heroTitle !== undefined) merged.heroTitle = design.heroTitle;
+    if (design.heroDescription !== undefined) merged.heroDescription = design.heroDescription;
+    if (design.heroImageUrl !== undefined) merged.heroImageUrl = design.heroImageUrl;
+    if (design.theme !== undefined) merged.theme = design.theme;
+
+    await prisma.organization.update({
+      where: { id: organizationId },
+      data: { careerDesign: merged },
+    });
+
+    return { design: merged };
+  });
+
+  // POST /api/careers/design/hero-image — upload hero image
+  app.post('/design/hero-image', async (request, reply) => {
+    const { organizationId } = request.user!;
+
+    const data = await request.file();
+    if (!data) {
+      return reply.status(400).send({ error: 'No file uploaded' });
+    }
+
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowed.includes(data.mimetype)) {
+      return reply.status(400).send({ error: 'Only JPEG, PNG, WebP, and GIF images are allowed' });
+    }
+
+    await fs.mkdir(env.UPLOAD_DIR, { recursive: true });
+
+    const ext = path.extname(data.filename || '') || '.jpg';
+    const safeName = `hero_${randomUUID()}${ext}`;
+    const filePath = path.join(env.UPLOAD_DIR, safeName);
+    await pipeline(data.file, createWriteStream(filePath));
+
+    const imageUrl = `/api/uploads/${safeName}`;
+
+    // Update the careerDesign with the new hero image URL
+    const existing = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { careerDesign: true },
+    });
+    const current = (existing?.careerDesign as CareerDesignPayload) || {};
+    const merged = { ...current, heroImageUrl: imageUrl };
+
+    await prisma.organization.update({
+      where: { id: organizationId },
+      data: { careerDesign: merged },
+    });
+
+    return { imageUrl, design: merged };
+  });
 }
 
 // Public careers routes — no auth required
@@ -61,7 +153,7 @@ export async function publicCareersRoutes(app: FastifyInstance) {
 
     const org = await prisma.organization.findUnique({
       where: { slug },
-      select: { id: true, name: true, slug: true, website: true, industry: true },
+      select: { id: true, name: true, slug: true, website: true, industry: true, careerDesign: true },
     });
 
     if (!org) {
@@ -96,6 +188,7 @@ export async function publicCareersRoutes(app: FastifyInstance) {
         slug: org.slug,
         website: org.website,
         industry: org.industry,
+        careerDesign: org.careerDesign || null,
       },
       jobs,
     };
@@ -107,7 +200,7 @@ export async function publicCareersRoutes(app: FastifyInstance) {
 
     const org = await prisma.organization.findUnique({
       where: { slug },
-      select: { id: true, name: true, slug: true },
+      select: { id: true, name: true, slug: true, careerDesign: true },
     });
 
     if (!org) {
@@ -141,7 +234,7 @@ export async function publicCareersRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Job not found' });
     }
 
-    return { organization: { name: org.name, slug: org.slug }, job };
+    return { organization: { name: org.name, slug: org.slug, careerDesign: org.careerDesign || null }, job };
   });
 
   // POST /api/public/careers/:slug/jobs/:jobId/apply — submit an application

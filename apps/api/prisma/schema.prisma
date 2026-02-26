@@ -112,6 +112,7 @@ model Organization {
   slug             String           @unique
   logoUrl          String?
   brandColor       String?          @default("#0D0D0D")
+  careerDesign     Json?            // { heroTitle, heroDescription, heroImageUrl, theme }
   industry         String?
   companySize      String?
   website          String?

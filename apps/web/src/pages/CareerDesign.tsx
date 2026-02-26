@@ -1,109 +1,216 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft } from 'lucide-react';
+import {
+  ChevronLeft,
+  Upload,
+  Trash2,
+  ExternalLink,
+  Sparkles,
+  Briefcase,
+  Check,
+  Loader2,
+} from 'lucide-react';
 import api from '@/lib/api';
 
-interface CareerSettings {
-  heroImage: string | null;
+interface CareerDesignData {
   heroTitle: string;
   heroDescription: string;
+  heroImageUrl: string | null;
+  theme: string;
 }
 
-const defaultSettings: CareerSettings = {
-  heroImage: null,
+const THEMES = [
+  {
+    id: 'midnight',
+    name: 'Midnight',
+    desc: 'Classic dark charcoal',
+    heroBg: 'from-gray-900 via-gray-800 to-gray-900',
+    accent: 'from-blue-400 to-emerald-400',
+    badge: 'bg-white/10 text-emerald-400 border-white/10',
+    btnBg: 'bg-white text-gray-900 hover:bg-gray-100',
+    cardAccent: 'text-blue-600',
+    preview: ['#1f2937', '#111827'],
+  },
+  {
+    id: 'ocean',
+    name: 'Ocean',
+    desc: 'Deep professional blue',
+    heroBg: 'from-blue-950 via-blue-900 to-indigo-950',
+    accent: 'from-cyan-400 to-blue-300',
+    badge: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+    btnBg: 'bg-white text-blue-900 hover:bg-blue-50',
+    cardAccent: 'text-blue-600',
+    preview: ['#172554', '#1e1b4b'],
+  },
+  {
+    id: 'forest',
+    name: 'Forest',
+    desc: 'Natural green tones',
+    heroBg: 'from-emerald-950 via-green-900 to-teal-950',
+    accent: 'from-emerald-300 to-lime-300',
+    badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    btnBg: 'bg-white text-green-900 hover:bg-green-50',
+    cardAccent: 'text-emerald-600',
+    preview: ['#022c22', '#042f2e'],
+  },
+  {
+    id: 'sunset',
+    name: 'Sunset',
+    desc: 'Warm orange glow',
+    heroBg: 'from-orange-950 via-amber-900 to-rose-950',
+    accent: 'from-amber-300 to-orange-300',
+    badge: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    btnBg: 'bg-white text-orange-900 hover:bg-orange-50',
+    cardAccent: 'text-orange-600',
+    preview: ['#431407', '#4c0519'],
+  },
+  {
+    id: 'royal',
+    name: 'Royal',
+    desc: 'Elegant purple tones',
+    heroBg: 'from-purple-950 via-violet-900 to-indigo-950',
+    accent: 'from-purple-300 to-pink-300',
+    badge: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+    btnBg: 'bg-white text-purple-900 hover:bg-purple-50',
+    cardAccent: 'text-purple-600',
+    preview: ['#3b0764', '#1e1b4b'],
+  },
+  {
+    id: 'crimson',
+    name: 'Crimson',
+    desc: 'Bold red intensity',
+    heroBg: 'from-red-950 via-rose-900 to-red-950',
+    accent: 'from-rose-300 to-red-300',
+    badge: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
+    btnBg: 'bg-white text-red-900 hover:bg-red-50',
+    cardAccent: 'text-red-600',
+    preview: ['#450a0a', '#4c0519'],
+  },
+  {
+    id: 'slate',
+    name: 'Slate',
+    desc: 'Cool blue-gray minimal',
+    heroBg: 'from-slate-900 via-slate-800 to-zinc-900',
+    accent: 'from-slate-300 to-blue-300',
+    badge: 'bg-slate-500/10 text-slate-300 border-slate-500/20',
+    btnBg: 'bg-white text-slate-900 hover:bg-slate-50',
+    cardAccent: 'text-slate-600',
+    preview: ['#0f172a', '#18181b'],
+  },
+];
+
+const defaultDesign: CareerDesignData = {
   heroTitle: 'Build the future with us',
-  heroDescription: 'Join our team and make an impact',
+  heroDescription: 'Join our team and help shape what\'s next. We\'re looking for passionate people ready to make an impact.',
+  heroImageUrl: null,
+  theme: 'midnight',
 };
 
-const MAX_HERO_IMAGE_BYTES = 2 * 1024 * 1024;
-
-function normalizeSettings(value: unknown): CareerSettings {
-  const data = value as Partial<CareerSettings> | null;
-  return {
-    heroImage: typeof data?.heroImage === 'string' ? data.heroImage : null,
-    heroTitle: typeof data?.heroTitle === 'string' && data.heroTitle.trim()
-      ? data.heroTitle
-      : defaultSettings.heroTitle,
-    heroDescription: typeof data?.heroDescription === 'string' && data.heroDescription.trim()
-      ? data.heroDescription
-      : defaultSettings.heroDescription,
-  };
-}
-
-function safeParseSettings(value: string | null): CareerSettings | null {
-  if (!value) return null;
-  try {
-    return normalizeSettings(JSON.parse(value));
-  } catch {
-    return null;
-  }
-}
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 export default function CareerDesign() {
   const navigate = useNavigate();
-  const [settings, setSettings] = useState<CareerSettings>(defaultSettings);
-  const [publishedSettings, setPublishedSettings] = useState<CareerSettings>(defaultSettings);
-  const [dirty, setDirty] = useState(false);
-  const [initialized, setInitialized] = useState(false);
+  const [design, setDesign] = useState<CareerDesignData>({ ...defaultDesign });
+  const [savedDesign, setSavedDesign] = useState<CareerDesignData>({ ...defaultDesign });
   const [careerSlug, setCareerSlug] = useState('');
+  const [orgName, setOrgName] = useState('');
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
+  const dirty = JSON.stringify(design) !== JSON.stringify(savedDesign);
+  const selectedTheme = THEMES.find((t) => t.id === design.theme) || THEMES[0];
+
+  function showToast(message: string, type: 'success' | 'error') {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 2500);
+  }
+
   useEffect(() => {
-    // Fetch current career site data
     api
-      .get('/careers')
+      .get('/careers/design')
       .then((res) => {
         setCareerSlug(res.data.slug);
-        if (typeof window !== 'undefined') {
-          const publishedKey = `careerDesign:${res.data.slug}:published`;
-          const draftKey = `careerDesign:${res.data.slug}:draft`;
-          const storedPublished = safeParseSettings(localStorage.getItem(publishedKey));
-          const storedDraft = safeParseSettings(localStorage.getItem(draftKey));
-
-          const initialPublished = storedPublished || defaultSettings;
-          const initialDraft = storedDraft || initialPublished;
-
-          setPublishedSettings(initialPublished);
-          setSettings(initialDraft);
-          setDirty(JSON.stringify(initialDraft) !== JSON.stringify(initialPublished));
+        setOrgName(res.data.name);
+        if (res.data.design) {
+          const d = res.data.design;
+          const loaded: CareerDesignData = {
+            heroTitle: d.heroTitle || defaultDesign.heroTitle,
+            heroDescription: d.heroDescription || defaultDesign.heroDescription,
+            heroImageUrl: d.heroImageUrl || null,
+            theme: d.theme || 'midnight',
+          };
+          setDesign(loaded);
+          setSavedDesign(loaded);
         }
-        setInitialized(true);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => {
-    if (!initialized || !careerSlug) return;
-    if (typeof window === 'undefined') return;
-    const draftKey = `careerDesign:${careerSlug}:draft`;
+  async function handleSave() {
+    setSaving(true);
     try {
-      localStorage.setItem(draftKey, JSON.stringify(settings));
-    } catch (err) {
-      console.error(err);
-      setToast({ message: 'Draft too large to save. Try a smaller image.', type: 'error' });
-      setTimeout(() => setToast(null), 2000);
+      const res = await api.put('/careers/design', design);
+      const d = res.data.design;
+      const saved: CareerDesignData = {
+        heroTitle: d.heroTitle || defaultDesign.heroTitle,
+        heroDescription: d.heroDescription || defaultDesign.heroDescription,
+        heroImageUrl: d.heroImageUrl || null,
+        theme: d.theme || 'midnight',
+      };
+      setSavedDesign(saved);
+      setDesign(saved);
+      showToast('Design saved successfully', 'success');
+    } catch {
+      showToast('Failed to save design', 'error');
+    } finally {
+      setSaving(false);
     }
-    setDirty(JSON.stringify(settings) !== JSON.stringify(publishedSettings));
-  }, [settings, publishedSettings, careerSlug, initialized]);
+  }
 
-  const saveSettings = async () => {
-    try {
-      if (typeof window !== 'undefined' && careerSlug) {
-        const publishedKey = `careerDesign:${careerSlug}:published`;
-        localStorage.setItem(publishedKey, JSON.stringify(settings));
-      }
-      setPublishedSettings(settings);
-      setDirty(false);
-      setToast({ message: 'Design saved', type: 'success' });
-      setTimeout(() => setToast(null), 2000);
-    } catch (err) {
-      console.error(err);
-      setToast({ message: 'Failed to save design', type: 'error' });
-      setTimeout(() => setToast(null), 2000);
+  async function handleImageUpload(file: File) {
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Image must be under 5MB', 'error');
+      return;
     }
-  };
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await api.post('/careers/design/hero-image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const imageUrl = res.data.imageUrl;
+      const d = res.data.design;
+      const updated: CareerDesignData = {
+        heroTitle: d.heroTitle || design.heroTitle,
+        heroDescription: d.heroDescription || design.heroDescription,
+        heroImageUrl: imageUrl,
+        theme: d.theme || design.theme,
+      };
+      setDesign(updated);
+      setSavedDesign(updated);
+      showToast('Hero image uploaded', 'success');
+    } catch {
+      showToast('Failed to upload image', 'error');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function handleRemoveImage() {
+    setDesign({ ...design, heroImageUrl: null });
+  }
+
+  function resolveImageUrl(url: string | null) {
+    if (!url) return null;
+    if (url.startsWith('http')) return url;
+    // API-relative URL like /api/uploads/...
+    const base = API_BASE.replace(/\/api$/, '');
+    return `${base}${url}`;
+  }
 
   if (loading) {
     return (
@@ -118,6 +225,8 @@ export default function CareerDesign() {
     );
   }
 
+  const heroImgResolved = resolveImageUrl(design.heroImageUrl);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -130,159 +239,220 @@ export default function CareerDesign() {
         </button>
         <div>
           <h1 className="text-2xl font-bold text-vb-text">Design Career Site</h1>
-          <p className="text-vb-text-muted text-sm">Customize your careers page appearance</p>
+          <p className="text-vb-text-muted text-sm">Customize your hero section, texts, and color theme</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <a
-            href={careerSlug ? `/${careerSlug}/careers?preview=1` : '#'}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-vb-card text-vb-text-secondary hover:text-vb-text hover:bg-vb-muted border border-vb-border transition-colors"
-          >
-            Preview Site
-          </a>
           <a
             href={careerSlug ? `/${careerSlug}/careers` : '#'}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-brand text-white hover:bg-brand-dark transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-vb-card text-vb-text-secondary hover:text-vb-text hover:bg-vb-muted border border-vb-border transition-colors"
           >
-            Go to Site
+            <ExternalLink className="w-3.5 h-3.5" />
+            Visit Site
           </a>
           <button
-            onClick={saveSettings}
-            disabled={!dirty}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-emerald-500 text-white hover:bg-emerald-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={handleSave}
+            disabled={!dirty || saving}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-brand text-white hover:bg-brand-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
             Save Changes
           </button>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="grid grid-cols-3 gap-6">
-        {/* Main Content */}
-        <div className="col-span-2 space-y-6">
-          {/* Hero Section */}
-          <div className="bg-vb-card border border-vb-border rounded-xl p-6 space-y-4">
-            <h2 className="text-lg font-semibold text-vb-text">Hero Section</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* ───── Left: Settings Panel ───── */}
+        <div className="lg:col-span-1 space-y-5">
+          {/* Hero Texts */}
+          <div className="bg-vb-card border border-vb-border rounded-xl p-5 space-y-4">
+            <h2 className="text-sm font-semibold text-vb-text">Hero Texts</h2>
 
             <div>
-              <label className="block text-sm font-medium text-vb-text mb-2">Hero Title</label>
+              <label className="block text-xs font-medium text-vb-text-secondary mb-1.5">Headline</label>
               <input
                 type="text"
-                value={settings.heroTitle}
-                onChange={(e) => {
-                  setSettings({ ...settings, heroTitle: e.target.value });
-                }}
-                className="w-full bg-vb-surface border border-vb-border text-vb-text rounded-lg px-3 py-2 outline-none focus:border-brand"
+                value={design.heroTitle}
+                onChange={(e) => setDesign({ ...design, heroTitle: e.target.value })}
+                maxLength={200}
+                className="w-full bg-vb-bg border border-vb-border text-vb-text rounded-lg px-3 py-2 text-sm outline-none focus:border-brand"
                 placeholder="e.g. Build the future with us"
               />
+              <p className="text-[10px] text-vb-text-muted mt-1">
+                Use <code className="bg-vb-bg px-1 rounded">{'{{company}}'}</code> to insert your company name dynamically
+              </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-vb-text mb-2">Hero Description</label>
+              <label className="block text-xs font-medium text-vb-text-secondary mb-1.5">Subtitle</label>
               <textarea
-                value={settings.heroDescription}
-                onChange={(e) => {
-                  setSettings({ ...settings, heroDescription: e.target.value });
-                }}
-                className="w-full bg-vb-surface border border-vb-border text-vb-text rounded-lg px-3 py-2 outline-none focus:border-brand h-24 resize-none"
-                placeholder="Tell candidates why they should join your team"
+                value={design.heroDescription}
+                onChange={(e) => setDesign({ ...design, heroDescription: e.target.value })}
+                maxLength={500}
+                rows={3}
+                className="w-full bg-vb-bg border border-vb-border text-vb-text rounded-lg px-3 py-2 text-sm outline-none focus:border-brand resize-none"
+                placeholder="Tell candidates why they should join"
               />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-vb-text mb-2">Hero Image</label>
-              <div className="border-2 border-dashed border-vb-border rounded-lg p-8 text-center">
-                {settings.heroImage ? (
-                  <div className="space-y-2">
-                    <img src={settings.heroImage} alt="Hero" className="w-full h-32 object-cover rounded-lg" />
-                    <button
-                      onClick={() => {
-                        setSettings({ ...settings, heroImage: null });
-                      }}
-                      className="text-sm text-red-400 hover:text-red-300"
-                    >
-                      Remove Image
-                    </button>
-                  </div>
-                ) : (
-                  <div className="text-vb-text-muted">
-                    <p className="text-sm mb-2">Upload or drag an image here</p>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          if (file.size > MAX_HERO_IMAGE_BYTES) {
-                            setToast({ message: 'Image too large. Use 2MB or less.', type: 'error' });
-                            setTimeout(() => setToast(null), 2000);
-                            return;
-                          }
-                          const reader = new FileReader();
-                          reader.onload = (evt) => {
-                            const imageData = evt.target?.result as string;
-                            setSettings({ ...settings, heroImage: imageData });
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                      className="hidden"
-                      id="hero-upload"
-                    />
-                    <label htmlFor="hero-upload" className="text-blue-400 hover:text-blue-300 cursor-pointer text-sm">
-                      Browse Files
-                    </label>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
 
+          {/* Hero Image */}
+          <div className="bg-vb-card border border-vb-border rounded-xl p-5 space-y-4">
+            <h2 className="text-sm font-semibold text-vb-text">Hero Image</h2>
+            <p className="text-xs text-vb-text-muted">Optional background image for the hero section</p>
+
+            {heroImgResolved ? (
+              <div className="space-y-3">
+                <img src={heroImgResolved} alt="Hero" className="w-full h-32 object-cover rounded-lg border border-vb-border" />
+                <button
+                  onClick={handleRemoveImage}
+                  className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Remove Image
+                </button>
+              </div>
+            ) : (
+              <label
+                htmlFor="hero-upload"
+                className="flex flex-col items-center gap-2 border-2 border-dashed border-vb-border rounded-lg p-6 cursor-pointer hover:border-brand/40 transition-colors"
+              >
+                {uploading ? (
+                  <Loader2 className="w-6 h-6 text-vb-text-muted animate-spin" />
+                ) : (
+                  <Upload className="w-6 h-6 text-vb-text-muted" />
+                )}
+                <span className="text-xs text-vb-text-muted">
+                  {uploading ? 'Uploading...' : 'Click to upload (max 5MB)'}
+                </span>
+                <input
+                  id="hero-upload"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={uploading}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleImageUpload(file);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+            )}
+          </div>
+
+          {/* Theme Picker */}
+          <div className="bg-vb-card border border-vb-border rounded-xl p-5 space-y-4">
+            <h2 className="text-sm font-semibold text-vb-text">Color Theme</h2>
+            <p className="text-xs text-vb-text-muted">Pick a theme that matches your brand</p>
+
+            <div className="grid grid-cols-1 gap-2">
+              {THEMES.map((theme) => (
+                <button
+                  key={theme.id}
+                  onClick={() => setDesign({ ...design, theme: theme.id })}
+                  className={`flex items-center gap-3 p-3 rounded-lg border transition-all text-left ${
+                    design.theme === theme.id
+                      ? 'border-brand bg-brand/5 ring-1 ring-brand/30'
+                      : 'border-vb-border hover:border-vb-muted bg-vb-bg'
+                  }`}
+                >
+                  {/* Color swatch */}
+                  <div className="flex gap-0.5 shrink-0">
+                    {theme.preview.map((color, i) => (
+                      <div
+                        key={i}
+                        className="w-5 h-5 rounded"
+                        style={{ backgroundColor: color }}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-xs font-medium ${design.theme === theme.id ? 'text-brand' : 'text-vb-text'}`}>
+                      {theme.name}
+                    </p>
+                    <p className="text-[10px] text-vb-text-muted truncate">{theme.desc}</p>
+                  </div>
+                  {design.theme === theme.id && (
+                    <Check className="w-4 h-4 text-brand shrink-0" />
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
-        {/* Preview Sidebar */}
-        <div className="col-span-1">
-          <div className="bg-vb-card border border-vb-border rounded-xl p-6 space-y-4 sticky top-6">
-            <h2 className="text-lg font-semibold text-vb-text">Preview</h2>
-
-            <div className="space-y-3">
-              <div>
-                <p className="text-vb-text-muted text-xs uppercase tracking-wider mb-2">Hero Title</p>
-                <p className="text-vb-text font-semibold">{settings.heroTitle}</p>
-              </div>
-
-              <div>
-                <p className="text-vb-text-muted text-xs uppercase tracking-wider mb-2">Hero Description</p>
-                <p className="text-vb-text text-sm">{settings.heroDescription}</p>
-              </div>
-
-              {settings.heroImage && (
-                <div>
-                  <p className="text-vb-text-muted text-xs uppercase tracking-wider mb-2">Hero Image</p>
-                  <img src={settings.heroImage} alt="Hero Preview" className="w-full h-24 object-cover rounded-lg" />
-                </div>
-              )}
-
-              <div>
-                <p className="text-vb-text-muted text-xs uppercase tracking-wider mb-2">Preview Notes</p>
-                <p className="text-xs text-vb-text-secondary">
-                  Use Preview Site to see the current draft changes without affecting live applicants.
-                </p>
+        {/* ───── Right: Live Preview ───── */}
+        <div className="lg:col-span-2">
+          <div className="bg-vb-card border border-vb-border rounded-xl overflow-hidden sticky top-6">
+            <div className="px-4 py-2.5 border-b border-vb-border flex items-center justify-between">
+              <span className="text-xs font-medium text-vb-text-secondary">Live Preview</span>
+              <div className="flex gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-red-400/70" />
+                <div className="w-2.5 h-2.5 rounded-full bg-amber-400/70" />
+                <div className="w-2.5 h-2.5 rounded-full bg-emerald-400/70" />
               </div>
             </div>
 
-            <div className="pt-4 border-t border-vb-border">
-              <a
-                href={careerSlug ? `/${careerSlug}/careers?preview=1` : '#'}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-brand text-white hover:bg-brand-dark transition-colors text-center"
-              >
-                Preview Site ↗
-              </a>
+            {/* Mock page */}
+            <div className="bg-gray-50 max-h-[600px] overflow-y-auto">
+              {/* Mock nav */}
+              <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+                <span className="text-sm font-bold text-gray-900">{orgName}</span>
+                <span className="text-xs text-gray-500">Open Roles</span>
+              </div>
+
+              {/* Hero section preview */}
+              <div className={`relative bg-gradient-to-br ${selectedTheme.heroBg} overflow-hidden`}>
+                {/* Hero image overlay */}
+                {heroImgResolved && (
+                  <div
+                    className="absolute inset-0 bg-cover bg-center opacity-20"
+                    style={{ backgroundImage: `url(${heroImgResolved})` }}
+                  />
+                )}
+
+                {/* Grid overlay */}
+                <div className="absolute inset-0 opacity-[0.04]" style={{
+                  backgroundImage:
+                    'linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px)',
+                  backgroundSize: '48px 48px',
+                }} />
+
+                <div className="relative px-6 py-12 text-center">
+                  <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full backdrop-blur border text-xs font-semibold tracking-wide uppercase mb-4 ${selectedTheme.badge}`}>
+                    <Sparkles className="w-3 h-3" />
+                    We're Hiring
+                  </div>
+
+                  <h1 className="text-xl font-extrabold text-white leading-tight max-w-lg mx-auto">
+                    {renderHeroTitle(design.heroTitle, orgName, selectedTheme.accent)}
+                  </h1>
+
+                  <p className="mt-3 text-gray-400 text-xs max-w-md mx-auto leading-relaxed">
+                    {design.heroDescription}
+                  </p>
+
+                  <button className={`mt-5 inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg shadow-lg shadow-black/20 ${selectedTheme.btnBg}`}>
+                    View All Openings
+                    <Briefcase className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Mock job cards */}
+              <div className="p-4 space-y-2">
+                <p className="text-xs text-gray-500 font-medium mb-2">3 Open Positions</p>
+                {['Senior Frontend Developer', 'Product Manager', 'UX Designer'].map((title) => (
+                  <div key={title} className="bg-white rounded-lg border border-gray-200 px-4 py-3 flex items-center justify-between">
+                    <div>
+                      <p className={`text-sm font-medium ${selectedTheme.cardAccent}`}>{title}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Engineering · Lagos · Full-time</p>
+                    </div>
+                    <span className="text-xs font-medium text-gray-500">Apply &rarr;</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -303,3 +473,24 @@ export default function CareerDesign() {
     </div>
   );
 }
+
+function renderHeroTitle(title: string, orgName: string, accentGradient: string) {
+  const resolved = title.replace(/\{\{company\}\}/gi, orgName);
+  // Highlight the company name if it appears in the title
+  if (resolved.includes(orgName) && orgName) {
+    const parts = resolved.split(orgName);
+    return (
+      <>
+        {parts[0]}
+        <span className={`text-transparent bg-clip-text bg-gradient-to-r ${accentGradient}`}>
+          {orgName}
+        </span>
+        {parts.slice(1).join(orgName)}
+      </>
+    );
+  }
+  return resolved;
+}
+
+export { THEMES };
+export type { CareerDesignData };

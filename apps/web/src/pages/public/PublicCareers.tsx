@@ -31,6 +31,12 @@ interface OrgInfo {
   slug: string;
   website: string | null;
   industry: string | null;
+  careerDesign?: {
+    heroTitle?: string;
+    heroDescription?: string;
+    heroImageUrl?: string | null;
+    theme?: string;
+  } | null;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -71,6 +77,88 @@ function timeAgo(dateStr: string) {
 type SortOption = 'newest' | 'oldest';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+
+const CAREER_THEMES: Record<string, {
+  heroBg: string;
+  accent: string;
+  badge: string;
+  btnBg: string;
+  cardAccent: string;
+}> = {
+  midnight: {
+    heroBg: 'from-gray-900 via-gray-800 to-gray-900',
+    accent: 'from-blue-400 to-emerald-400',
+    badge: 'bg-white/10 text-emerald-400 border-white/10',
+    btnBg: 'bg-white text-gray-900 hover:bg-gray-100',
+    cardAccent: 'text-blue-600',
+  },
+  ocean: {
+    heroBg: 'from-blue-950 via-blue-900 to-indigo-950',
+    accent: 'from-cyan-400 to-blue-300',
+    badge: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+    btnBg: 'bg-white text-blue-900 hover:bg-blue-50',
+    cardAccent: 'text-blue-600',
+  },
+  forest: {
+    heroBg: 'from-emerald-950 via-green-900 to-teal-950',
+    accent: 'from-emerald-300 to-lime-300',
+    badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    btnBg: 'bg-white text-green-900 hover:bg-green-50',
+    cardAccent: 'text-emerald-600',
+  },
+  sunset: {
+    heroBg: 'from-orange-950 via-amber-900 to-rose-950',
+    accent: 'from-amber-300 to-orange-300',
+    badge: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    btnBg: 'bg-white text-orange-900 hover:bg-orange-50',
+    cardAccent: 'text-orange-600',
+  },
+  royal: {
+    heroBg: 'from-purple-950 via-violet-900 to-indigo-950',
+    accent: 'from-purple-300 to-pink-300',
+    badge: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+    btnBg: 'bg-white text-purple-900 hover:bg-purple-50',
+    cardAccent: 'text-purple-600',
+  },
+  crimson: {
+    heroBg: 'from-red-950 via-rose-900 to-red-950',
+    accent: 'from-rose-300 to-red-300',
+    badge: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
+    btnBg: 'bg-white text-red-900 hover:bg-red-50',
+    cardAccent: 'text-red-600',
+  },
+  slate: {
+    heroBg: 'from-slate-900 via-slate-800 to-zinc-900',
+    accent: 'from-slate-300 to-blue-300',
+    badge: 'bg-slate-500/10 text-slate-300 border-slate-500/20',
+    btnBg: 'bg-white text-slate-900 hover:bg-slate-50',
+    cardAccent: 'text-slate-600',
+  },
+};
+
+function resolveImageUrl(url: string | null | undefined) {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  const base = API_BASE.replace(/\/api$/, '');
+  return `${base}${url}`;
+}
+
+function renderHeroTitle(title: string, orgName: string, accentGradient: string) {
+  const resolved = title.replace(/\{\{company\}\}/gi, orgName);
+  if (resolved.includes(orgName) && orgName) {
+    const idx = resolved.indexOf(orgName);
+    return (
+      <>
+        {resolved.slice(0, idx)}
+        <span className={`text-transparent bg-clip-text bg-gradient-to-r ${accentGradient}`}>
+          {orgName}
+        </span>
+        {resolved.slice(idx + orgName.length)}
+      </>
+    );
+  }
+  return resolved;
+}
 
 export default function PublicCareers() {
   const { slug } = useParams<{ slug: string }>();
@@ -130,6 +218,14 @@ export default function PublicCareers() {
   }, [jobs, search, deptFilter, locFilter, sort]);
 
   const scrollToRoles = () => rolesRef.current?.scrollIntoView({ behavior: 'smooth' });
+
+  const cd = org?.careerDesign;
+  const theme = CAREER_THEMES[cd?.theme || 'midnight'] || CAREER_THEMES.midnight;
+  const heroTitle = cd?.heroTitle || `Build the future with ${org?.name || ''}`;
+  const heroDesc = cd?.heroDescription || (org?.industry
+    ? `Join our team in ${org.industry} and help shape what's next. We're looking for passionate people ready to make an impact.`
+    : `Join our team and help shape what's next. We're looking for passionate people ready to make an impact.`);
+  const heroImg = resolveImageUrl(cd?.heroImageUrl);
 
   if (loading) {
     return (
@@ -196,7 +292,15 @@ export default function PublicCareers() {
       </header>
 
       {/* ───── Hero Section ───── */}
-      <section className="relative bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 overflow-hidden">
+      <section className={`relative bg-gradient-to-br ${theme.heroBg} overflow-hidden`}>
+        {/* Hero image overlay */}
+        {heroImg && (
+          <div
+            className="absolute inset-0 bg-cover bg-center opacity-20"
+            style={{ backgroundImage: `url(${heroImg})` }}
+          />
+        )}
+
         {/* Decorative grid overlay */}
         <div className="absolute inset-0 opacity-[0.04]" style={{
           backgroundImage:
@@ -206,27 +310,22 @@ export default function PublicCareers() {
 
         <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-20 sm:py-28 text-center">
           {/* "We're Hiring" badge */}
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur border border-white/10 text-emerald-400 text-xs font-semibold tracking-wide uppercase mb-6">
+          <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full backdrop-blur border text-xs font-semibold tracking-wide uppercase mb-6 ${theme.badge}`}>
             <Sparkles className="w-3.5 h-3.5" />
             We're Hiring
           </div>
 
           <h1 className="text-3xl sm:text-5xl font-extrabold text-white leading-tight max-w-3xl mx-auto">
-            Build the future with{' '}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">
-              {org.name}
-            </span>
+            {renderHeroTitle(heroTitle, org.name, theme.accent)}
           </h1>
 
           <p className="mt-4 text-gray-400 text-base sm:text-lg max-w-2xl mx-auto leading-relaxed">
-            {org.industry
-              ? `Join our team in ${org.industry} and help shape what's next. We're looking for passionate people ready to make an impact.`
-              : `Join our team and help shape what's next. We're looking for passionate people ready to make an impact.`}
+            {heroDesc}
           </p>
 
           <button
             onClick={scrollToRoles}
-            className="mt-8 inline-flex items-center gap-2 px-6 py-3 bg-white text-gray-900 text-sm font-semibold rounded-lg hover:bg-gray-100 transition-colors shadow-lg shadow-black/20"
+            className={`mt-8 inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold rounded-lg transition-colors shadow-lg shadow-black/20 ${theme.btnBg}`}
           >
             View All Openings
             <Briefcase className="w-4 h-4" />
@@ -343,7 +442,7 @@ export default function PublicCareers() {
                   <div className="flex-1 min-w-0">
                     <Link
                       to={`/${slug}/careers/${job.id}`}
-                      className="text-gray-900 font-semibold text-base group-hover:text-blue-600 transition-colors"
+                      className={`text-gray-900 font-semibold text-base group-hover:${theme.cardAccent} transition-colors`}
                     >
                       {job.title}
                     </Link>

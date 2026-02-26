@@ -34,6 +34,12 @@ interface OrgInfo {
   name: string;
   slug: string;
   website?: string | null;
+  careerDesign?: {
+    heroTitle?: string;
+    heroDescription?: string;
+    heroImageUrl?: string | null;
+    theme?: string;
+  } | null;
 }
 
 type ApplicantFieldType = 'short_text' | 'long_text' | 'email' | 'url' | 'phone' | 'file';
@@ -77,6 +83,23 @@ function formatSalary(min: number | null, max: number | null, currency: string) 
 }
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+
+const CAREER_THEMES: Record<string, { heroBg: string }> = {
+  midnight: { heroBg: 'from-gray-900 via-gray-800 to-gray-900' },
+  ocean: { heroBg: 'from-blue-950 via-blue-900 to-indigo-950' },
+  forest: { heroBg: 'from-emerald-950 via-green-900 to-teal-950' },
+  sunset: { heroBg: 'from-orange-950 via-amber-900 to-rose-950' },
+  royal: { heroBg: 'from-purple-950 via-violet-900 to-indigo-950' },
+  crimson: { heroBg: 'from-red-950 via-rose-900 to-red-950' },
+  slate: { heroBg: 'from-slate-900 via-slate-800 to-zinc-900' },
+};
+
+function resolveJobImageUrl(url: string | null | undefined) {
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  const base = API_BASE.replace(/\/api$/, '');
+  return `${base}${url}`;
+}
 
 export default function PublicJobApply() {
   const { slug, jobId } = useParams<{ slug: string; jobId: string }>();
@@ -268,8 +291,15 @@ export default function PublicJobApply() {
       </header>
 
       {/* ───── Job Header Banner ───── */}
-      <section className="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
+      <section className={`relative bg-gradient-to-br ${(CAREER_THEMES[org?.careerDesign?.theme || 'midnight'] || CAREER_THEMES.midnight).heroBg} overflow-hidden`}>
+        {/* Hero image overlay */}
+        {resolveJobImageUrl(org?.careerDesign?.heroImageUrl) && (
+          <div
+            className="absolute inset-0 bg-cover bg-center opacity-20"
+            style={{ backgroundImage: `url(${resolveJobImageUrl(org?.careerDesign?.heroImageUrl)})` }}
+          />
+        )}
+        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
           <h1 className="text-2xl sm:text-3xl font-bold text-white">{job.title}</h1>
 
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-3 text-sm text-gray-400">

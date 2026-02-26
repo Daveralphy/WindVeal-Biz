@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Globe, Eye, ExternalLink, Briefcase, MapPin } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Globe, Palette, ExternalLink, Briefcase, MapPin } from 'lucide-react';
 import api from '@/lib/api';
 
 interface CareerJob {
@@ -38,6 +39,7 @@ function timeAgo(dateStr: string) {
 }
 
 export default function Careers() {
+  const navigate = useNavigate();
   const [data, setData] = useState<CareersData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -64,9 +66,12 @@ export default function Careers() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-vb-text">Careers Page</h1>
         <div className="flex gap-2">
-          <button className="flex items-center gap-2 px-4 py-2 bg-vb-card text-sm text-vb-text-secondary rounded-lg hover:bg-vb-muted border border-vb-border transition-colors">
-            <Eye className="w-4 h-4" />
-            Preview
+          <button
+            onClick={() => navigate('/careers/design')}
+            className="flex items-center gap-2 px-4 py-2 bg-vb-card text-sm text-vb-text-secondary rounded-lg hover:bg-vb-muted border border-vb-border transition-colors"
+          >
+            <Palette className="w-4 h-4" />
+            Design
           </button>
           <a
             href={data ? `/${data.slug}/careers` : '#'}

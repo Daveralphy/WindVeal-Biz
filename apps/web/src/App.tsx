@@ -15,6 +15,7 @@ import Pipeline from '@/pages/Pipeline';
 import Interviews from '@/pages/Interviews';
 import Communications from '@/pages/Communications';
 import Careers from '@/pages/Careers';
+import CareerDesign from '@/pages/CareerDesign';
 import Analytics from '@/pages/Analytics';
 import Team from '@/pages/Team';
 import Settings from '@/pages/Settings';
@@ -99,6 +100,7 @@ export default function App() {
           <Route path="/interviews" element={<Interviews />} />
           <Route path="/communications" element={<Communications />} />
           <Route path="/careers" element={<Careers />} />
+          <Route path="/careers/design" element={<CareerDesign />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/team" element={<Team />} />
           <Route path="/settings" element={<Settings />} />
