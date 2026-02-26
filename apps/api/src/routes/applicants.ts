@@ -9,6 +9,7 @@ import path from 'node:path';
 import prisma from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
 import { env } from '../config/env.js';
+import { screenApplicant } from '../services/groqService.js';
 
 const addApplicantSchema = z.object({
   firstName: z.string().min(1),
@@ -286,6 +287,83 @@ export async function applicantRoutes(app: FastifyInstance) {
 
     await prisma.applicant.delete({ where: { id: applicant.id } });
     return { message: 'Applicant deleted' };
+  });
+
+  // AI Screen applicant
+  app.post<{ Params: { id: string } }>('/:id/ai-screen', async (request, reply) => {
+    const { organizationId } = request.user!;
+
+    const applicant = await prisma.applicant.findFirst({
+      where: { id: request.params.id, organizationId },
+      include: {
+        job: {
+          select: {
+            title: true,
+            description: true,
+            requirements: true,
+            responsibilities: true,
+            niceToHave: true,
+            applicationForm: true,
+          },
+        },
+        applicationData: true,
+        uploadedFiles: true,
+      },
+    });
+
+    if (!applicant) {
+      return reply.status(404).send({ error: 'Applicant not found' });
+    }
+
+    const applicationText = applicant.applicationData
+      .map((d) => {
+        const val = typeof d.value === 'string' ? d.value : JSON.stringify(d.value);
+        return `${d.fieldId}: ${val}`;
+      })
+      .join('\n');
+
+    const coverLetterData = applicant.applicationData.find((d) => d.fieldId === 'cover_letter');
+    const coverLetter = coverLetterData ? String(coverLetterData.value) : '';
+
+    const report = await screenApplicant({
+      applicantName: `${applicant.firstName} ${applicant.lastName}`,
+      email: applicant.email,
+      phone: applicant.phone,
+      linkedinUrl: applicant.linkedinUrl,
+      applicationData: applicationText,
+      coverLetter,
+      hasResume: applicant.uploadedFiles.some((f) => f.type === 'resume'),
+      hasVideo: applicant.uploadedFiles.some((f) => f.type === 'video'),
+      jobTitle: applicant.job.title,
+      jobDescription: applicant.job.description,
+      jobRequirements: applicant.job.requirements,
+      jobResponsibilities: applicant.job.responsibilities,
+      jobNiceToHave: applicant.job.niceToHave,
+    });
+
+    // Upsert AIReport
+    const aiReport = await prisma.aIReport.upsert({
+      where: { applicantId: applicant.id },
+      update: {
+        overallScore: report.overallScore,
+        dimensionScores: report.dimensionScores,
+        strengths: report.strengths,
+        concerns: report.concerns,
+        recommendation: report.recommendation,
+        confidenceLevel: report.confidenceLevel,
+      },
+      create: {
+        applicantId: applicant.id,
+        overallScore: report.overallScore,
+        dimensionScores: report.dimensionScores,
+        strengths: report.strengths,
+        concerns: report.concerns,
+        recommendation: report.recommendation,
+        confidenceLevel: report.confidenceLevel,
+      },
+    });
+
+    return { ...aiReport, resumeAnalysis: report.resumeAnalysis };
   });
 
   // Import applicants from CSV/Excel/JSON
