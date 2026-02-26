@@ -1,11 +1,30 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Search,
-  Filter,
   Download,
   User,
-  ChevronDown,
   ArrowUpDown,
+  X,
+  FileText,
+  Clock,
+  MessageSquare,
+  Star,
+  ChevronRight,
+  Send,
+  Trash2,
+  ExternalLink,
+  Phone,
+  Mail,
+  Linkedin,
+  Briefcase,
+  Calendar,
+  Plus,
+  Upload,
+  UserPlus,
+  ChevronDown,
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
 } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -14,11 +33,84 @@ interface Applicant {
   firstName: string;
   lastName: string;
   email: string;
+  phone?: string;
+  linkedinUrl?: string;
   job: { id: string; title: string };
-  currentStage: { name: string; color: string };
+  currentStage: { id: string; name: string; color: string };
   aiReport: { overallScore: number; recommendation: string } | null;
   source: string;
   createdAt: string;
+}
+
+interface PipelineStage {
+  id: string;
+  name: string;
+  order: number;
+  color: string;
+}
+
+interface ApplicationDataItem {
+  id: string;
+  fieldId: string;
+  value: unknown;
+}
+
+interface UploadedFileItem {
+  id: string;
+  type: string;
+  fileName: string;
+  storageUrl: string;
+  mimeType?: string;
+}
+
+interface StageHistoryItem {
+  id: string;
+  fromStage?: { name: string; color: string } | null;
+  toStage: { name: string; color: string };
+  movedBy?: { firstName: string; lastName: string } | null;
+  movedAt: string;
+  note?: string;
+}
+
+interface NoteItem {
+  id: string;
+  content: string;
+  createdAt: string;
+  author: { firstName: string; lastName: string; avatarUrl?: string | null };
+}
+
+interface AIReportFull {
+  overallScore: number;
+  recommendation: string;
+  strengths: string[];
+  concerns: string[];
+  confidenceLevel: string;
+  dimensionScores: Record<string, number>;
+}
+
+interface ApplicationFormField {
+  id: string;
+  label: string;
+  type: string;
+  required: boolean;
+  system?: boolean;
+}
+
+interface ApplicantDetail extends Applicant {
+  phone: string | null;
+  linkedinUrl: string | null;
+  job: {
+    id: string;
+    title: string;
+    applicationForm?: { fields: ApplicationFormField[] } | null;
+    pipelineStages: PipelineStage[];
+  };
+  currentStage: PipelineStage;
+  aiReport: AIReportFull | null;
+  applicationData: ApplicationDataItem[];
+  uploadedFiles: UploadedFileItem[];
+  stageHistory: StageHistoryItem[];
+  notes: NoteItem[];
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -28,7 +120,51 @@ const SOURCE_LABELS: Record<string, string> = {
   REFERRAL: 'Referral',
 };
 
+const RECOMMENDATION_LABELS: Record<string, { label: string; color: string }> = {
+  ADVANCE: { label: 'Advance', color: 'text-green-400' },
+  REQUEST_INFO: { label: 'Request Info', color: 'text-amber-400' },
+  CONSIDER_OTHER: { label: 'Consider Other', color: 'text-orange-400' },
+  REJECT: { label: 'Reject', color: 'text-red-400' },
+};
+
 const COLUMNS = ['Name', 'Job', 'Stage', 'Score', 'Source', 'Applied', 'Actions'];
+
+interface JobOption {
+  id: string;
+  title: string;
+}
+
+interface CustomField {
+  id: string;
+  label: string;
+  value: string;
+}
+
+interface ManualForm {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  linkedinUrl: string;
+  jobId: string;
+  customFields: CustomField[];
+}
+
+const EMPTY_MANUAL_FORM: ManualForm = {
+  firstName: '',
+  lastName: '',
+  email: '',
+  phone: '',
+  linkedinUrl: '',
+  jobId: '',
+  customFields: [],
+};
+
+interface ImportResult {
+  imported: number;
+  skipped: number;
+  errors: string[];
+}
 
 export default function Applicants() {
   const [applicants, setApplicants] = useState<Applicant[]>([]);
@@ -36,9 +172,72 @@ export default function Applicants() {
   const [search, setSearch] = useState('');
   const [stageFilter, setStageFilter] = useState<string>('all');
 
-  useEffect(() => {
-    api.get('/applicants').then((res) => setApplicants(res.data)).catch(console.error).finally(() => setLoading(false));
+  // Drawer state
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<ApplicantDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'notes'>('overview');
+  const [newNote, setNewNote] = useState('');
+  const [noteSubmitting, setNoteSubmitting] = useState(false);
+  const [stageMoving, setStageMoving] = useState(false);
+
+  // Add contact state
+  const [addDropdownOpen, setAddDropdownOpen] = useState(false);
+  const addDropdownRef = useRef<HTMLDivElement>(null);
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [manualForm, setManualForm] = useState<ManualForm>(EMPTY_MANUAL_FORM);
+  const [manualSubmitting, setManualSubmitting] = useState(false);
+  const [manualError, setManualError] = useState('');
+  const [jobs, setJobs] = useState<JobOption[]>([]);
+
+  // Import state
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importJobId, setImportJobId] = useState('');
+  const [importPreview, setImportPreview] = useState<Record<string, unknown>[]>([]);
+  const [importUploading, setImportUploading] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchApplicants = useCallback(() => {
+    api.get('/applicants')
+      .then((res) => setApplicants(res.data))
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    fetchApplicants();
+  }, [fetchApplicants]);
+
+  // Fetch jobs for selectors
+  useEffect(() => {
+    api.get('/jobs').then((res) => setJobs(res.data.map((j: JobOption) => ({ id: j.id, title: j.title })))).catch(console.error);
+  }, []);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (addDropdownRef.current && !addDropdownRef.current.contains(e.target as Node)) {
+        setAddDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Fetch detail when selecting an applicant
+  useEffect(() => {
+    if (!selectedId) {
+      setDetail(null);
+      return;
+    }
+    setDetailLoading(true);
+    api.get(`/applicants/${selectedId}`)
+      .then((res) => setDetail(res.data))
+      .catch(console.error)
+      .finally(() => setDetailLoading(false));
+  }, [selectedId]);
 
   const stages = ['all', ...new Set(applicants.map((a) => a.currentStage.name))];
 
@@ -51,6 +250,183 @@ export default function Applicants() {
     const matchesStage = stageFilter === 'all' || a.currentStage.name === stageFilter;
     return matchesSearch && matchesStage;
   });
+
+  const handleStageMove = async (stageId: string) => {
+    if (!detail || stageId === detail.currentStage.id) return;
+    setStageMoving(true);
+    try {
+      await api.patch(`/applicants/${detail.id}/stage`, { stageId });
+      // Refresh detail and list
+      const res = await api.get(`/applicants/${detail.id}`);
+      setDetail(res.data);
+      fetchApplicants();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setStageMoving(false);
+    }
+  };
+
+  const handleAddNote = async () => {
+    if (!detail || !newNote.trim()) return;
+    setNoteSubmitting(true);
+    try {
+      await api.post(`/applicants/${detail.id}/notes`, { content: newNote.trim() });
+      setNewNote('');
+      // Refresh detail
+      const res = await api.get(`/applicants/${detail.id}`);
+      setDetail(res.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setNoteSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this applicant? This cannot be undone.')) return;
+    try {
+      await api.delete(`/applicants/${id}`);
+      setSelectedId(null);
+      fetchApplicants();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleExport = () => {
+    const headers = ['First Name', 'Last Name', 'Email', 'Job', 'Stage', 'Score', 'Source', 'Applied'];
+    const rows = filtered.map((a) => [
+      a.firstName,
+      a.lastName,
+      a.email,
+      a.job.title,
+      a.currentStage.name,
+      a.aiReport?.overallScore ?? '',
+      SOURCE_LABELS[a.source] || a.source,
+      new Date(a.createdAt).toLocaleDateString(),
+    ]);
+    const csv = [headers, ...rows].map((r) => r.map((c) => `"${c}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'applicants.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleManualAdd = async () => {
+    if (!manualForm.firstName || !manualForm.lastName || !manualForm.email || !manualForm.jobId) {
+      setManualError('First name, last name, email and job are required.');
+      return;
+    }
+    setManualSubmitting(true);
+    setManualError('');
+    try {
+      await api.post('/applicants', {
+        firstName: manualForm.firstName,
+        lastName: manualForm.lastName,
+        email: manualForm.email,
+        phone: manualForm.phone || undefined,
+        linkedinUrl: manualForm.linkedinUrl || undefined,
+        jobId: manualForm.jobId,
+        source: 'MANUAL',
+        customFields: manualForm.customFields
+          .filter((f) => f.label.trim() && f.value.trim())
+          .map((f) => ({ label: f.label.trim(), value: f.value.trim() })),
+      });
+      setShowManualModal(false);
+      setManualForm(EMPTY_MANUAL_FORM);
+      fetchApplicants();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to add applicant';
+      setManualError(msg);
+    } finally {
+      setManualSubmitting(false);
+    }
+  };
+
+  const handleImportFileSelect = (file: File) => {
+    setImportFile(file);
+    setImportResult(null);
+
+    // Parse preview locally
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result;
+        if (file.name.toLowerCase().endsWith('.json')) {
+          const parsed = JSON.parse(text as string);
+          const rows = Array.isArray(parsed) ? parsed : [parsed];
+          setImportPreview(rows.slice(0, 5));
+        } else {
+          // CSV/Excel — parse with simple approach for preview
+          const lines = (text as string).split('\n').filter((l) => l.trim());
+          if (lines.length < 2) {
+            setImportPreview([]);
+            return;
+          }
+          const headers = lines[0].split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
+          const rows = lines.slice(1, 6).map((line) => {
+            const vals = line.split(',').map((v) => v.trim().replace(/^"|"$/g, ''));
+            const obj: Record<string, string> = {};
+            headers.forEach((h, i) => { obj[h] = vals[i] || ''; });
+            return obj;
+          });
+          setImportPreview(rows);
+        }
+      } catch {
+        setImportPreview([]);
+      }
+    };
+    if (file.name.toLowerCase().endsWith('.json') || file.name.toLowerCase().endsWith('.csv')) {
+      reader.readAsText(file);
+    } else {
+      // For Excel, just show file name — backend will parse
+      setImportPreview([]);
+    }
+  };
+
+  const handleImportSubmit = async () => {
+    if (!importFile || !importJobId) return;
+    setImportUploading(true);
+    setImportResult(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', importFile);
+      const res = await api.post(`/applicants/import?jobId=${encodeURIComponent(importJobId)}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setImportResult(res.data);
+      fetchApplicants();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Import failed';
+      setImportResult({ imported: 0, skipped: 0, errors: [msg] });
+    } finally {
+      setImportUploading(false);
+    }
+  };
+
+  const resetImport = () => {
+    setImportFile(null);
+    setImportJobId('');
+    setImportPreview([]);
+    setImportResult(null);
+    setShowImportModal(false);
+  };
+
+  const getFieldValue = (fieldId: string): string => {
+    if (!detail) return '';
+    const data = detail.applicationData.find((d) => d.fieldId === fieldId);
+    if (!data) return '';
+    const val = data.value;
+    if (typeof val === 'string') return val;
+    if (typeof val === 'object' && val !== null && 'value' in (val as Record<string, unknown>)) {
+      return String((val as Record<string, unknown>).value);
+    }
+    return String(val ?? '');
+  };
 
   if (loading) {
     return (
@@ -65,10 +441,46 @@ export default function Applicants() {
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-vb-text">All Applicants</h1>
-        <button className="flex items-center gap-2 px-4 py-2 bg-vb-card text-sm text-vb-text-secondary rounded-lg hover:bg-vb-muted border border-vb-border transition-colors">
-          <Download className="w-4 h-4" />
-          Export
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-2 px-4 py-2 bg-vb-card text-sm text-vb-text-secondary rounded-lg hover:bg-vb-muted border border-vb-border transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            Export
+          </button>
+
+          {/* Add Contact Dropdown */}
+          <div className="relative" ref={addDropdownRef}>
+            <button
+              onClick={() => setAddDropdownOpen(!addDropdownOpen)}
+              className="flex items-center gap-2 px-4 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand/90 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add Contact
+              <ChevronDown className="w-3 h-3" />
+            </button>
+
+            {addDropdownOpen && (
+              <div className="absolute right-0 mt-1 w-52 bg-vb-surface border border-vb-border rounded-lg shadow-xl z-20 py-1">
+                <button
+                  onClick={() => { setAddDropdownOpen(false); setShowManualModal(true); }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-vb-text hover:bg-vb-card transition-colors"
+                >
+                  <UserPlus className="w-4 h-4 text-vb-text-muted" />
+                  Enter Manually
+                </button>
+                <button
+                  onClick={() => { setAddDropdownOpen(false); setShowImportModal(true); }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-vb-text hover:bg-vb-card transition-colors"
+                >
+                  <Upload className="w-4 h-4 text-vb-text-muted" />
+                  Import File
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Filters */}
@@ -82,13 +494,6 @@ export default function Applicants() {
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand"
           />
-        </div>
-        <div className="relative">
-          <button className="flex items-center gap-2 px-3 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text-secondary hover:bg-vb-muted transition-colors">
-            <Filter className="w-4 h-4" />
-            Stage
-            <ChevronDown className="w-3 h-3" />
-          </button>
         </div>
         <div className="flex gap-1 ml-2">
           {stages.map((s) => (
@@ -129,6 +534,7 @@ export default function Applicants() {
             {filtered.map((applicant) => (
               <tr
                 key={applicant.id}
+                onClick={() => setSelectedId(applicant.id)}
                 className="hover:bg-vb-surface transition-colors cursor-pointer"
               >
                 <td className="px-4 py-3">
@@ -185,8 +591,11 @@ export default function Applicants() {
                   })}
                 </td>
                 <td className="px-4 py-3">
-                  <button className="text-vb-text-muted hover:text-vb-text text-sm">
-                    View
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setSelectedId(applicant.id); }}
+                    className="text-vb-text-muted hover:text-brand text-sm flex items-center gap-1"
+                  >
+                    View <ChevronRight className="w-3 h-3" />
                   </button>
                 </td>
               </tr>
@@ -208,6 +617,812 @@ export default function Applicants() {
           Showing {filtered.length} of {applicants.length} applicants
         </span>
       </div>
+
+      {/* ─── DETAIL DRAWER ─── */}
+      {selectedId && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/40" onClick={() => setSelectedId(null)} />
+
+          {/* Drawer panel */}
+          <div className="relative w-full max-w-2xl bg-vb-bg border-l border-vb-border overflow-y-auto animate-in slide-in-from-right">
+            {detailLoading || !detail ? (
+              <div className="p-6 space-y-4">
+                <div className="h-8 bg-vb-muted rounded animate-pulse w-48" />
+                <div className="h-4 bg-vb-muted rounded animate-pulse w-32" />
+                <div className="h-40 bg-vb-muted rounded animate-pulse" />
+              </div>
+            ) : (
+              <>
+                {/* Header */}
+                <div className="sticky top-0 bg-vb-bg border-b border-vb-border px-6 py-4 flex items-start justify-between z-10">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-brand/10 flex items-center justify-center">
+                      <User className="w-6 h-6 text-brand" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-semibold text-vb-text">
+                        {detail.firstName} {detail.lastName}
+                      </h2>
+                      <p className="text-sm text-vb-text-muted flex items-center gap-2">
+                        <Briefcase className="w-3.5 h-3.5" />
+                        {detail.job.title}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleDelete(detail.id)}
+                      className="p-2 text-vb-text-muted hover:text-red-400 rounded-lg hover:bg-vb-card transition-colors"
+                      title="Delete applicant"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setSelectedId(null)}
+                      className="p-2 text-vb-text-muted hover:text-vb-text rounded-lg hover:bg-vb-card transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Stage selector */}
+                <div className="px-6 py-3 border-b border-vb-border">
+                  <label className="text-xs font-medium text-vb-text-muted uppercase tracking-wider mb-2 block">
+                    Pipeline Stage
+                  </label>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {detail.job.pipelineStages.map((stage) => (
+                      <button
+                        key={stage.id}
+                        onClick={() => handleStageMove(stage.id)}
+                        disabled={stageMoving}
+                        className={`px-3 py-1.5 text-xs rounded-full font-medium transition-all ${
+                          stage.id === detail.currentStage.id
+                            ? 'ring-2 ring-offset-1 ring-offset-vb-bg'
+                            : 'opacity-60 hover:opacity-100'
+                        }`}
+                        style={{
+                          backgroundColor: `${stage.color}20`,
+                          color: stage.color,
+                          ...(stage.id === detail.currentStage.id ? { ringColor: stage.color } : {}),
+                        }}
+                      >
+                        {stage.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tabs */}
+                <div className="px-6 border-b border-vb-border flex gap-1">
+                  {(['overview', 'activity', 'notes'] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveTab(tab)}
+                      className={`px-4 py-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${
+                        activeTab === tab
+                          ? 'text-brand border-brand'
+                          : 'text-vb-text-muted border-transparent hover:text-vb-text-secondary'
+                      }`}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Tab content */}
+                <div className="p-6 space-y-6">
+                  {activeTab === 'overview' && (
+                    <>
+                      {/* Contact Info */}
+                      <section className="space-y-3">
+                        <h3 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">
+                          Contact Information
+                        </h3>
+                        <div className="bg-vb-surface border border-vb-border rounded-lg p-4 space-y-2.5">
+                          <div className="flex items-center gap-3 text-sm">
+                            <Mail className="w-4 h-4 text-vb-text-muted flex-shrink-0" />
+                            <a href={`mailto:${detail.email}`} className="text-brand hover:underline">
+                              {detail.email}
+                            </a>
+                          </div>
+                          {detail.phone && (
+                            <div className="flex items-center gap-3 text-sm">
+                              <Phone className="w-4 h-4 text-vb-text-muted flex-shrink-0" />
+                              <span className="text-vb-text">{detail.phone}</span>
+                            </div>
+                          )}
+                          {detail.linkedinUrl && (
+                            <div className="flex items-center gap-3 text-sm">
+                              <Linkedin className="w-4 h-4 text-vb-text-muted flex-shrink-0" />
+                              <a
+                                href={detail.linkedinUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-brand hover:underline flex items-center gap-1"
+                              >
+                                LinkedIn Profile
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-3 text-sm">
+                            <Calendar className="w-4 h-4 text-vb-text-muted flex-shrink-0" />
+                            <span className="text-vb-text-secondary">
+                              Applied{' '}
+                              {new Date(detail.createdAt).toLocaleDateString('en-US', {
+                                month: 'long',
+                                day: 'numeric',
+                                year: 'numeric',
+                              })}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 text-sm">
+                            <Briefcase className="w-4 h-4 text-vb-text-muted flex-shrink-0" />
+                            <span className="text-vb-text-secondary">
+                              Source: {SOURCE_LABELS[detail.source] || detail.source}
+                            </span>
+                          </div>
+                        </div>
+                      </section>
+
+                      {/* Application Fields */}
+                      {detail.applicationData.length > 0 && (
+                        <section className="space-y-3">
+                          <h3 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">
+                            Application Responses
+                          </h3>
+                          <div className="bg-vb-surface border border-vb-border rounded-lg divide-y divide-vb-border">
+                            {/* Form-defined fields */}
+                            {detail.job.applicationForm?.fields
+                              ?.filter((f: ApplicationFormField) => !f.system)
+                              .map((field: ApplicationFormField) => {
+                                const value = getFieldValue(field.id);
+                                if (!value) return null;
+                                return (
+                                  <div key={field.id} className="px-4 py-3">
+                                    <p className="text-xs text-vb-text-muted mb-1">{field.label}</p>
+                                    {field.type === 'long_text' ? (
+                                      <p className="text-sm text-vb-text whitespace-pre-wrap">{value}</p>
+                                    ) : field.type === 'url' ? (
+                                      <a
+                                        href={value}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-sm text-brand hover:underline flex items-center gap-1"
+                                      >
+                                        {value}
+                                        <ExternalLink className="w-3 h-3" />
+                                      </a>
+                                    ) : (
+                                      <p className="text-sm text-vb-text">{value}</p>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            {/* Custom/extra fields not in the form definition */}
+                            {detail.applicationData
+                              .filter((d) => {
+                                const formFieldIds = detail.job.applicationForm?.fields?.map((f: ApplicationFormField) => f.id) || [];
+                                return !formFieldIds.includes(d.fieldId);
+                              })
+                              .map((d) => {
+                                const label = d.fieldId.startsWith('custom_')
+                                  ? d.fieldId.replace('custom_', '').replace(/_/g, ' ')
+                                  : d.fieldId;
+                                const val = typeof d.value === 'string' ? d.value : String(d.value ?? '');
+                                if (!val) return null;
+                                return (
+                                  <div key={d.id} className="px-4 py-3">
+                                    <p className="text-xs text-vb-text-muted mb-1 capitalize">{label}</p>
+                                    <p className="text-sm text-vb-text">{val}</p>
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        </section>
+                      )}
+
+                      {/* Uploaded Files */}
+                      {detail.uploadedFiles.length > 0 && (
+                        <section className="space-y-3">
+                          <h3 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">
+                            Files
+                          </h3>
+                          <div className="space-y-2">
+                            {detail.uploadedFiles.map((file) => (
+                              <a
+                                key={file.id}
+                                href={`/api/uploads/${file.storageUrl.split('/').pop()}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-3 bg-vb-surface border border-vb-border rounded-lg px-4 py-3 hover:bg-vb-card transition-colors"
+                              >
+                                <FileText className="w-5 h-5 text-brand flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm text-vb-text truncate">{file.fileName}</p>
+                                  <p className="text-xs text-vb-text-muted capitalize">{file.type.replace('_', ' ')}</p>
+                                </div>
+                                <ExternalLink className="w-4 h-4 text-vb-text-muted" />
+                              </a>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+
+                      {/* AI Report */}
+                      {detail.aiReport && (
+                        <section className="space-y-3">
+                          <h3 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">
+                            AI Assessment
+                          </h3>
+                          <div className="bg-vb-surface border border-vb-border rounded-lg p-4 space-y-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className={`text-2xl font-bold ${
+                                    detail.aiReport.overallScore >= 80
+                                      ? 'text-green-400'
+                                      : detail.aiReport.overallScore >= 50
+                                      ? 'text-amber-400'
+                                      : 'text-red-400'
+                                  }`}
+                                >
+                                  {detail.aiReport.overallScore}%
+                                </div>
+                                <div>
+                                  <span
+                                    className={`text-sm font-medium ${
+                                      RECOMMENDATION_LABELS[detail.aiReport.recommendation]?.color ?? 'text-vb-text'
+                                    }`}
+                                  >
+                                    {RECOMMENDATION_LABELS[detail.aiReport.recommendation]?.label ??
+                                      detail.aiReport.recommendation}
+                                  </span>
+                                  <p className="text-xs text-vb-text-muted">
+                                    Confidence: {detail.aiReport.confidenceLevel}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Dimension scores */}
+                            {detail.aiReport.dimensionScores &&
+                              typeof detail.aiReport.dimensionScores === 'object' && (
+                                <div className="space-y-2">
+                                  {Object.entries(detail.aiReport.dimensionScores).map(
+                                    ([key, score]) => (
+                                      <div key={key}>
+                                        <div className="flex justify-between text-xs mb-1">
+                                          <span className="text-vb-text-secondary capitalize">
+                                            {key.replace(/([A-Z])/g, ' $1').trim()}
+                                          </span>
+                                          <span className="text-vb-text">{score}%</span>
+                                        </div>
+                                        <div className="h-1.5 bg-vb-muted rounded-full overflow-hidden">
+                                          <div
+                                            className={`h-full rounded-full ${
+                                              score >= 80
+                                                ? 'bg-green-400'
+                                                : score >= 50
+                                                ? 'bg-amber-400'
+                                                : 'bg-red-400'
+                                            }`}
+                                            style={{ width: `${score}%` }}
+                                          />
+                                        </div>
+                                      </div>
+                                    ),
+                                  )}
+                                </div>
+                              )}
+
+                            {/* Strengths */}
+                            {Array.isArray(detail.aiReport.strengths) &&
+                              detail.aiReport.strengths.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-medium text-green-400 mb-1">Strengths</p>
+                                  <ul className="space-y-1">
+                                    {detail.aiReport.strengths.map((s: string, i: number) => (
+                                      <li key={i} className="text-xs text-vb-text-secondary flex gap-2">
+                                        <Star className="w-3 h-3 text-green-400 flex-shrink-0 mt-0.5" />
+                                        {s}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+
+                            {/* Concerns */}
+                            {Array.isArray(detail.aiReport.concerns) &&
+                              detail.aiReport.concerns.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-medium text-amber-400 mb-1">Concerns</p>
+                                  <ul className="space-y-1">
+                                    {detail.aiReport.concerns.map((c: string, i: number) => (
+                                      <li key={i} className="text-xs text-vb-text-secondary flex gap-2">
+                                        <span className="text-amber-400 flex-shrink-0">•</span>
+                                        {c}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                          </div>
+                        </section>
+                      )}
+                    </>
+                  )}
+
+                  {activeTab === 'activity' && (
+                    <section className="space-y-3">
+                      <h3 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">
+                        Stage History
+                      </h3>
+                      {detail.stageHistory.length === 0 ? (
+                        <p className="text-sm text-vb-text-muted">No activity yet.</p>
+                      ) : (
+                        <div className="space-y-0">
+                          {detail.stageHistory.map((entry, i) => (
+                            <div key={entry.id} className="flex gap-3">
+                              {/* Timeline line */}
+                              <div className="flex flex-col items-center">
+                                <div
+                                  className="w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0"
+                                  style={{ backgroundColor: entry.toStage.color }}
+                                />
+                                {i < detail.stageHistory.length - 1 && (
+                                  <div className="w-px flex-1 bg-vb-border" />
+                                )}
+                              </div>
+                              <div className="pb-5 min-w-0">
+                                <p className="text-sm text-vb-text">
+                                  {entry.fromStage ? (
+                                    <>
+                                      Moved from{' '}
+                                      <span className="font-medium" style={{ color: entry.fromStage.color }}>
+                                        {entry.fromStage.name}
+                                      </span>{' '}
+                                      to{' '}
+                                      <span className="font-medium" style={{ color: entry.toStage.color }}>
+                                        {entry.toStage.name}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      Added to{' '}
+                                      <span className="font-medium" style={{ color: entry.toStage.color }}>
+                                        {entry.toStage.name}
+                                      </span>
+                                    </>
+                                  )}
+                                </p>
+                                <p className="text-xs text-vb-text-muted mt-0.5 flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {new Date(entry.movedAt).toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                  })}
+                                  {entry.movedBy && (
+                                    <>
+                                      {' · '}
+                                      {entry.movedBy.firstName} {entry.movedBy.lastName}
+                                    </>
+                                  )}
+                                </p>
+                                {entry.note && (
+                                  <p className="text-xs text-vb-text-secondary mt-1 italic">
+                                    "{entry.note}"
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </section>
+                  )}
+
+                  {activeTab === 'notes' && (
+                    <section className="space-y-4">
+                      {/* Add note */}
+                      <div className="flex gap-2">
+                        <textarea
+                          value={newNote}
+                          onChange={(e) => setNewNote(e.target.value)}
+                          placeholder="Add a note..."
+                          rows={2}
+                          className="flex-1 px-3 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand resize-none"
+                        />
+                        <button
+                          onClick={handleAddNote}
+                          disabled={!newNote.trim() || noteSubmitting}
+                          className="self-end px-3 py-2 bg-brand text-white rounded-lg text-sm hover:bg-brand/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          <Send className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Notes list */}
+                      {detail.notes.length === 0 ? (
+                        <p className="text-sm text-vb-text-muted text-center py-4">
+                          <MessageSquare className="w-8 h-8 mx-auto mb-2 text-vb-text-faint" />
+                          No notes yet. Add one above.
+                        </p>
+                      ) : (
+                        <div className="space-y-3">
+                          {detail.notes.map((note) => (
+                            <div
+                              key={note.id}
+                              className="bg-vb-surface border border-vb-border rounded-lg p-3"
+                            >
+                              <p className="text-sm text-vb-text whitespace-pre-wrap">
+                                {note.content}
+                              </p>
+                              <p className="text-xs text-vb-text-muted mt-2 flex items-center gap-1">
+                                {note.author.firstName} {note.author.lastName}
+                                {' · '}
+                                {new Date(note.createdAt).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: 'numeric',
+                                  minute: '2-digit',
+                                })}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </section>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      {/* ─── MANUAL ADD MODAL ─── */}
+      {showManualModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => { setShowManualModal(false); setManualError(''); }} />
+          <div className="relative bg-vb-bg border border-vb-border rounded-xl w-full max-w-lg mx-4 shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-vb-border">
+              <h2 className="text-lg font-semibold text-vb-text flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-brand" />
+                Add Applicant Manually
+              </h2>
+              <button onClick={() => { setShowManualModal(false); setManualError(''); }} className="p-1 text-vb-text-muted hover:text-vb-text rounded">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="px-6 py-4 space-y-4">
+              {manualError && (
+                <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  {manualError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-vb-text-muted mb-1">First Name *</label>
+                  <input
+                    value={manualForm.firstName}
+                    onChange={(e) => setManualForm({ ...manualForm, firstName: e.target.value })}
+                    className="w-full px-3 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand"
+                    placeholder="John"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-vb-text-muted mb-1">Last Name *</label>
+                  <input
+                    value={manualForm.lastName}
+                    onChange={(e) => setManualForm({ ...manualForm, lastName: e.target.value })}
+                    className="w-full px-3 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand"
+                    placeholder="Doe"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-vb-text-muted mb-1">Email *</label>
+                <input
+                  type="email"
+                  value={manualForm.email}
+                  onChange={(e) => setManualForm({ ...manualForm, email: e.target.value })}
+                  className="w-full px-3 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand"
+                  placeholder="john@example.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-vb-text-muted mb-1">Phone</label>
+                <input
+                  value={manualForm.phone}
+                  onChange={(e) => setManualForm({ ...manualForm, phone: e.target.value })}
+                  className="w-full px-3 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand"
+                  placeholder="+1 555 123 4567"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-vb-text-muted mb-1">LinkedIn URL</label>
+                <input
+                  value={manualForm.linkedinUrl}
+                  onChange={(e) => setManualForm({ ...manualForm, linkedinUrl: e.target.value })}
+                  className="w-full px-3 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand"
+                  placeholder="https://linkedin.com/in/johndoe"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-vb-text-muted mb-1">Job Position *</label>
+                <select
+                  value={manualForm.jobId}
+                  onChange={(e) => setManualForm({ ...manualForm, jobId: e.target.value })}
+                  className="w-full px-3 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text outline-none focus:border-brand"
+                >
+                  <option value="">Select a job...</option>
+                  {jobs.map((j) => (
+                    <option key={j.id} value={j.id}>{j.title}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Custom Fields */}
+              {manualForm.customFields.length > 0 && (
+                <div className="space-y-3 pt-2">
+                  <label className="block text-xs font-medium text-vb-text-muted uppercase tracking-wider">Additional Fields</label>
+                  {manualForm.customFields.map((cf) => (
+                    <div key={cf.id} className="flex gap-2 items-start">
+                      <input
+                        value={cf.label}
+                        onChange={(e) => {
+                          const updated = manualForm.customFields.map((f) =>
+                            f.id === cf.id ? { ...f, label: e.target.value } : f
+                          );
+                          setManualForm({ ...manualForm, customFields: updated });
+                        }}
+                        className="w-2/5 px-3 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand"
+                        placeholder="Field name"
+                      />
+                      <input
+                        value={cf.value}
+                        onChange={(e) => {
+                          const updated = manualForm.customFields.map((f) =>
+                            f.id === cf.id ? { ...f, value: e.target.value } : f
+                          );
+                          setManualForm({ ...manualForm, customFields: updated });
+                        }}
+                        className="flex-1 px-3 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand"
+                        placeholder="Value"
+                      />
+                      <button
+                        onClick={() => setManualForm({
+                          ...manualForm,
+                          customFields: manualForm.customFields.filter((f) => f.id !== cf.id),
+                        })}
+                        className="p-2 text-vb-text-muted hover:text-red-400 rounded-lg hover:bg-vb-card transition-colors flex-shrink-0"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setManualForm({
+                  ...manualForm,
+                  customFields: [
+                    ...manualForm.customFields,
+                    { id: crypto.randomUUID(), label: '', value: '' },
+                  ],
+                })}
+                className="flex items-center gap-2 text-sm text-brand hover:text-brand/80 transition-colors pt-1"
+              >
+                <Plus className="w-4 h-4" />
+                Add More Fields
+              </button>
+            </div>
+
+            <div className="flex justify-end gap-2 px-6 py-4 border-t border-vb-border">
+              <button
+                onClick={() => { setShowManualModal(false); setManualError(''); }}
+                className="px-4 py-2 text-sm text-vb-text-secondary hover:text-vb-text rounded-lg border border-vb-border hover:bg-vb-card transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleManualAdd}
+                disabled={manualSubmitting}
+                className="flex items-center gap-2 px-4 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand/90 disabled:opacity-50 transition-colors"
+              >
+                {manualSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                Add Applicant
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── IMPORT MODAL ─── */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={resetImport} />
+          <div className="relative bg-vb-bg border border-vb-border rounded-xl w-full max-w-2xl mx-4 shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-vb-border">
+              <h2 className="text-lg font-semibold text-vb-text flex items-center gap-2">
+                <Upload className="w-5 h-5 text-brand" />
+                Import Applicants
+              </h2>
+              <button onClick={resetImport} className="p-1 text-vb-text-muted hover:text-vb-text rounded">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="px-6 py-4 space-y-4 overflow-y-auto flex-1">
+              {/* Job selector */}
+              <div>
+                <label className="block text-xs font-medium text-vb-text-muted mb-1">Import into Job *</label>
+                <select
+                  value={importJobId}
+                  onChange={(e) => setImportJobId(e.target.value)}
+                  className="w-full px-3 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text outline-none focus:border-brand"
+                >
+                  <option value="">Select a job...</option>
+                  {jobs.map((j) => (
+                    <option key={j.id} value={j.id}>{j.title}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* File drop zone */}
+              {!importFile ? (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const f = e.dataTransfer.files[0];
+                    if (f) handleImportFileSelect(f);
+                  }}
+                  className="border-2 border-dashed border-vb-border rounded-xl p-8 text-center cursor-pointer hover:border-brand/50 hover:bg-brand/5 transition-colors"
+                >
+                  <Upload className="w-10 h-10 text-vb-text-faint mx-auto mb-3" />
+                  <p className="text-sm text-vb-text-secondary mb-1">
+                    Click to upload or drag & drop
+                  </p>
+                  <p className="text-xs text-vb-text-muted">
+                    CSV, Excel (.xlsx, .xls), or JSON
+                  </p>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv,.xlsx,.xls,.json"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleImportFileSelect(f);
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* File selected */}
+                  <div className="flex items-center gap-3 bg-vb-surface border border-vb-border rounded-lg px-4 py-3">
+                    <FileText className="w-5 h-5 text-brand flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-vb-text truncate">{importFile.name}</p>
+                      <p className="text-xs text-vb-text-muted">
+                        {(importFile.size / 1024).toFixed(1)} KB
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => { setImportFile(null); setImportPreview([]); setImportResult(null); }}
+                      className="text-vb-text-muted hover:text-red-400 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Preview */}
+                  {importPreview.length > 0 && !importResult && (
+                    <div>
+                      <p className="text-xs font-medium text-vb-text-muted uppercase tracking-wider mb-2">
+                        Preview (first {importPreview.length} rows)
+                      </p>
+                      <div className="bg-vb-surface border border-vb-border rounded-lg overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b border-vb-border">
+                              {Object.keys(importPreview[0]).map((key) => (
+                                <th key={key} className="px-3 py-2 text-left text-vb-text-muted font-medium whitespace-nowrap">
+                                  {key}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {importPreview.map((row, i) => (
+                              <tr key={i} className="border-b border-vb-border last:border-0">
+                                {Object.values(row).map((val, j) => (
+                                  <td key={j} className="px-3 py-2 text-vb-text-secondary whitespace-nowrap max-w-[200px] truncate">
+                                    {String(val ?? '')}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <p className="text-xs text-vb-text-muted mt-2">
+                        The system will automatically map columns: <span className="text-vb-text-secondary">First Name, Last Name, Email, Phone, LinkedIn</span> (and common variants like "Full Name", "Mobile", etc.)
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Result */}
+                  {importResult && (
+                    <div className="space-y-3">
+                      <div className="flex gap-3">
+                        {importResult.imported > 0 && (
+                          <div className="flex-1 bg-green-500/10 border border-green-500/20 rounded-lg p-3 text-center">
+                            <CheckCircle2 className="w-6 h-6 text-green-400 mx-auto mb-1" />
+                            <p className="text-lg font-bold text-green-400">{importResult.imported}</p>
+                            <p className="text-xs text-green-400/80">Imported</p>
+                          </div>
+                        )}
+                        {importResult.skipped > 0 && (
+                          <div className="flex-1 bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-center">
+                            <AlertCircle className="w-6 h-6 text-amber-400 mx-auto mb-1" />
+                            <p className="text-lg font-bold text-amber-400">{importResult.skipped}</p>
+                            <p className="text-xs text-amber-400/80">Skipped</p>
+                          </div>
+                        )}
+                      </div>
+                      {importResult.errors.length > 0 && (
+                        <div className="bg-vb-surface border border-vb-border rounded-lg p-3 max-h-32 overflow-y-auto">
+                          <p className="text-xs font-medium text-vb-text-muted mb-1">Issues:</p>
+                          {importResult.errors.map((err, i) => (
+                            <p key={i} className="text-xs text-amber-400">{err}</p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 px-6 py-4 border-t border-vb-border">
+              <button
+                onClick={resetImport}
+                className="px-4 py-2 text-sm text-vb-text-secondary hover:text-vb-text rounded-lg border border-vb-border hover:bg-vb-card transition-colors"
+              >
+                {importResult ? 'Close' : 'Cancel'}
+              </button>
+              {!importResult && (
+                <button
+                  onClick={handleImportSubmit}
+                  disabled={!importFile || !importJobId || importUploading}
+                  className="flex items-center gap-2 px-4 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand/90 disabled:opacity-50 transition-colors"
+                >
+                  {importUploading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Import
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

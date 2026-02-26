@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import * as XLSX from 'xlsx';
 import prisma from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
 
@@ -11,6 +12,10 @@ const addApplicantSchema = z.object({
   linkedinUrl: z.string().url().optional(),
   jobId: z.string().min(1),
   source: z.enum(['PORTAL', 'MANUAL', 'IMPORTED', 'REFERRAL']).default('MANUAL'),
+  customFields: z.array(z.object({
+    label: z.string().min(1),
+    value: z.string(),
+  })).optional(),
 });
 
 const updateStageSchema = z.object({
@@ -57,8 +62,14 @@ export async function applicantRoutes(app: FastifyInstance) {
       where: { id: request.params.id, organizationId },
       include: {
         currentStage: true,
-        job: true,
+        job: {
+          include: {
+            applicationForm: true,
+            pipelineStages: { orderBy: { order: 'asc' } },
+          },
+        },
         aiReport: true,
+        applicationData: true,
         uploadedFiles: true,
         stageHistory: {
           include: { fromStage: true, toStage: true, movedBy: true },
@@ -118,6 +129,17 @@ export async function applicantRoutes(app: FastifyInstance) {
       },
       include: { currentStage: true, job: true },
     });
+
+    // Store custom fields as ApplicationData
+    if (data.customFields && data.customFields.length > 0) {
+      await prisma.applicationData.createMany({
+        data: data.customFields.map((cf) => ({
+          applicantId: applicant.id,
+          fieldId: `custom_${cf.label.toLowerCase().replace(/\s+/g, '_')}`,
+          value: cf.value,
+        })),
+      });
+    }
 
     // Create initial stage history
     await prisma.stageHistory.create({
@@ -211,5 +233,143 @@ export async function applicantRoutes(app: FastifyInstance) {
 
     await prisma.applicant.delete({ where: { id: applicant.id } });
     return { message: 'Applicant deleted' };
+  });
+
+  // Import applicants from CSV/Excel/JSON
+  app.post('/import', async (request, reply) => {
+    const { organizationId, userId } = request.user!;
+
+    const data = await request.file();
+    if (!data) {
+      return reply.status(400).send({ error: 'No file uploaded' });
+    }
+
+    const buffer = await data.toBuffer();
+    const fileName = data.filename.toLowerCase();
+    let rows: Record<string, unknown>[] = [];
+
+    try {
+      if (fileName.endsWith('.json')) {
+        const parsed = JSON.parse(buffer.toString('utf-8'));
+        rows = Array.isArray(parsed) ? parsed : [parsed];
+      } else {
+        // CSV or Excel — SheetJS handles both
+        const workbook = XLSX.read(buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        if (!sheetName) {
+          return reply.status(400).send({ error: 'Empty workbook' });
+        }
+        rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]!);
+      }
+    } catch {
+      return reply.status(400).send({ error: 'Could not parse file. Ensure it is a valid CSV, Excel, or JSON file.' });
+    }
+
+    if (rows.length === 0) {
+      return reply.status(400).send({ error: 'File contains no data rows' });
+    }
+
+    // Parse jobId from query
+    const query = request.query as Record<string, string>;
+    const jobId = query.jobId;
+    if (!jobId) {
+      return reply.status(400).send({ error: 'jobId query parameter is required' });
+    }
+
+    // Validate job belongs to org and get first stage
+    const job = await prisma.job.findFirst({ where: { id: jobId, organizationId } });
+    if (!job) {
+      return reply.status(404).send({ error: 'Job not found' });
+    }
+    const firstStage = await prisma.pipelineStage.findFirst({
+      where: { jobId },
+      orderBy: { order: 'asc' },
+    });
+    if (!firstStage) {
+      return reply.status(400).send({ error: 'Job has no pipeline stages configured' });
+    }
+
+    // Normalize field names from any common format
+    const normalize = (key: string) => key.trim().toLowerCase().replace(/[\s_-]+/g, '');
+
+    const FIELD_MAP: Record<string, string> = {
+      firstname: 'firstName', first: 'firstName', givenname: 'firstName',
+      lastname: 'lastName', last: 'lastName', surname: 'lastName', familyname: 'lastName',
+      email: 'email', emailaddress: 'email', mail: 'email',
+      phone: 'phone', phonenumber: 'phone', mobile: 'phone', tel: 'phone', telephone: 'phone',
+      linkedin: 'linkedinUrl', linkedinurl: 'linkedinUrl', linkedinprofile: 'linkedinUrl',
+    };
+
+    const mapRow = (raw: Record<string, unknown>) => {
+      const mapped: Record<string, string> = {};
+      for (const [key, val] of Object.entries(raw)) {
+        const norm = normalize(key);
+        const target = FIELD_MAP[norm];
+        if (target && val != null && String(val).trim()) {
+          mapped[target] = String(val).trim();
+        }
+      }
+      // Try to split "name" / "full name" into first + last
+      if (!mapped.firstName || !mapped.lastName) {
+        for (const [key, val] of Object.entries(raw)) {
+          const norm = normalize(key);
+          if ((norm === 'name' || norm === 'fullname') && val) {
+            const parts = String(val).trim().split(/\s+/);
+            if (!mapped.firstName) mapped.firstName = parts[0] || '';
+            if (!mapped.lastName) mapped.lastName = parts.slice(1).join(' ') || parts[0] || '';
+          }
+        }
+      }
+      return mapped;
+    };
+
+    const results = { imported: 0, skipped: 0, errors: [] as string[] };
+
+    for (let i = 0; i < rows.length; i++) {
+      const mapped = mapRow(rows[i] as Record<string, unknown>);
+      if (!mapped.firstName || !mapped.lastName || !mapped.email) {
+        results.skipped++;
+        results.errors.push(`Row ${i + 1}: Missing required fields (firstName, lastName, email)`);
+        continue;
+      }
+
+      // Basic email validation
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mapped.email)) {
+        results.skipped++;
+        results.errors.push(`Row ${i + 1}: Invalid email "${mapped.email}"`);
+        continue;
+      }
+
+      try {
+        const applicant = await prisma.applicant.create({
+          data: {
+            organizationId,
+            jobId,
+            firstName: mapped.firstName,
+            lastName: mapped.lastName,
+            email: mapped.email,
+            phone: mapped.phone || null,
+            linkedinUrl: mapped.linkedinUrl || null,
+            currentStageId: firstStage.id,
+            source: 'IMPORTED',
+          },
+        });
+
+        await prisma.stageHistory.create({
+          data: {
+            applicantId: applicant.id,
+            toStageId: firstStage.id,
+            movedById: userId,
+          },
+        });
+
+        results.imported++;
+      } catch {
+        results.skipped++;
+        results.errors.push(`Row ${i + 1}: Failed to import (possible duplicate)`);
+      }
+    }
+
+    return reply.send(results);
   });
 }
