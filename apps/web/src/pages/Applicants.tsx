@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Search,
   Download,
@@ -7,11 +8,8 @@ import {
   X,
   FileText,
   Clock,
-  MessageSquare,
   Star,
   ChevronRight,
-  Send,
-  Trash2,
   ExternalLink,
   Phone,
   Mail,
@@ -25,14 +23,10 @@ import {
   AlertCircle,
   CheckCircle2,
   Loader2,
-  ShieldAlert,
-  ChevronLeft,
   Sparkles,
-  Play,
   Video,
-  Users,
-  Link2,
-  Undo2,
+  Check,
+  XCircle,
 } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -174,35 +168,28 @@ interface ImportResult {
   errors: string[];
 }
 
-interface TeamMember {
-  id: string;
-  name: string;
-  email: string;
-}
-
 export default function Applicants() {
+  const navigate = useNavigate();
   const [applicants, setApplicants] = useState<Applicant[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [stageFilter, setStageFilter] = useState<string>('all');
 
-  // Drawer state
+  // Detail drawer state (name click)
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ApplicantDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [reviewStepIndex, setReviewStepIndex] = useState(0);
-  const [newNote, setNewNote] = useState('');
-  const [noteSubmitting, setNoteSubmitting] = useState(false);
-  const [stageMoving, setStageMoving] = useState(false);
-  const [aiScreening, setAiScreening] = useState(false);
-  const [showNotesPanel, setShowNotesPanel] = useState(false);
 
-  // Meeting / interview state
-  const [meetingPlatform, setMeetingPlatform] = useState<'google_meet' | 'microsoft_teams'>('google_meet');
-  const [meetingLink, setMeetingLink] = useState('');
-  const [interviewQuestions, setInterviewQuestions] = useState<string[]>(['']);
-  const [selectedTeamMembers, setSelectedTeamMembers] = useState<string[]>([]);
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  // Stage timeline modal state (stage click)
+  const [timelineApplicant, setTimelineApplicant] = useState<ApplicantDetail | null>(null);
+  const [timelineLoading, setTimelineLoading] = useState(false);
+  const [showTimeline, setShowTimeline] = useState(false);
+
+  // AI analysis modal state (score click)
+  const [aiApplicant, setAiApplicant] = useState<ApplicantDetail | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [aiScreening, setAiScreening] = useState(false);
 
   // Add contact state
   const [addDropdownOpen, setAddDropdownOpen] = useState(false);
@@ -240,11 +227,6 @@ export default function Applicants() {
     api.get('/jobs').then((res) => setJobs(res.data.map((j: JobOption) => ({ id: j.id, title: j.title })))).catch(console.error);
   }, []);
 
-  // Fetch team members for interview CC
-  useEffect(() => {
-    api.get('/team').then((res) => setTeamMembers(res.data.members || [])).catch(console.error);
-  }, []);
-
   // Close dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -256,25 +238,15 @@ export default function Applicants() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Fetch detail when selecting an applicant
+  // Fetch detail when selecting an applicant (name click)
   useEffect(() => {
     if (!selectedId) {
       setDetail(null);
       return;
     }
     setDetailLoading(true);
-    setShowNotesPanel(false);
-    setMeetingLink('');
-    setInterviewQuestions(['']);
-    setSelectedTeamMembers([]);
     api.get(`/applicants/${selectedId}`)
-      .then((res) => {
-        setDetail(res.data);
-        // Set review step to current stage index
-        const stages = res.data.job?.pipelineStages || [];
-        const idx = stages.findIndex((s: PipelineStage) => s.id === res.data.currentStage.id);
-        setReviewStepIndex(Math.max(0, idx));
-      })
+      .then((res) => setDetail(res.data))
       .catch(console.error)
       .finally(() => setDetailLoading(false));
   }, [selectedId]);
@@ -291,71 +263,43 @@ export default function Applicants() {
     return matchesSearch && matchesStage;
   });
 
-  const handleStageMove = async (stageId: string) => {
-    if (!detail || stageId === detail.currentStage.id) return;
-    setStageMoving(true);
+  // Open stage timeline modal
+  const handleStageClick = async (applicantId: string) => {
+    setShowTimeline(true);
+    setTimelineLoading(true);
     try {
-      await api.patch(`/applicants/${detail.id}/stage`, { stageId });
-      const res = await api.get(`/applicants/${detail.id}`);
-      setDetail(res.data);
-      // Move review step forward to the new stage
-      const stages = res.data.job?.pipelineStages || [];
-      const idx = stages.findIndex((s: PipelineStage) => s.id === stageId);
-      if (idx >= 0) setReviewStepIndex(idx);
-      fetchApplicants();
+      const res = await api.get(`/applicants/${applicantId}`);
+      setTimelineApplicant(res.data);
     } catch (err) {
       console.error(err);
     } finally {
-      setStageMoving(false);
+      setTimelineLoading(false);
     }
   };
 
-  const handleAdvanceToNext = async () => {
-    if (!detail) return;
-    const stages = detail.job.pipelineStages;
-    const currentIdx = stages.findIndex((s) => s.id === detail.currentStage.id);
-    const nextStage = stages[currentIdx + 1];
-    if (nextStage) {
-      await handleStageMove(nextStage.id);
+  // Open AI analysis modal
+  const handleScoreClick = async (applicantId: string) => {
+    setShowAiModal(true);
+    setAiLoading(true);
+    try {
+      const res = await api.get(`/applicants/${applicantId}`);
+      setAiApplicant(res.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAiLoading(false);
     }
   };
 
-  const handleMoveToPrevious = async () => {
-    if (!detail) return;
-    const stages = detail.job.pipelineStages;
-    const currentIdx = stages.findIndex((s) => s.id === detail.currentStage.id);
-    const prevStage = stages[currentIdx - 1];
-    if (prevStage) {
-      await handleStageMove(prevStage.id);
-    }
-  };
-
-  const handleSendEmail = () => {
-    if (!detail || !meetingLink.trim()) return;
-    const platformName = meetingPlatform === 'google_meet' ? 'Google Meet' : 'Microsoft Teams';
-    const subject = `Interview Invitation - ${detail.job.title}`;
-
-    let body = `Dear ${detail.firstName},\n\nWe would like to invite you for an interview for the ${detail.job.title} position.\n\nPlease join using the following ${platformName} link:\n${meetingLink}\n\n`;
-    const validQuestions = interviewQuestions.filter((q) => q.trim());
-    if (validQuestions.length > 0) {
-      body += `Topics we plan to discuss:\n${validQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}\n\n`;
-    }
-    body += 'We look forward to speaking with you.\n\nBest regards';
-
-    const ccEmails = selectedTeamMembers.map((id) => teamMembers.find((m) => m.id === id)?.email).filter(Boolean).join(',');
-
-    const mailto = `mailto:${encodeURIComponent(detail.email)}?${ccEmails ? `cc=${encodeURIComponent(ccEmails)}&` : ''}subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.location.href = mailto;
-  };
-
+  // Run AI screening from the AI modal
   const handleAiScreen = async () => {
-    if (!detail) return;
+    if (!aiApplicant) return;
     setAiScreening(true);
     try {
-      const res = await api.post(`/applicants/${detail.id}/ai-screen`);
-      // Refresh detail to get updated AI report
-      const updated = await api.get(`/applicants/${detail.id}`);
-      setDetail({ ...updated.data, _resumeAnalysis: res.data.resumeAnalysis });
+      await api.post(`/applicants/${aiApplicant.id}/ai-screen`);
+      const updated = await api.get(`/applicants/${aiApplicant.id}`);
+      setAiApplicant(updated.data);
+      fetchApplicants();
     } catch (err) {
       console.error(err);
     } finally {
@@ -363,31 +307,23 @@ export default function Applicants() {
     }
   };
 
-  const handleAddNote = async () => {
-    if (!detail || !newNote.trim()) return;
-    setNoteSubmitting(true);
-    try {
-      await api.post(`/applicants/${detail.id}/notes`, { content: newNote.trim() });
-      setNewNote('');
-      // Refresh detail
-      const res = await api.get(`/applicants/${detail.id}`);
-      setDetail(res.data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setNoteSubmitting(false);
-    }
+  // Accept AI analysis (keep the report as-is)
+  const handleAcceptAi = () => {
+    setShowAiModal(false);
+    setAiApplicant(null);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this applicant? This cannot be undone.')) return;
+  // Reject AI analysis (delete the AI report)
+  const handleRejectAi = async () => {
+    if (!aiApplicant) return;
     try {
-      await api.delete(`/applicants/${id}`);
-      setSelectedId(null);
+      await api.delete(`/applicants/${aiApplicant.id}/ai-report`);
       fetchApplicants();
     } catch (err) {
       console.error(err);
     }
+    setShowAiModal(false);
+    setAiApplicant(null);
   };
 
   const handleExport = () => {
@@ -645,40 +581,53 @@ export default function Applicants() {
             {filtered.map((applicant) => (
               <tr
                 key={applicant.id}
-                onClick={() => setSelectedId(applicant.id)}
-                className="hover:bg-vb-surface transition-colors cursor-pointer"
+                className="hover:bg-vb-surface transition-colors"
               >
+                {/* Name — clickable, opens details drawer */}
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setSelectedId(applicant.id)}
+                    className="flex items-center gap-3 text-left group"
+                  >
                     <div className="w-8 h-8 rounded-full bg-vb-muted flex items-center justify-center">
                       <User className="w-3.5 h-3.5 text-vb-text-secondary" />
                     </div>
                     <div>
-                      <p className="text-vb-text text-sm font-medium">
+                      <p className="text-vb-text text-sm font-medium group-hover:text-brand transition-colors">
                         {applicant.firstName} {applicant.lastName}
                       </p>
                       <p className="text-vb-text-muted text-xs">{applicant.email}</p>
                     </div>
-                  </div>
+                  </button>
                 </td>
-                <td className="px-4 py-3 text-vb-text-secondary text-sm">
-                  {applicant.job.title}
-                </td>
+                {/* Job — clickable, navigates to job detail */}
                 <td className="px-4 py-3">
-                  <span
-                    className="text-xs px-2 py-1 rounded-full font-medium"
+                  <button
+                    onClick={() => navigate(`/jobs/${applicant.job.id}`)}
+                    className="text-vb-text-secondary text-sm hover:text-brand transition-colors"
+                  >
+                    {applicant.job.title}
+                  </button>
+                </td>
+                {/* Stage — clickable, opens timeline popup */}
+                <td className="px-4 py-3">
+                  <button
+                    onClick={() => handleStageClick(applicant.id)}
+                    className="text-xs px-2 py-1 rounded-full font-medium hover:ring-2 ring-brand/30 transition-all"
                     style={{
                       backgroundColor: `${applicant.currentStage.color}15`,
                       color: applicant.currentStage.color,
                     }}
                   >
                     {applicant.currentStage.name}
-                  </span>
+                  </button>
                 </td>
+                {/* Score — clickable, opens AI analysis popup */}
                 <td className="px-4 py-3">
                   {applicant.aiReport ? (
-                    <span
-                      className={`text-sm font-medium ${
+                    <button
+                      onClick={() => handleScoreClick(applicant.id)}
+                      className={`text-sm font-medium hover:underline ${
                         applicant.aiReport.overallScore >= 80
                           ? 'text-green-400'
                           : applicant.aiReport.overallScore >= 50
@@ -687,26 +636,29 @@ export default function Applicants() {
                       }`}
                     >
                       {applicant.aiReport.overallScore}%
-                    </span>
+                    </button>
                   ) : (
                     <span className="text-vb-text-faint text-sm">—</span>
                   )}
                 </td>
+                {/* Source — not clickable */}
                 <td className="px-4 py-3 text-vb-text-secondary text-sm">
                   {SOURCE_LABELS[applicant.source] || applicant.source}
                 </td>
+                {/* Applied — not clickable */}
                 <td className="px-4 py-3 text-vb-text-secondary text-sm">
                   {new Date(applicant.createdAt).toLocaleDateString('en-US', {
                     month: 'short',
                     day: 'numeric',
                   })}
                 </td>
+                {/* Actions — pipeline button */}
                 <td className="px-4 py-3">
                   <button
-                    onClick={(e) => { e.stopPropagation(); setSelectedId(applicant.id); }}
+                    onClick={() => navigate('/pipeline')}
                     className="text-vb-text-muted hover:text-brand text-sm flex items-center gap-1"
                   >
-                    View <ChevronRight className="w-3 h-3" />
+                    Pipeline <ChevronRight className="w-3 h-3" />
                   </button>
                 </td>
               </tr>
@@ -729,909 +681,496 @@ export default function Applicants() {
         </span>
       </div>
 
-      {/* ─── DETAIL DRAWER ─── */}
+      {/* ─── DETAILS DRAWER (name click) ─── */}
       {selectedId && (
         <div className="fixed inset-0 z-50 flex justify-end">
           <div className="absolute inset-0 bg-black/40" onClick={() => setSelectedId(null)} />
 
-          <div className="relative w-full max-w-2xl bg-vb-bg border-l border-vb-border flex flex-col animate-in slide-in-from-right">
+          <div className="relative w-full max-w-lg bg-vb-bg border-l border-vb-border flex flex-col animate-in slide-in-from-right">
             {detailLoading || !detail ? (
               <div className="p-6 space-y-4">
                 <div className="h-8 bg-vb-muted rounded animate-pulse w-48" />
                 <div className="h-4 bg-vb-muted rounded animate-pulse w-32" />
                 <div className="h-40 bg-vb-muted rounded animate-pulse" />
               </div>
-            ) : (() => {
-              const stages = detail.job.pipelineStages;
-              const currentStageIdx = stages.findIndex((s) => s.id === detail.currentStage.id);
-              const viewingStage = stages[reviewStepIndex];
-              const nextStage = stages[currentStageIdx + 1];
-              const prevStage = stages[currentStageIdx - 1];
-              const isFirstStep = reviewStepIndex === 0;
-              const isScreeningStep = reviewStepIndex === 1;
-              const isInterviewStep = viewingStage?.name === 'Interview' || viewingStage?.name === 'Final Interview';
-              const isAtOrBeyondCurrent = reviewStepIndex >= currentStageIdx;
-
-              // Check qualification — are all required fields filled?
-              const formFields = detail.job.applicationForm?.fields || [];
-              const requiredFields = formFields.filter((f: ApplicationFormField) => f.required);
-              const systemFieldMap: Record<string, string | null | undefined> = {
-                first_name: detail.firstName,
-                last_name: detail.lastName,
-                email: detail.email,
-                phone: detail.phone,
-                linkedin_url: detail.linkedinUrl,
-              };
-              const missingFields = requiredFields.filter((f: ApplicationFormField) => {
-                if (f.system || f.id in systemFieldMap) {
-                  return !systemFieldMap[f.id]?.trim();
-                }
-                if (f.type === 'file') {
-                  return !detail.uploadedFiles.some((uf) => uf.type === f.id);
-                }
-                return !getFieldValue(f.id);
-              });
-              const isQualified = missingFields.length === 0;
-
-              const resumeFile = detail.uploadedFiles.find((f) => f.type === 'resume');
-              const videoFile = detail.uploadedFiles.find((f) => f.type === 'video');
-              const coverLetter = getFieldValue('cover_letter');
-
-              return (
-                <>
-                  {/* ── Header ── */}
-                  <div className="sticky top-0 bg-vb-bg border-b border-vb-border px-6 py-4 z-10 flex-shrink-0">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-brand/10 flex items-center justify-center">
-                          <User className="w-6 h-6 text-brand" />
-                        </div>
-                        <div>
-                          <h2 className="text-lg font-semibold text-vb-text">
-                            {detail.firstName} {detail.lastName}
-                          </h2>
-                          <p className="text-sm text-vb-text-muted flex items-center gap-2">
-                            <Briefcase className="w-3.5 h-3.5" />
-                            {detail.job.title}
-                          </p>
-                        </div>
+            ) : (
+              <>
+                {/* Header */}
+                <div className="sticky top-0 bg-vb-bg border-b border-vb-border px-6 py-4 z-10 flex-shrink-0">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-full bg-brand/10 flex items-center justify-center">
+                        <User className="w-6 h-6 text-brand" />
                       </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => setShowNotesPanel(!showNotesPanel)}
-                          className={`p-2 rounded-lg transition-colors ${showNotesPanel ? 'text-brand bg-brand/10' : 'text-vb-text-muted hover:text-vb-text hover:bg-vb-card'}`}
-                          title="Notes"
-                        >
-                          <MessageSquare className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(detail.id)}
-                          className="p-2 text-vb-text-muted hover:text-red-400 rounded-lg hover:bg-vb-card transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setSelectedId(null)}
-                          className="p-2 text-vb-text-muted hover:text-vb-text rounded-lg hover:bg-vb-card transition-colors"
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
+                      <div>
+                        <h2 className="text-lg font-semibold text-vb-text">
+                          {detail.firstName} {detail.lastName}
+                        </h2>
+                        <p className="text-sm text-vb-text-muted flex items-center gap-2">
+                          <Briefcase className="w-3.5 h-3.5" />
+                          {detail.job.title}
+                        </p>
                       </div>
                     </div>
+                    <button
+                      onClick={() => setSelectedId(null)}
+                      className="p-2 text-vb-text-muted hover:text-vb-text rounded-lg hover:bg-vb-card transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
 
-                    {/* Pipeline Stepper */}
-                    <div className="flex items-center gap-1">
-                      {stages.map((stage, i) => {
-                        const isCompleted = i < currentStageIdx;
-                        const isCurrent = i === currentStageIdx;
-                        const isViewing = i === reviewStepIndex;
-                        return (
-                          <button
-                            key={stage.id}
-                            onClick={() => setReviewStepIndex(i)}
-                            className="flex-1 relative group cursor-pointer"
+                {/* Content — applicant submitted details */}
+                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                  {/* Current Stage Badge */}
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="text-xs px-2.5 py-1 rounded-full font-medium"
+                      style={{
+                        backgroundColor: `${detail.currentStage.color}15`,
+                        color: detail.currentStage.color,
+                      }}
+                    >
+                      {detail.currentStage.name}
+                    </span>
+                    <span className="text-xs text-vb-text-muted">
+                      Applied {new Date(detail.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  </div>
+
+                  {/* Contact Information */}
+                  <section className="space-y-3">
+                    <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Contact Information</h4>
+                    <div className="bg-vb-surface border border-vb-border rounded-lg p-4 space-y-2.5">
+                      <div className="flex items-center gap-3 text-sm">
+                        <Mail className="w-4 h-4 text-vb-text-muted flex-shrink-0" />
+                        <a href={`mailto:${detail.email}`} className="text-brand hover:underline">{detail.email}</a>
+                      </div>
+                      {detail.phone && (
+                        <div className="flex items-center gap-3 text-sm">
+                          <Phone className="w-4 h-4 text-vb-text-muted flex-shrink-0" />
+                          <span className="text-vb-text">{detail.phone}</span>
+                        </div>
+                      )}
+                      {detail.linkedinUrl && (
+                        <div className="flex items-center gap-3 text-sm">
+                          <Linkedin className="w-4 h-4 text-vb-text-muted flex-shrink-0" />
+                          <a href={detail.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline flex items-center gap-1">
+                            LinkedIn Profile <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-3 text-sm">
+                        <Briefcase className="w-4 h-4 text-vb-text-muted flex-shrink-0" />
+                        <span className="text-vb-text-secondary">Source: {SOURCE_LABELS[detail.source] || detail.source}</span>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Application Responses */}
+                  {detail.applicationData.length > 0 && (
+                    <section className="space-y-3">
+                      <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Application Responses</h4>
+                      <div className="bg-vb-surface border border-vb-border rounded-lg divide-y divide-vb-border">
+                        {detail.job.applicationForm?.fields
+                          ?.filter((f: ApplicationFormField) => !f.system)
+                          .map((field: ApplicationFormField) => {
+                            const value = getFieldValue(field.id);
+                            if (!value && !field.required) return null;
+                            return (
+                              <div key={field.id} className="px-4 py-3">
+                                <p className="text-xs text-vb-text-muted mb-1 flex items-center gap-1">
+                                  {field.label}
+                                  {field.required && <span className="text-red-400">*</span>}
+                                </p>
+                                {!value ? (
+                                  <p className="text-sm text-vb-text-faint italic">Not provided</p>
+                                ) : field.type === 'long_text' ? (
+                                  <p className="text-sm text-vb-text whitespace-pre-wrap">{value}</p>
+                                ) : field.type === 'url' ? (
+                                  <a href={value} target="_blank" rel="noopener noreferrer" className="text-sm text-brand hover:underline flex items-center gap-1">
+                                    {value} <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                ) : (
+                                  <p className="text-sm text-vb-text">{value}</p>
+                                )}
+                              </div>
+                            );
+                          })}
+                        {/* Custom/extra fields */}
+                        {detail.applicationData
+                          .filter((d) => {
+                            const formFieldIds = detail.job.applicationForm?.fields?.map((f: ApplicationFormField) => f.id) || [];
+                            return !formFieldIds.includes(d.fieldId) && d.fieldId !== 'cover_letter';
+                          })
+                          .map((d) => {
+                            const label = d.fieldId.startsWith('custom_')
+                              ? d.fieldId.replace('custom_', '').replace(/_/g, ' ')
+                              : d.fieldId;
+                            const val = typeof d.value === 'string' ? d.value : String(d.value ?? '');
+                            if (!val) return null;
+                            return (
+                              <div key={d.id} className="px-4 py-3">
+                                <p className="text-xs text-vb-text-muted mb-1 capitalize">{label}</p>
+                                <p className="text-sm text-vb-text">{val}</p>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </section>
+                  )}
+
+                  {/* Uploaded Files */}
+                  {detail.uploadedFiles.length > 0 && (
+                    <section className="space-y-3">
+                      <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Submitted Files</h4>
+                      <div className="space-y-2">
+                        {detail.uploadedFiles.map((file) => (
+                          <a
+                            key={file.id}
+                            href={`/api/uploads/${file.storageUrl.replace(/.*[/\\]/, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-3 bg-vb-surface border border-vb-border rounded-lg px-4 py-3 hover:bg-vb-card transition-colors"
                           >
+                            {file.mimeType?.startsWith('video/') ? (
+                              <Video className="w-5 h-5 text-brand flex-shrink-0" />
+                            ) : (
+                              <FileText className="w-5 h-5 text-brand flex-shrink-0" />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-vb-text truncate">{file.fileName}</p>
+                              <p className="text-xs text-vb-text-muted capitalize">{file.type.replace('_', ' ')}</p>
+                            </div>
+                            <ExternalLink className="w-4 h-4 text-vb-text-muted" />
+                          </a>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
+                  {/* AI Score Summary (if available) */}
+                  {detail.aiReport && (
+                    <section className="space-y-3">
+                      <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">AI Score</h4>
+                      <div className="flex items-center gap-4 bg-vb-surface border border-vb-border rounded-lg p-4">
+                        <div className={`text-2xl font-bold ${
+                          detail.aiReport.overallScore >= 80 ? 'text-green-400' :
+                          detail.aiReport.overallScore >= 50 ? 'text-amber-400' : 'text-red-400'
+                        }`}>
+                          {detail.aiReport.overallScore}%
+                        </div>
+                        <div>
+                          <span className={`text-sm font-medium ${
+                            RECOMMENDATION_LABELS[detail.aiReport.recommendation]?.color ?? 'text-vb-text'
+                          }`}>
+                            {RECOMMENDATION_LABELS[detail.aiReport.recommendation]?.label ?? detail.aiReport.recommendation}
+                          </span>
+                          <p className="text-xs text-vb-text-muted">{detail.aiReport.confidenceLevel} confidence</p>
+                        </div>
+                      </div>
+                    </section>
+                  )}
+                </div>
+
+                {/* Bottom — Pipeline button */}
+                <div className="sticky bottom-0 bg-vb-bg border-t border-vb-border px-6 py-4 flex-shrink-0">
+                  <button
+                    onClick={() => { setSelectedId(null); navigate('/pipeline'); }}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-brand text-white text-sm rounded-lg hover:bg-brand/90 transition-colors font-medium"
+                  >
+                    Go to Pipeline
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─── STAGE TIMELINE MODAL (stage click) ─── */}
+      {showTimeline && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => { setShowTimeline(false); setTimelineApplicant(null); }} />
+          <div className="relative bg-vb-bg border border-vb-border rounded-xl w-full max-w-md mx-4 shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-vb-border">
+              <h2 className="text-lg font-semibold text-vb-text flex items-center gap-2">
+                <Clock className="w-5 h-5 text-brand" />
+                Stage Timeline
+              </h2>
+              <button onClick={() => { setShowTimeline(false); setTimelineApplicant(null); }} className="p-1 text-vb-text-muted hover:text-vb-text rounded">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5">
+              {timelineLoading ? (
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-10 bg-vb-muted rounded animate-pulse" />
+                  ))}
+                </div>
+              ) : timelineApplicant ? (() => {
+                const pStages = timelineApplicant.job.pipelineStages;
+                const currentIdx = pStages.findIndex((s) => s.id === timelineApplicant.currentStage.id);
+
+                // Build a map of stage → date from history (latest entry per toStage)
+                const stageDateMap: Record<string, string> = {};
+                // The "Applied" stage date is always createdAt
+                const firstStage = pStages[0];
+                if (firstStage) stageDateMap[firstStage.id] = timelineApplicant.createdAt;
+                // Walk history to find when each stage was reached
+                [...timelineApplicant.stageHistory].reverse().forEach((entry) => {
+                  if (!stageDateMap[entry.toStage.id || '']) {
+                    stageDateMap[entry.toStage.id || ''] = entry.movedAt;
+                  }
+                });
+
+                return (
+                  <div className="space-y-0">
+                    {pStages.map((stage, i) => {
+                      const isReached = i <= currentIdx;
+                      const isCurrent = i === currentIdx;
+                      const dateStr = stageDateMap[stage.id];
+                      const isLast = i === pStages.length - 1;
+                      return (
+                        <div key={stage.id} className="flex gap-4">
+                          {/* Flowchart line + dot */}
+                          <div className="flex flex-col items-center w-6">
                             <div
-                              className={`h-1.5 rounded-full transition-all ${
-                                isViewing
-                                  ? 'h-2.5'
-                                  : ''
+                              className={`w-3.5 h-3.5 rounded-full border-2 flex-shrink-0 ${
+                                isCurrent
+                                  ? 'border-brand bg-brand shadow-lg shadow-brand/30'
+                                  : isReached
+                                  ? 'border-brand bg-brand/30'
+                                  : 'border-vb-border bg-vb-muted'
                               }`}
-                              style={{
-                                backgroundColor: isCompleted || isCurrent
-                                  ? stage.color
-                                  : `${stage.color}25`,
-                                opacity: isViewing ? 1 : isCompleted ? 0.8 : 0.3,
-                              }}
+                              style={isReached ? { borderColor: stage.color, backgroundColor: isCurrent ? stage.color : `${stage.color}40` } : {}}
                             />
-                            <span className={`absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] whitespace-nowrap transition-opacity ${
-                              isViewing ? 'opacity-100 font-medium' : 'opacity-0 group-hover:opacity-100'
-                            }`} style={{ color: stage.color }}>
+                            {!isLast && (
+                              <div
+                                className={`w-0.5 flex-1 min-h-[32px] ${
+                                  i < currentIdx ? 'bg-brand/40' : 'bg-vb-border'
+                                }`}
+                                style={i < currentIdx ? { backgroundColor: `${stage.color}60` } : {}}
+                              />
+                            )}
+                          </div>
+                          {/* Stage info */}
+                          <div className={`pb-6 ${isLast ? 'pb-0' : ''}`}>
+                            <p className={`text-sm font-medium ${
+                              isReached ? 'text-vb-text' : 'text-vb-text-faint'
+                            }`}>
                               {stage.name}
-                            </span>
-                          </button>
-                        );
-                      })}
+                              {isCurrent && (
+                                <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-brand/10 text-brand font-medium">
+                                  Current
+                                </span>
+                              )}
+                            </p>
+                            {dateStr ? (
+                              <p className="text-xs text-vb-text-muted mt-0.5 flex items-center gap-1">
+                                <Calendar className="w-3 h-3" />
+                                {new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                              </p>
+                            ) : (
+                              <p className="text-xs text-vb-text-faint mt-0.5">Pending</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })() : null}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── AI ANALYSIS MODAL (score click) ─── */}
+      {showAiModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => { setShowAiModal(false); setAiApplicant(null); }} />
+          <div className="relative bg-vb-bg border border-vb-border rounded-xl w-full max-w-lg mx-4 shadow-2xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-vb-border flex-shrink-0">
+              <h2 className="text-lg font-semibold text-vb-text flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-brand" />
+                AI Analysis
+              </h2>
+              <button onClick={() => { setShowAiModal(false); setAiApplicant(null); }} className="p-1 text-vb-text-muted hover:text-vb-text rounded">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-5 overflow-y-auto flex-1">
+              {aiLoading ? (
+                <div className="space-y-4">
+                  <div className="h-16 bg-vb-muted rounded animate-pulse" />
+                  <div className="h-24 bg-vb-muted rounded animate-pulse" />
+                  <div className="h-20 bg-vb-muted rounded animate-pulse" />
+                </div>
+              ) : aiApplicant ? (
+                <>
+                  {/* Applicant info */}
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-brand/10 flex items-center justify-center">
+                      <User className="w-5 h-5 text-brand" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-vb-text">{aiApplicant.firstName} {aiApplicant.lastName}</p>
+                      <p className="text-xs text-vb-text-muted">{aiApplicant.job.title}</p>
                     </div>
                   </div>
 
-                  {/* ── Content ── */}
-                  <div className="flex-1 overflow-y-auto">
-                    <div className="p-6 space-y-6">
-                      {/* Stage title */}
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className="text-base font-semibold text-vb-text flex items-center gap-2">
-                            {viewingStage?.name || 'Review'}
-                            {isFirstStep && !isQualified && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-500/10 border border-red-500/20 rounded-full text-xs text-red-400">
-                                <ShieldAlert className="w-3 h-3" />
-                                Incomplete
-                              </span>
-                            )}
-                            {isFirstStep && isQualified && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/10 border border-green-500/20 rounded-full text-xs text-green-400">
-                                <CheckCircle2 className="w-3 h-3" />
-                                Qualified
-                              </span>
-                            )}
-                          </h3>
-                          <p className="text-xs text-vb-text-muted mt-0.5">
-                            {isFirstStep && 'Review submitted application details'}
-                            {isScreeningStep && 'AI-powered screening and document review'}
-                            {isInterviewStep && 'Schedule a one-on-one interview with the applicant'}
-                            {!isFirstStep && !isScreeningStep && !isInterviewStep && `Stage ${reviewStepIndex + 1} of ${stages.length}`}
-                          </p>
+                  {aiApplicant.aiReport ? (
+                    <>
+                      {/* Overall Score */}
+                      <div className="flex items-center gap-4 bg-vb-surface border border-vb-border rounded-xl p-4">
+                        <div className={`w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold ${
+                          aiApplicant.aiReport.overallScore >= 80 ? 'bg-green-500/10 text-green-400' :
+                          aiApplicant.aiReport.overallScore >= 50 ? 'bg-amber-500/10 text-amber-400' :
+                          'bg-red-500/10 text-red-400'
+                        }`}>
+                          {aiApplicant.aiReport.overallScore}
                         </div>
-                        <span className="text-xs text-vb-text-muted flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {new Date(detail.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </span>
+                        <div>
+                          <span className={`text-sm font-medium ${
+                            RECOMMENDATION_LABELS[aiApplicant.aiReport.recommendation]?.color ?? 'text-vb-text'
+                          }`}>
+                            {RECOMMENDATION_LABELS[aiApplicant.aiReport.recommendation]?.label ?? aiApplicant.aiReport.recommendation}
+                          </span>
+                          <p className="text-xs text-vb-text-muted">Confidence: {aiApplicant.aiReport.confidenceLevel}</p>
+                        </div>
                       </div>
 
-                      {/* ── APPLIED STEP (Step 0): Show submitted data + qualification ── */}
-                      {isFirstStep && (
-                        <>
-                          {/* Missing fields warning */}
-                          {!isQualified && (
-                            <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-4 space-y-2">
-                              <div className="flex items-center gap-2 text-red-400 font-medium text-sm">
-                                <ShieldAlert className="w-4 h-4" />
-                                Missing Required Fields
-                              </div>
-                              <ul className="space-y-1">
-                                {missingFields.map((f: ApplicationFormField) => (
-                                  <li key={f.id} className="text-xs text-red-400/80 flex items-center gap-2">
-                                    <span className="w-1 h-1 rounded-full bg-red-400" />
-                                    {f.label}
-                                  </li>
-                                ))}
-                              </ul>
+                      {/* Analyzed Data Summary */}
+                      <section className="space-y-2">
+                        <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Data Analyzed</h4>
+                        <div className="bg-vb-surface border border-vb-border rounded-lg p-3 space-y-1.5">
+                          <div className="flex items-center gap-2 text-xs text-vb-text-secondary">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
+                            Application form responses
+                          </div>
+                          {aiApplicant.uploadedFiles.some((f) => f.type === 'resume') && (
+                            <div className="flex items-center gap-2 text-xs text-vb-text-secondary">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
+                              Resume uploaded
                             </div>
                           )}
-
-                          {/* Contact Info */}
-                          <section className="space-y-3">
-                            <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Contact Information</h4>
-                            <div className="bg-vb-surface border border-vb-border rounded-lg p-4 space-y-2.5">
-                              <div className="flex items-center gap-3 text-sm">
-                                <Mail className="w-4 h-4 text-vb-text-muted flex-shrink-0" />
-                                <a href={`mailto:${detail.email}`} className="text-brand hover:underline">{detail.email}</a>
-                              </div>
-                              {detail.phone && (
-                                <div className="flex items-center gap-3 text-sm">
-                                  <Phone className="w-4 h-4 text-vb-text-muted flex-shrink-0" />
-                                  <span className="text-vb-text">{detail.phone}</span>
-                                </div>
-                              )}
-                              {detail.linkedinUrl && (
-                                <div className="flex items-center gap-3 text-sm">
-                                  <Linkedin className="w-4 h-4 text-vb-text-muted flex-shrink-0" />
-                                  <a href={detail.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline flex items-center gap-1">
-                                    LinkedIn Profile <ExternalLink className="w-3 h-3" />
-                                  </a>
-                                </div>
-                              )}
-                              <div className="flex items-center gap-3 text-sm">
-                                <Briefcase className="w-4 h-4 text-vb-text-muted flex-shrink-0" />
-                                <span className="text-vb-text-secondary">Source: {SOURCE_LABELS[detail.source] || detail.source}</span>
-                              </div>
+                          {aiApplicant.uploadedFiles.some((f) => f.type === 'video') && (
+                            <div className="flex items-center gap-2 text-xs text-vb-text-secondary">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
+                              Video introduction
                             </div>
-                          </section>
-
-                          {/* Application Responses */}
-                          {detail.applicationData.length > 0 && (
-                            <section className="space-y-3">
-                              <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Application Responses</h4>
-                              <div className="bg-vb-surface border border-vb-border rounded-lg divide-y divide-vb-border">
-                                {detail.job.applicationForm?.fields
-                                  ?.filter((f: ApplicationFormField) => !f.system)
-                                  .map((field: ApplicationFormField) => {
-                                    const value = getFieldValue(field.id);
-                                    const isMissing = field.required && !value;
-                                    return (
-                                      <div key={field.id} className={`px-4 py-3 ${isMissing ? 'bg-red-500/5' : ''}`}>
-                                        <p className="text-xs text-vb-text-muted mb-1 flex items-center gap-1">
-                                          {field.label}
-                                          {field.required && <span className="text-red-400">*</span>}
-                                        </p>
-                                        {isMissing ? (
-                                          <p className="text-sm text-red-400 italic">Not provided</p>
-                                        ) : field.type === 'long_text' ? (
-                                          <p className="text-sm text-vb-text whitespace-pre-wrap">{value}</p>
-                                        ) : field.type === 'url' ? (
-                                          <a href={value} target="_blank" rel="noopener noreferrer" className="text-sm text-brand hover:underline flex items-center gap-1">
-                                            {value} <ExternalLink className="w-3 h-3" />
-                                          </a>
-                                        ) : (
-                                          <p className="text-sm text-vb-text">{value}</p>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                {/* Custom/extra fields */}
-                                {detail.applicationData
-                                  .filter((d) => {
-                                    const formFieldIds = detail.job.applicationForm?.fields?.map((f: ApplicationFormField) => f.id) || [];
-                                    return !formFieldIds.includes(d.fieldId) && d.fieldId !== 'cover_letter';
-                                  })
-                                  .map((d) => {
-                                    const label = d.fieldId.startsWith('custom_')
-                                      ? d.fieldId.replace('custom_', '').replace(/_/g, ' ')
-                                      : d.fieldId;
-                                    const val = typeof d.value === 'string' ? d.value : String(d.value ?? '');
-                                    if (!val) return null;
-                                    return (
-                                      <div key={d.id} className="px-4 py-3">
-                                        <p className="text-xs text-vb-text-muted mb-1 capitalize">{label}</p>
-                                        <p className="text-sm text-vb-text">{val}</p>
-                                      </div>
-                                    );
-                                  })}
-                              </div>
-                            </section>
                           )}
-
-                          {/* Files summary */}
-                          {detail.uploadedFiles.length > 0 && (
-                            <section className="space-y-3">
-                              <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Submitted Files</h4>
-                              <div className="space-y-2">
-                                {detail.uploadedFiles.map((file) => (
-                                  <a
-                                    key={file.id}
-                                    href={`/api/uploads/${file.storageUrl.replace(/.*[/\\]/, '')}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-3 bg-vb-surface border border-vb-border rounded-lg px-4 py-3 hover:bg-vb-card transition-colors"
-                                  >
-                                    {file.mimeType?.startsWith('video/') ? (
-                                      <Video className="w-5 h-5 text-brand flex-shrink-0" />
-                                    ) : (
-                                      <FileText className="w-5 h-5 text-brand flex-shrink-0" />
-                                    )}
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm text-vb-text truncate">{file.fileName}</p>
-                                      <p className="text-xs text-vb-text-muted capitalize">{file.type.replace('_', ' ')}</p>
-                                    </div>
-                                    <ExternalLink className="w-4 h-4 text-vb-text-muted" />
-                                  </a>
-                                ))}
-                              </div>
-                            </section>
-                          )}
-                        </>
-                      )}
-
-                      {/* ── SCREENING STEP (Step 1): AI analysis, resume rating, documents ── */}
-                      {isScreeningStep && (
-                        <>
-                          {/* AI Overall Score */}
-                          {detail.aiReport && (
-                            <section className="space-y-3">
-                              <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">AI Assessment</h4>
-                              <div className="bg-vb-surface border border-vb-border rounded-xl p-5">
-                                <div className="flex items-center justify-between mb-4">
-                                  <div className="flex items-center gap-4">
-                                    <div className={`w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold ${
-                                      detail.aiReport.overallScore >= 80 ? 'bg-green-500/10 text-green-400' :
-                                      detail.aiReport.overallScore >= 50 ? 'bg-amber-500/10 text-amber-400' :
-                                      'bg-red-500/10 text-red-400'
-                                    }`}>
-                                      {detail.aiReport.overallScore}
-                                    </div>
-                                    <div>
-                                      <span className={`text-sm font-medium ${
-                                        RECOMMENDATION_LABELS[detail.aiReport.recommendation]?.color ?? 'text-vb-text'
-                                      }`}>
-                                        {RECOMMENDATION_LABELS[detail.aiReport.recommendation]?.label ?? detail.aiReport.recommendation}
-                                      </span>
-                                      <p className="text-xs text-vb-text-muted">Confidence: {detail.aiReport.confidenceLevel}</p>
-                                    </div>
-                                  </div>
-                                  <button
-                                    onClick={handleAiScreen}
-                                    disabled={aiScreening}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-brand/10 text-brand rounded-lg hover:bg-brand/20 disabled:opacity-50 transition-colors"
-                                  >
-                                    {aiScreening ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                                    Re-screen
-                                  </button>
-                                </div>
-
-                                {/* Dimension scores */}
-                                {detail.aiReport.dimensionScores && typeof detail.aiReport.dimensionScores === 'object' && (
-                                  <div className="space-y-2.5 mb-4">
-                                    {Object.entries(detail.aiReport.dimensionScores).map(([key, score]) => (
-                                      <div key={key}>
-                                        <div className="flex justify-between text-xs mb-1">
-                                          <span className="text-vb-text-secondary capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                                          <span className="text-vb-text font-medium">{score}%</span>
-                                        </div>
-                                        <div className="h-1.5 bg-vb-muted rounded-full overflow-hidden">
-                                          <div className={`h-full rounded-full transition-all ${
-                                            score >= 80 ? 'bg-green-400' : score >= 50 ? 'bg-amber-400' : 'bg-red-400'
-                                          }`} style={{ width: `${score}%` }} />
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-
-                                <div className="grid grid-cols-2 gap-4">
-                                  {Array.isArray(detail.aiReport.strengths) && detail.aiReport.strengths.length > 0 && (
-                                    <div>
-                                      <p className="text-xs font-medium text-green-400 mb-1.5">Strengths</p>
-                                      <ul className="space-y-1">
-                                        {detail.aiReport.strengths.map((s: string, i: number) => (
-                                          <li key={i} className="text-xs text-vb-text-secondary flex gap-1.5">
-                                            <Star className="w-3 h-3 text-green-400 flex-shrink-0 mt-0.5" /> {s}
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                  )}
-                                  {Array.isArray(detail.aiReport.concerns) && detail.aiReport.concerns.length > 0 && (
-                                    <div>
-                                      <p className="text-xs font-medium text-amber-400 mb-1.5">Concerns</p>
-                                      <ul className="space-y-1">
-                                        {detail.aiReport.concerns.map((c: string, i: number) => (
-                                          <li key={i} className="text-xs text-vb-text-secondary flex gap-1.5">
-                                            <span className="text-amber-400 flex-shrink-0">•</span> {c}
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </section>
-                          )}
-
-                          {/* Resume with Rate button */}
-                          <section className="space-y-3">
-                            <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Resume</h4>
-                            {resumeFile ? (
-                              <div className="bg-vb-surface border border-vb-border rounded-xl overflow-hidden">
-                                <div className="flex items-center justify-between px-4 py-3">
-                                  <a
-                                    href={`/api/uploads/${resumeFile.storageUrl.replace(/.*[/\\]/, '')}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="flex items-center gap-3 hover:text-brand transition-colors flex-1 min-w-0"
-                                  >
-                                    <FileText className="w-5 h-5 text-brand flex-shrink-0" />
-                                    <div className="min-w-0">
-                                      <p className="text-sm text-vb-text truncate">{resumeFile.fileName}</p>
-                                      <p className="text-xs text-vb-text-muted">Click to view</p>
-                                    </div>
-                                  </a>
-                                  <button
-                                    onClick={handleAiScreen}
-                                    disabled={aiScreening}
-                                    className="flex items-center gap-1.5 px-3 py-2 bg-brand text-white text-xs rounded-lg hover:bg-brand/90 disabled:opacity-50 transition-colors ml-3 flex-shrink-0"
-                                  >
-                                    {aiScreening ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                                    {detail.aiReport ? 'Re-rate' : 'Rate Resume'}
-                                  </button>
-                                </div>
-                                {/* Resume AI feedback inline */}
-                                {(detail as ApplicantDetail & { _resumeAnalysis?: { score: number; feedback: string[] } })._resumeAnalysis && (
-                                  <div className="border-t border-vb-border px-4 py-3 bg-brand/5">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <Sparkles className="w-3.5 h-3.5 text-brand" />
-                                      <span className={`text-sm font-semibold ${
-                                        ((detail as ApplicantDetail & { _resumeAnalysis?: { score: number } })._resumeAnalysis?.score ?? 0) >= 70 ? 'text-green-400' :
-                                        ((detail as ApplicantDetail & { _resumeAnalysis?: { score: number } })._resumeAnalysis?.score ?? 0) >= 50 ? 'text-amber-400' : 'text-red-400'
-                                      }`}>
-                                        Resume Score: {(detail as ApplicantDetail & { _resumeAnalysis?: { score: number } })._resumeAnalysis?.score ?? 0}/100
-                                      </span>
-                                    </div>
-                                    <ul className="space-y-1">
-                                      {((detail as ApplicantDetail & { _resumeAnalysis?: { feedback: string[] } })._resumeAnalysis?.feedback ?? []).map((fb: string, i: number) => (
-                                        <li key={i} className="text-xs text-vb-text-secondary flex gap-1.5">
-                                          <ChevronRight className="w-3 h-3 text-brand flex-shrink-0 mt-0.5" /> {fb}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="bg-vb-surface border border-dashed border-vb-border rounded-xl p-6 text-center">
-                                <FileText className="w-8 h-8 text-vb-text-faint mx-auto mb-2" />
-                                <p className="text-sm text-vb-text-muted">No resume uploaded</p>
-                              </div>
-                            )}
-                          </section>
-
-                          {/* Cover Letter */}
-                          {coverLetter && (
-                            <section className="space-y-3">
-                              <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Cover Letter</h4>
-                              <div className="bg-vb-surface border border-vb-border rounded-xl p-4">
-                                <p className="text-sm text-vb-text whitespace-pre-wrap leading-relaxed">{coverLetter}</p>
-                              </div>
-                            </section>
-                          )}
-
-                          {/* Video */}
-                          {videoFile && (
-                            <section className="space-y-3">
-                              <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Video Introduction</h4>
-                              <div className="bg-vb-surface border border-vb-border rounded-xl overflow-hidden">
-                                <video
-                                  controls
-                                  className="w-full"
-                                  preload="metadata"
-                                >
-                                  <source src={`/api/uploads/${videoFile.storageUrl.replace(/.*[/\\]/, '')}`} type={videoFile.mimeType || 'video/mp4'} />
-                                </video>
-                                <div className="px-4 py-2 border-t border-vb-border flex items-center gap-2">
-                                  <Play className="w-3.5 h-3.5 text-vb-text-muted" />
-                                  <span className="text-xs text-vb-text-secondary truncate">{videoFile.fileName}</span>
-                                </div>
-                              </div>
-                            </section>
-                          )}
-
-                          {/* Application data in clickable cards for screening */}
-                          {detail.applicationData.length > 0 && (
-                            <section className="space-y-3">
-                              <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Application Details</h4>
-                              <div className="grid grid-cols-1 gap-2">
-                                {detail.applicationData
-                                  .filter((d) => d.fieldId !== 'cover_letter')
-                                  .map((d) => {
-                                    const formField = formFields.find((f: ApplicationFormField) => f.id === d.fieldId);
-                                    const label = formField ? formField.label : d.fieldId.startsWith('custom_') ? d.fieldId.replace('custom_', '').replace(/_/g, ' ') : d.fieldId;
-                                    const val = typeof d.value === 'string' ? d.value : String(d.value ?? '');
-                                    if (!val) return null;
-                                    const isUrl = val.startsWith('http://') || val.startsWith('https://');
-                                    return (
-                                      <div key={d.id} className="bg-vb-surface border border-vb-border rounded-lg px-4 py-3 hover:bg-vb-card transition-colors cursor-default">
-                                        <p className="text-xs text-vb-text-muted mb-1 capitalize">{label}</p>
-                                        {isUrl ? (
-                                          <a href={val} target="_blank" rel="noopener noreferrer" className="text-sm text-brand hover:underline flex items-center gap-1">
-                                            {val} <ExternalLink className="w-3 h-3" />
-                                          </a>
-                                        ) : (
-                                          <p className="text-sm text-vb-text">{val}</p>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                              </div>
-                            </section>
-                          )}
-
-                          {/* If no AI report yet, show a big CTA */}
-                          {!detail.aiReport && (
-                            <section className="bg-gradient-to-br from-brand/5 to-brand/10 border border-brand/20 rounded-xl p-6 text-center space-y-3">
-                              <Sparkles className="w-10 h-10 text-brand mx-auto" />
-                              <div>
-                                <h4 className="text-sm font-semibold text-vb-text">AI Screening Available</h4>
-                                <p className="text-xs text-vb-text-muted mt-1">Let AI analyze this applicant against job requirements and keywords</p>
-                              </div>
-                              <button
-                                onClick={handleAiScreen}
-                                disabled={aiScreening}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand/90 disabled:opacity-50 transition-colors"
-                              >
-                                {aiScreening ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                                {aiScreening ? 'Screening...' : 'Run AI Screening'}
-                              </button>
-                            </section>
-                          )}
-                        </>
-                      )}
-
-                      {/* ── INTERVIEW STEP ── */}
-                      {isInterviewStep && (
-                        <>
-                          {/* Meeting Setup */}
-                          <section className="space-y-3">
-                            <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Interview Setup</h4>
-                            <div className="bg-vb-surface border border-vb-border rounded-xl p-5 space-y-4">
-                              <div>
-                                <label className="block text-xs font-medium text-vb-text-secondary mb-1.5">Platform</label>
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() => setMeetingPlatform('google_meet')}
-                                    className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm border transition-colors ${
-                                      meetingPlatform === 'google_meet'
-                                        ? 'border-brand bg-brand/10 text-brand'
-                                        : 'border-vb-border text-vb-text-secondary hover:bg-vb-card'
-                                    }`}
-                                  >
-                                    <Video className="w-4 h-4" />
-                                    Google Meet
-                                  </button>
-                                  <button
-                                    onClick={() => setMeetingPlatform('microsoft_teams')}
-                                    className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm border transition-colors ${
-                                      meetingPlatform === 'microsoft_teams'
-                                        ? 'border-brand bg-brand/10 text-brand'
-                                        : 'border-vb-border text-vb-text-secondary hover:bg-vb-card'
-                                    }`}
-                                  >
-                                    <Users className="w-4 h-4" />
-                                    Microsoft Teams
-                                  </button>
-                                </div>
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-medium text-vb-text-secondary mb-1.5">Meeting Link</label>
-                                <div className="relative">
-                                  <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-vb-text-muted" />
-                                  <input
-                                    type="url"
-                                    value={meetingLink}
-                                    onChange={(e) => setMeetingLink(e.target.value)}
-                                    placeholder={meetingPlatform === 'google_meet' ? 'https://meet.google.com/...' : 'https://teams.microsoft.com/...'}
-                                    className="w-full pl-10 pr-4 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand"
-                                  />
-                                </div>
-                              </div>
-
-                              <button
-                                onClick={() => handleSendEmail()}
-                                disabled={!meetingLink.trim()}
-                                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-brand text-white text-sm rounded-lg hover:bg-brand/90 disabled:opacity-40 transition-colors font-medium"
-                              >
-                                <Send className="w-4 h-4" />
-                                Send Interview Invite
-                              </button>
+                          {aiApplicant.linkedinUrl && (
+                            <div className="flex items-center gap-2 text-xs text-vb-text-secondary">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
+                              LinkedIn profile provided
                             </div>
-                          </section>
-
-                          {/* Team Members */}
-                          <section className="space-y-3">
-                            <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">
-                              Include Team Members
-                              {selectedTeamMembers.length > 0 && (
-                                <span className="ml-2 text-brand font-normal">({selectedTeamMembers.length} selected)</span>
-                              )}
-                            </h4>
-                            {teamMembers.length > 0 ? (
-                              <div className="bg-vb-surface border border-vb-border rounded-xl divide-y divide-vb-border max-h-48 overflow-y-auto">
-                                {teamMembers.map((member) => (
-                                  <label
-                                    key={member.id}
-                                    className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-vb-card transition-colors"
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedTeamMembers.includes(member.id)}
-                                      onChange={(e) => {
-                                        if (e.target.checked) {
-                                          setSelectedTeamMembers([...selectedTeamMembers, member.id]);
-                                        } else {
-                                          setSelectedTeamMembers(selectedTeamMembers.filter((id) => id !== member.id));
-                                        }
-                                      }}
-                                      className="w-4 h-4 rounded border-vb-border text-brand focus:ring-brand/30"
-                                    />
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-sm text-vb-text">{member.name}</p>
-                                      <p className="text-xs text-vb-text-muted">{member.email}</p>
-                                    </div>
-                                  </label>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-sm text-vb-text-muted bg-vb-surface border border-vb-border rounded-lg p-4">
-                                No team members found. Invite team members from the Team page.
-                              </p>
-                            )}
-                          </section>
-
-                          {/* Interview Questions */}
-                          <section className="space-y-3">
-                            <div className="flex items-center justify-between">
-                              <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Interview Questions</h4>
-                              <button
-                                onClick={() => setInterviewQuestions([...interviewQuestions, ''])}
-                                className="flex items-center gap-1 text-xs text-brand hover:text-brand/80 transition-colors"
-                              >
-                                <Plus className="w-3 h-3" />
-                                Add Question
-                              </button>
-                            </div>
-                            <div className="space-y-2">
-                              {interviewQuestions.map((q, i) => (
-                                <div key={i} className="flex gap-2 items-start">
-                                  <span className="text-xs text-vb-text-muted mt-2.5 w-5 text-right flex-shrink-0">{i + 1}.</span>
-                                  <input
-                                    type="text"
-                                    value={q}
-                                    onChange={(e) => {
-                                      const updated = [...interviewQuestions];
-                                      updated[i] = e.target.value;
-                                      setInterviewQuestions(updated);
-                                    }}
-                                    placeholder="Enter a question..."
-                                    className="flex-1 px-3 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand"
-                                  />
-                                  {interviewQuestions.length > 1 && (
-                                    <button
-                                      onClick={() => setInterviewQuestions(interviewQuestions.filter((_, idx) => idx !== i))}
-                                      className="p-2 text-vb-text-muted hover:text-red-400 rounded-lg hover:bg-vb-card transition-colors flex-shrink-0"
-                                    >
-                                      <X className="w-4 h-4" />
-                                    </button>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </section>
-
-                          {/* Interview Notes */}
-                          <section className="space-y-3">
-                            <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Interview Notes</h4>
-                            <div className="flex gap-2">
-                              <textarea
-                                value={newNote}
-                                onChange={(e) => setNewNote(e.target.value)}
-                                placeholder="Add notes about the interview..."
-                                rows={3}
-                                className="flex-1 px-3 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand resize-none"
-                              />
-                              <button
-                                onClick={handleAddNote}
-                                disabled={!newNote.trim() || noteSubmitting}
-                                className="self-end px-3 py-2 bg-brand text-white rounded-lg text-sm hover:bg-brand/90 disabled:opacity-40 transition-colors"
-                              >
-                                <Send className="w-4 h-4" />
-                              </button>
-                            </div>
-                            {detail.notes.length > 0 && (
-                              <div className="space-y-2 max-h-48 overflow-y-auto">
-                                {detail.notes.map((note) => (
-                                  <div key={note.id} className="bg-vb-surface border border-vb-border rounded-lg p-3">
-                                    <p className="text-sm text-vb-text whitespace-pre-wrap">{note.content}</p>
-                                    <p className="text-xs text-vb-text-muted mt-1.5">
-                                      {note.author.firstName} {note.author.lastName} · {new Date(note.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                                    </p>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </section>
-
-                          {/* Contact quick-view */}
-                          <section className="space-y-3">
-                            <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Applicant</h4>
-                            <div className="bg-vb-surface border border-vb-border rounded-lg p-4">
-                              <div className="flex items-center gap-3 text-sm mb-2">
-                                <Mail className="w-4 h-4 text-vb-text-muted" />
-                                <a href={`mailto:${detail.email}`} className="text-brand hover:underline">{detail.email}</a>
-                              </div>
-                              {detail.phone && (
-                                <div className="flex items-center gap-3 text-sm">
-                                  <Phone className="w-4 h-4 text-vb-text-muted" />
-                                  <span className="text-vb-text">{detail.phone}</span>
-                                </div>
-                              )}
-                            </div>
-                          </section>
-
-                          {/* AI Score if available */}
-                          {detail.aiReport && (
-                            <section className="space-y-3">
-                              <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">AI Score</h4>
-                              <div className="flex items-center gap-4 bg-vb-surface border border-vb-border rounded-lg p-4">
-                                <div className={`text-2xl font-bold ${
-                                  detail.aiReport.overallScore >= 80 ? 'text-green-400' :
-                                  detail.aiReport.overallScore >= 50 ? 'text-amber-400' : 'text-red-400'
-                                }`}>
-                                  {detail.aiReport.overallScore}%
-                                </div>
-                                <div>
-                                  <span className={`text-sm font-medium ${
-                                    RECOMMENDATION_LABELS[detail.aiReport.recommendation]?.color ?? 'text-vb-text'
-                                  }`}>
-                                    {RECOMMENDATION_LABELS[detail.aiReport.recommendation]?.label ?? detail.aiReport.recommendation}
-                                  </span>
-                                  <p className="text-xs text-vb-text-muted">{detail.aiReport.confidenceLevel} confidence</p>
-                                </div>
-                              </div>
-                            </section>
                           )}
-                        </>
-                      )}
-
-                      {/* ── GENERIC STAGE (Step 2+): Activity, interviews, etc. ── */}
-                      {!isFirstStep && !isScreeningStep && !isInterviewStep && (
-                        <>
-                          {/* Contact quick-view */}
-                          <section className="space-y-3">
-                            <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Applicant</h4>
-                            <div className="bg-vb-surface border border-vb-border rounded-lg p-4">
-                              <div className="flex items-center gap-3 text-sm mb-2">
-                                <Mail className="w-4 h-4 text-vb-text-muted" />
-                                <a href={`mailto:${detail.email}`} className="text-brand hover:underline">{detail.email}</a>
-                              </div>
-                              {detail.phone && (
-                                <div className="flex items-center gap-3 text-sm">
-                                  <Phone className="w-4 h-4 text-vb-text-muted" />
-                                  <span className="text-vb-text">{detail.phone}</span>
-                                </div>
-                              )}
-                            </div>
-                          </section>
-
-                          {/* AI Score summary if available */}
-                          {detail.aiReport && (
-                            <section className="space-y-3">
-                              <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">AI Score</h4>
-                              <div className="flex items-center gap-4 bg-vb-surface border border-vb-border rounded-lg p-4">
-                                <div className={`text-2xl font-bold ${
-                                  detail.aiReport.overallScore >= 80 ? 'text-green-400' :
-                                  detail.aiReport.overallScore >= 50 ? 'text-amber-400' : 'text-red-400'
-                                }`}>
-                                  {detail.aiReport.overallScore}%
-                                </div>
-                                <div>
-                                  <span className={`text-sm font-medium ${
-                                    RECOMMENDATION_LABELS[detail.aiReport.recommendation]?.color ?? 'text-vb-text'
-                                  }`}>
-                                    {RECOMMENDATION_LABELS[detail.aiReport.recommendation]?.label ?? detail.aiReport.recommendation}
-                                  </span>
-                                  <p className="text-xs text-vb-text-muted">{detail.aiReport.confidenceLevel} confidence</p>
-                                </div>
-                              </div>
-                            </section>
-                          )}
-
-                          {/* Stage History / Activity */}
-                          <section className="space-y-3">
-                            <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Activity</h4>
-                            {detail.stageHistory.length === 0 ? (
-                              <p className="text-sm text-vb-text-muted">No activity yet.</p>
-                            ) : (
-                              <div className="space-y-0">
-                                {detail.stageHistory.map((entry, i) => (
-                                  <div key={entry.id} className="flex gap-3">
-                                    <div className="flex flex-col items-center">
-                                      <div className="w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: entry.toStage.color }} />
-                                      {i < detail.stageHistory.length - 1 && <div className="w-px flex-1 bg-vb-border" />}
-                                    </div>
-                                    <div className="pb-4 min-w-0">
-                                      <p className="text-sm text-vb-text">
-                                        {entry.fromStage ? (
-                                          <>Moved from <span className="font-medium" style={{ color: entry.fromStage.color }}>{entry.fromStage.name}</span> to <span className="font-medium" style={{ color: entry.toStage.color }}>{entry.toStage.name}</span></>
-                                        ) : (
-                                          <>Added to <span className="font-medium" style={{ color: entry.toStage.color }}>{entry.toStage.name}</span></>
-                                        )}
-                                      </p>
-                                      <p className="text-xs text-vb-text-muted mt-0.5 flex items-center gap-1">
-                                        <Clock className="w-3 h-3" />
-                                        {new Date(entry.movedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                                        {entry.movedBy && <> · {entry.movedBy.firstName} {entry.movedBy.lastName}</>}
-                                      </p>
-                                      {entry.note && <p className="text-xs text-vb-text-secondary mt-1 italic">"{entry.note}"</p>}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </section>
-                        </>
-                      )}
-                    </div>
-
-                    {/* ── Notes slide-in panel ── */}
-                    {showNotesPanel && (
-                      <div className="border-t border-vb-border bg-vb-bg px-6 py-4 space-y-4">
-                        <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Notes</h4>
-                        <div className="flex gap-2">
-                          <textarea
-                            value={newNote}
-                            onChange={(e) => setNewNote(e.target.value)}
-                            placeholder="Add a note..."
-                            rows={2}
-                            className="flex-1 px-3 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand resize-none"
-                          />
-                          <button
-                            onClick={handleAddNote}
-                            disabled={!newNote.trim() || noteSubmitting}
-                            className="self-end px-3 py-2 bg-brand text-white rounded-lg text-sm hover:bg-brand/90 disabled:opacity-40 transition-colors"
-                          >
-                            <Send className="w-4 h-4" />
-                          </button>
                         </div>
-                        {detail.notes.length > 0 && (
-                          <div className="space-y-2 max-h-48 overflow-y-auto">
-                            {detail.notes.map((note) => (
-                              <div key={note.id} className="bg-vb-surface border border-vb-border rounded-lg p-3">
-                                <p className="text-sm text-vb-text whitespace-pre-wrap">{note.content}</p>
-                                <p className="text-xs text-vb-text-muted mt-1">
-                                  {note.author.firstName} {note.author.lastName} · {new Date(note.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                                </p>
+                      </section>
+
+                      {/* Dimension Scores */}
+                      {aiApplicant.aiReport.dimensionScores && typeof aiApplicant.aiReport.dimensionScores === 'object' && (
+                        <section className="space-y-2">
+                          <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Dimension Scores</h4>
+                          <div className="space-y-2.5">
+                            {Object.entries(aiApplicant.aiReport.dimensionScores).map(([key, score]) => (
+                              <div key={key}>
+                                <div className="flex justify-between text-xs mb-1">
+                                  <span className="text-vb-text-secondary capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                                  <span className="text-vb-text font-medium">{score}%</span>
+                                </div>
+                                <div className="h-1.5 bg-vb-muted rounded-full overflow-hidden">
+                                  <div className={`h-full rounded-full transition-all ${
+                                    score >= 80 ? 'bg-green-400' : score >= 50 ? 'bg-amber-400' : 'bg-red-400'
+                                  }`} style={{ width: `${score}%` }} />
+                                </div>
                               </div>
                             ))}
                           </div>
+                        </section>
+                      )}
+
+                      {/* Strengths & Concerns */}
+                      <div className="grid grid-cols-2 gap-4">
+                        {Array.isArray(aiApplicant.aiReport.strengths) && aiApplicant.aiReport.strengths.length > 0 && (
+                          <div>
+                            <p className="text-xs font-medium text-green-400 mb-1.5">Strengths</p>
+                            <ul className="space-y-1">
+                              {aiApplicant.aiReport.strengths.map((s: string, i: number) => (
+                                <li key={i} className="text-xs text-vb-text-secondary flex gap-1.5">
+                                  <Star className="w-3 h-3 text-green-400 flex-shrink-0 mt-0.5" /> {s}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {Array.isArray(aiApplicant.aiReport.concerns) && aiApplicant.aiReport.concerns.length > 0 && (
+                          <div>
+                            <p className="text-xs font-medium text-amber-400 mb-1.5">Concerns</p>
+                            <ul className="space-y-1">
+                              {aiApplicant.aiReport.concerns.map((c: string, i: number) => (
+                                <li key={i} className="text-xs text-vb-text-secondary flex gap-1.5">
+                                  <span className="text-amber-400 flex-shrink-0">•</span> {c}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
                         )}
                       </div>
-                    )}
-                  </div>
 
-                  {/* ── Bottom Bar: Navigation ── */}
-                  <div className="sticky bottom-0 bg-vb-bg border-t border-vb-border px-6 py-4 flex items-center justify-between flex-shrink-0">
-                    <div className="flex items-center gap-2">
+                      {/* AI Disclaimer */}
+                      <p className="text-[11px] text-vb-text-faint italic">
+                        AI analysis may not be 100% accurate. Review the details and decide whether to accept or reject this assessment.
+                      </p>
+                    </>
+                  ) : (
+                    /* No AI report — offer to run screening */
+                    <div className="text-center py-6 space-y-3">
+                      <Sparkles className="w-10 h-10 text-brand mx-auto" />
+                      <div>
+                        <h4 className="text-sm font-semibold text-vb-text">No AI Analysis Yet</h4>
+                        <p className="text-xs text-vb-text-muted mt-1">Run AI screening to analyze this applicant against job requirements.</p>
+                      </div>
                       <button
-                        onClick={() => setReviewStepIndex(Math.max(0, reviewStepIndex - 1))}
-                        disabled={reviewStepIndex === 0}
-                        className="flex items-center gap-1.5 px-3 py-2 text-sm text-vb-text-secondary hover:text-vb-text rounded-lg hover:bg-vb-card disabled:opacity-30 disabled:cursor-default transition-colors"
+                        onClick={handleAiScreen}
+                        disabled={aiScreening}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand/90 disabled:opacity-50 transition-colors"
                       >
-                        <ChevronLeft className="w-4 h-4" />
-                        Back
+                        {aiScreening ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                        {aiScreening ? 'Screening...' : 'Run AI Screening'}
                       </button>
-
-                      {/* Move to previous stage */}
-                      {prevStage && (
-                        <button
-                          onClick={handleMoveToPrevious}
-                          disabled={stageMoving}
-                          className="flex items-center gap-1.5 px-3 py-2 text-sm text-amber-400 hover:text-amber-300 rounded-lg hover:bg-amber-500/10 disabled:opacity-50 transition-colors"
-                          title={`Move applicant back to ${prevStage.name}`}
-                        >
-                          <Undo2 className="w-3.5 h-3.5" />
-                          Move to {prevStage.name}
-                        </button>
-                      )}
                     </div>
-
-                    <div className="flex items-center gap-2">
-                      {isAtOrBeyondCurrent && nextStage ? (
-                        <button
-                          onClick={handleAdvanceToNext}
-                          disabled={stageMoving}
-                          className="flex items-center gap-2 px-5 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand/90 disabled:opacity-50 transition-colors font-medium"
-                        >
-                          {stageMoving && <Loader2 className="w-4 h-4 animate-spin" />}
-                          Next: {nextStage.name}
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-                      ) : reviewStepIndex < currentStageIdx ? (
-                        <button
-                          onClick={() => setReviewStepIndex(reviewStepIndex + 1)}
-                          className="flex items-center gap-2 px-5 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand/90 transition-colors font-medium"
-                        >
-                          Next: {stages[reviewStepIndex + 1]?.name || 'Continue'}
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-                      ) : (
-                        <span className="text-xs text-vb-text-muted px-3 py-2">Final Stage</span>
-                      )}
-                    </div>
-                  </div>
+                  )}
                 </>
-              );
-            })()}
+              ) : null}
+            </div>
+
+            {/* Accept / Reject buttons */}
+            {aiApplicant?.aiReport && !aiLoading && (
+              <div className="flex items-center gap-3 px-6 py-4 border-t border-vb-border flex-shrink-0">
+                <button
+                  onClick={handleRejectAi}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 border border-red-500/30 text-red-400 text-sm rounded-lg hover:bg-red-500/10 transition-colors font-medium"
+                >
+                  <XCircle className="w-4 h-4" />
+                  Reject Analysis
+                </button>
+                <button
+                  onClick={handleAcceptAi}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-brand text-white text-sm rounded-lg hover:bg-brand/90 transition-colors font-medium"
+                >
+                  <Check className="w-4 h-4" />
+                  Accept Analysis
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

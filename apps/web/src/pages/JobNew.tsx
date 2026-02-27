@@ -84,6 +84,8 @@ export default function JobNew() {
   const [customStages, setCustomStages] = useState(false);
   const [stages, setStages] = useState<string[]>([...DEFAULT_STAGES]);
   const [newStage, setNewStage] = useState('');
+  const [aiKeywords, setAiKeywords] = useState<string[]>([]);
+  const [newKeyword, setNewKeyword] = useState('');
 
   function canProceed(): boolean {
     if (step === 1) return title.trim().length > 0;
@@ -136,6 +138,7 @@ export default function JobNew() {
       if (salaryMax) payload.salaryMax = parseInt(salaryMax);
       if (deadline) payload.deadline = new Date(deadline).toISOString();
       if (aiScoreThreshold) payload.aiScoreThreshold = parseInt(aiScoreThreshold);
+      if (aiKeywords.length > 0) payload.aiKeywords = aiKeywords;
       if (customStages) payload.pipelineStages = stages;
 
       await api.post('/jobs', payload);
@@ -431,20 +434,81 @@ export default function JobNew() {
               AI will automatically analyze and score resumes uploaded for this job
             </p>
             {aiScreeningEnabled && (
-              <div className="mt-2">
-                <label className="block text-xs text-vb-text-secondary mb-1">
-                  Minimum AI Score Threshold
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={aiScoreThreshold}
-                    onChange={(e) => setAiScoreThreshold(e.target.value)}
-                    className="flex-1 accent-brand"
-                  />
-                  <span className="text-sm font-mono text-vb-text w-8 text-right">{aiScoreThreshold}%</span>
+              <div className="mt-2 space-y-4">
+                <div>
+                  <label className="block text-xs text-vb-text-secondary mb-1">
+                    Minimum AI Score Threshold
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={aiScoreThreshold}
+                      onChange={(e) => setAiScoreThreshold(e.target.value)}
+                      className="flex-1 accent-brand"
+                    />
+                    <span className="text-sm font-mono text-vb-text w-8 text-right">{aiScoreThreshold}%</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-vb-text-secondary mb-1">
+                    Screening Keywords
+                  </label>
+                  <p className="text-[10px] text-vb-text-muted mb-2">
+                    Add keywords the AI should evaluate applicants against. These reduce unnecessary API calls by focusing the screening.
+                  </p>
+                  {aiKeywords.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {aiKeywords.map((kw, i) => (
+                        <span
+                          key={i}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-brand/10 text-brand text-xs rounded-lg border border-brand/20"
+                        >
+                          {kw}
+                          <button
+                            onClick={() => setAiKeywords(aiKeywords.filter((_, idx) => idx !== i))}
+                            className="hover:text-red-400 transition-colors"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newKeyword}
+                      onChange={(e) => setNewKeyword(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const kw = newKeyword.trim();
+                          if (kw && !aiKeywords.includes(kw)) {
+                            setAiKeywords([...aiKeywords, kw]);
+                            setNewKeyword('');
+                          }
+                        }
+                      }}
+                      placeholder="e.g. React, TypeScript, 3+ years..."
+                      className="flex-1 px-3 py-2 bg-vb-bg border border-vb-border rounded-lg text-xs text-vb-text placeholder-vb-text-muted outline-none focus:border-brand"
+                    />
+                    <button
+                      onClick={() => {
+                        const kw = newKeyword.trim();
+                        if (kw && !aiKeywords.includes(kw)) {
+                          setAiKeywords([...aiKeywords, kw]);
+                          setNewKeyword('');
+                        }
+                      }}
+                      disabled={!newKeyword.trim()}
+                      className="px-3 py-2 bg-brand/10 text-brand text-xs rounded-lg hover:bg-brand/20 disabled:opacity-50"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

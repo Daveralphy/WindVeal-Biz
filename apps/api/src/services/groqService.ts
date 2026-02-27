@@ -164,6 +164,7 @@ interface ScreeningContext {
   jobRequirements: string | null;
   jobResponsibilities: string | null;
   jobNiceToHave: string | null;
+  aiKeywords: string[];
 }
 
 interface AIScreeningResult {
@@ -232,6 +233,9 @@ function buildScreeningPrompt(ctx: ScreeningContext): string {
   if (ctx.jobRequirements) parts.push(`Requirements: ${ctx.jobRequirements}`);
   if (ctx.jobResponsibilities) parts.push(`Responsibilities: ${ctx.jobResponsibilities}`);
   if (ctx.jobNiceToHave) parts.push(`Nice to have: ${ctx.jobNiceToHave}`);
+  if (ctx.aiKeywords && ctx.aiKeywords.length > 0) {
+    parts.push(`Key screening keywords (IMPORTANT - evaluate applicant strongly against these): ${ctx.aiKeywords.join(', ')}`);
+  }
 
   parts.push('');
   parts.push('=== APPLICANT ===');

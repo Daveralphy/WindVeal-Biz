@@ -220,6 +220,7 @@ model Job {
   deadline            DateTime?
   aiScreeningEnabled  Boolean   @default(true)
   aiScoreThreshold    Int?      @default(50)
+  aiKeywords          String[]  @default([])
   visibility          String    @default("PORTAL")  // PORTAL, INTERNAL, DRAFT
   createdById         String
   createdAt           DateTime  @default(now())

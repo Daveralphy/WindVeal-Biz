@@ -20,6 +20,7 @@ const createJobSchema = z.object({
   deadline: z.string().datetime().optional(),
   aiScreeningEnabled: z.boolean().default(true),
   aiScoreThreshold: z.number().min(0).max(100).optional(),
+  aiKeywords: z.array(z.string()).optional(),
   visibility: z.enum(['PORTAL', 'INTERNAL', 'DRAFT']).default('PORTAL'),
   pipelineStages: z.array(z.string()).optional(),
 });

@@ -333,6 +333,7 @@ export async function applicantRoutes(app: FastifyInstance) {
             requirements: true,
             responsibilities: true,
             niceToHave: true,
+            aiKeywords: true,
             applicationForm: true,
           },
         },
@@ -369,6 +370,7 @@ export async function applicantRoutes(app: FastifyInstance) {
       jobRequirements: applicant.job.requirements,
       jobResponsibilities: applicant.job.responsibilities,
       jobNiceToHave: applicant.job.niceToHave,
+      aiKeywords: applicant.job.aiKeywords || [],
     });
 
     // Upsert AIReport
@@ -394,6 +396,25 @@ export async function applicantRoutes(app: FastifyInstance) {
     });
 
     return { ...aiReport, resumeAnalysis: report.resumeAnalysis };
+  });
+
+  // Delete AI report (reject analysis)
+  app.delete<{ Params: { id: string } }>('/:id/ai-report', async (request, reply) => {
+    const { organizationId } = request.user!;
+
+    const applicant = await prisma.applicant.findFirst({
+      where: { id: request.params.id, organizationId },
+    });
+
+    if (!applicant) {
+      return reply.status(404).send({ error: 'Applicant not found' });
+    }
+
+    await prisma.aIReport.deleteMany({
+      where: { applicantId: applicant.id },
+    });
+
+    return { message: 'AI report removed' };
   });
 
   // Import applicants from CSV/Excel/JSON
