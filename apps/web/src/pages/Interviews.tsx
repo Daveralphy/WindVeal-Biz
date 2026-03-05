@@ -19,6 +19,7 @@ import {
   Send,
   Link2,
   ChevronDown,
+  Trash2,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
@@ -115,6 +116,7 @@ const STATUS_STYLES: Record<string, string> = {
   COMPLETED: 'bg-green-500/10 text-green-400',
   CANCELLED: 'bg-red-500/10 text-red-400',
   NO_SHOW: 'bg-gray-500/10 text-vb-text-secondary',
+  PASSED: 'bg-amber-500/10 text-amber-400',
 };
 
 const RECOMMENDATION_STYLES: Record<string, { label: string; color: string }> = {
@@ -210,8 +212,12 @@ export default function Interviews() {
   });
   const [scheduling, setScheduling] = useState(false);
 
-  // Tab
-  const [activeTab, setActiveTab] = useState<'candidates' | 'scheduled'>('candidates');
+  // Delete confirmation
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // Status filter
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
   // ── Fetch data ──
   useEffect(() => {
@@ -242,22 +248,26 @@ export default function Interviews() {
   }, [selectedApplicantId]);
 
   // ── Interview grouping ──
+  const filteredInterviews = statusFilter === 'ALL'
+    ? interviews
+    : interviews.filter((i) => i.status === statusFilter);
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
-  const todayInterviews = interviews.filter((i) => {
+  const todayInterviews = filteredInterviews.filter((i) => {
     const d = new Date(i.scheduledAt);
-    return d >= today && d < tomorrow && ['SCHEDULED', 'CONFIRMED'].includes(i.status);
+    return d >= today && d < tomorrow;
   });
-  const upcomingInterviews = interviews.filter((i) => {
+  const upcomingInterviews = filteredInterviews.filter((i) => {
     const d = new Date(i.scheduledAt);
-    return d >= tomorrow && ['SCHEDULED', 'CONFIRMED'].includes(i.status);
+    return d >= tomorrow;
   });
-  const pastInterviews = interviews.filter(
-    (i) => i.status === 'COMPLETED' || i.status === 'CANCELLED' || i.status === 'NO_SHOW' || new Date(i.scheduledAt) < today
-  );
+  const pastInterviews = filteredInterviews.filter((i) => {
+    return new Date(i.scheduledAt) < today;
+  });
 
   // ── Open schedule modal ──
   function openScheduleModal(candidate: InterviewCandidate) {
@@ -315,6 +325,32 @@ export default function Interviews() {
     return typeof d.value === 'string' ? d.value : String(d.value ?? '');
   }
 
+  // ── Delete interview ──
+  async function handleDelete(id: string) {
+    setDeleting(true);
+    try {
+      await api.delete(`/interviews/${id}`);
+      setInterviews((prev) => prev.filter((i) => i.id !== id));
+      setDeleteConfirm(null);
+    } catch (err) {
+      console.error('Failed to delete interview:', err);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  // ── Update interview status ──
+  async function handleStatusChange(id: string, status: string) {
+    try {
+      await api.patch(`/interviews/${id}/status`, { status });
+      setInterviews((prev) =>
+        prev.map((i) => (i.id === id ? { ...i, status } : i))
+      );
+    } catch (err) {
+      console.error('Failed to update interview status:', err);
+    }
+  }
+
   // ── Loading state ──
   if (loading) {
     return (
@@ -334,153 +370,108 @@ export default function Interviews() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-vb-text">Interviews</h1>
-        <div className="flex bg-vb-surface border border-vb-border rounded-lg p-0.5">
-          <button
-            onClick={() => setActiveTab('candidates')}
-            className={`px-4 py-1.5 text-sm rounded-md transition-colors ${
-              activeTab === 'candidates'
-                ? 'bg-brand text-white'
-                : 'text-vb-text-secondary hover:text-vb-text'
-            }`}
+        <div className="relative">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="appearance-none bg-vb-surface border border-vb-border rounded-lg px-4 py-1.5 pr-8 text-sm text-vb-text outline-none focus:border-brand cursor-pointer"
           >
-            Candidates ({candidates.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('scheduled')}
-            className={`px-4 py-1.5 text-sm rounded-md transition-colors ${
-              activeTab === 'scheduled'
-                ? 'bg-brand text-white'
-                : 'text-vb-text-secondary hover:text-vb-text'
-            }`}
-          >
-            Scheduled ({interviews.length})
-          </button>
+            <option value="ALL">All Interviews ({interviews.length})</option>
+            <option value="SCHEDULED">Scheduled ({interviews.filter((i) => i.status === 'SCHEDULED').length})</option>
+            <option value="CONFIRMED">Confirmed ({interviews.filter((i) => i.status === 'CONFIRMED').length})</option>
+            <option value="COMPLETED">Completed ({interviews.filter((i) => i.status === 'COMPLETED').length})</option>
+            <option value="PASSED">Passed ({interviews.filter((i) => i.status === 'PASSED').length})</option>
+            <option value="CANCELLED">Cancelled ({interviews.filter((i) => i.status === 'CANCELLED').length})</option>
+            <option value="NO_SHOW">No Show ({interviews.filter((i) => i.status === 'NO_SHOW').length})</option>
+          </select>
+          <ChevronDown className="w-4 h-4 text-vb-text-muted absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
       </div>
 
-      {/* ── CANDIDATES TAB ── */}
-      {activeTab === 'candidates' && (
-        <>
-          {candidates.length === 0 ? (
-            <div className="bg-vb-surface border border-vb-border rounded-xl p-12 text-center">
-              <User className="w-10 h-10 text-vb-text-muted mx-auto mb-3" />
-              <p className="text-vb-text-secondary text-sm">No applicants at the Interview stage yet.</p>
-              <p className="text-vb-text-muted text-xs mt-1">
-                Move applicants to the Interview stage from the Pipeline to see them here.
-              </p>
-            </div>
-          ) : (
+      {/* ── CANDIDATES AWAITING SCHEDULE ── */}
+      {(() => {
+        const unscheduled = candidates.filter((c) => {
+          const hasActive = c.interviews.some((i) => i.status === 'SCHEDULED' || i.status === 'CONFIRMED');
+          return !hasActive;
+        });
+        if (unscheduled.length === 0) return null;
+        return (
+          <div>
+            <h2 className="text-sm font-medium text-vb-text-secondary mb-3">
+              Awaiting Schedule ({unscheduled.length})
+            </h2>
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {candidates.map((c) => {
-                const hasInterview = c.interviews.length > 0;
-                const latestInterview = c.interviews[0];
-                return (
-                  <div
-                    key={c.id}
-                    className="bg-vb-card border border-vb-border rounded-xl p-4 hover:border-brand/40 transition-colors"
+              {unscheduled.map((c) => (
+                <div
+                  key={c.id}
+                  className="bg-vb-card border border-vb-border rounded-xl p-4 flex items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-full bg-brand/10 flex items-center justify-center flex-shrink-0">
+                      <User className="w-4 h-4 text-brand" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-vb-text truncate">
+                        {c.firstName} {c.lastName}
+                      </p>
+                      <p className="text-xs text-vb-text-muted truncate">{c.job.title}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => openScheduleModal(c)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-brand text-white text-xs font-medium rounded-lg hover:bg-brand-dark transition-colors flex-shrink-0"
                   >
-                    <div className="flex items-start justify-between">
-                      <div
-                        className="flex items-center gap-3 cursor-pointer flex-1 min-w-0"
-                        onClick={() => setSelectedApplicantId(c.id)}
-                      >
-                        <div className="w-10 h-10 rounded-full bg-brand/10 flex-shrink-0 flex items-center justify-center">
-                          <User className="w-4 h-4 text-brand" />
-                        </div>
-                        <div className="min-w-0">
-                          <h3 className="text-vb-text text-sm font-medium truncate">
-                            {c.firstName} {c.lastName}
-                          </h3>
-                          <p className="text-vb-text-muted text-xs truncate">{c.job.title}</p>
-                        </div>
-                      </div>
-                      {c.aiReport && (
-                        <span
-                          className={`text-xs font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ${
-                            c.aiReport.overallScore >= 80
-                              ? 'bg-green-500/10 text-green-400'
-                              : c.aiReport.overallScore >= 50
-                              ? 'bg-amber-500/10 text-amber-400'
-                              : 'bg-red-500/10 text-red-400'
-                          }`}
-                        >
-                          {c.aiReport.overallScore}%
-                        </span>
-                      )}
-                    </div>
+                    <Send className="w-3.5 h-3.5" />
+                    Schedule
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
-                    <div className="mt-3 flex items-center gap-2 text-xs text-vb-text-muted">
-                      <Mail className="w-3.5 h-3.5" />
-                      <span className="truncate">{c.email}</span>
-                    </div>
-
-                    <div className="mt-3 pt-3 border-t border-vb-border flex items-center justify-between">
-                      {hasInterview ? (
-                        <span className="text-xs text-blue-400 flex items-center gap-1">
-                          <Calendar className="w-3.5 h-3.5" />
-                          {formatDate(latestInterview.scheduledAt)} · {formatTime(latestInterview.scheduledAt)}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-vb-text-muted">No interview scheduled</span>
-                      )}
-                      <button
-                        onClick={() => openScheduleModal(c)}
-                        className="text-xs px-3 py-1.5 bg-brand/10 text-brand rounded-lg hover:bg-brand/20 transition-colors"
-                      >
-                        {hasInterview ? 'Reschedule' : 'Schedule'}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+      {/* ── INTERVIEWS ── */}
+      {filteredInterviews.length === 0 ? (
+        <div className="bg-vb-surface border border-vb-border rounded-xl p-12 text-center">
+          <Calendar className="w-10 h-10 text-vb-text-muted mx-auto mb-3" />
+          <p className="text-vb-text-secondary text-sm">
+            {statusFilter === 'ALL' ? 'No interviews yet.' : `No ${statusFilter.toLowerCase().replace('_', ' ')} interviews.`}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {todayInterviews.length > 0 && (
+            <div>
+              <h2 className="text-sm font-medium text-vb-text-secondary mb-3">Today</h2>
+              <div className="grid gap-3 md:grid-cols-2">
+                {todayInterviews.map((interview) => (
+                  <InterviewCard key={interview.id} interview={interview} onClickCandidate={setSelectedApplicantId} onDelete={setDeleteConfirm} onStatusChange={handleStatusChange} />
+                ))}
+              </div>
             </div>
           )}
-        </>
-      )}
-
-      {/* ── SCHEDULED TAB ── */}
-      {activeTab === 'scheduled' && (
-        <>
-          {interviews.length === 0 ? (
-            <div className="bg-vb-surface border border-vb-border rounded-xl p-12 text-center">
-              <Calendar className="w-10 h-10 text-vb-text-muted mx-auto mb-3" />
-              <p className="text-vb-text-secondary text-sm">No interviews scheduled yet.</p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {todayInterviews.length > 0 && (
-                <div>
-                  <h2 className="text-sm font-medium text-vb-text-secondary mb-3">Today</h2>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {todayInterviews.map((interview) => (
-                      <InterviewCard key={interview.id} interview={interview} onClickCandidate={setSelectedApplicantId} />
-                    ))}
-                  </div>
-                </div>
-              )}
-              {upcomingInterviews.length > 0 && (
-                <div>
-                  <h2 className="text-sm font-medium text-vb-text-secondary mb-3">Upcoming</h2>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {upcomingInterviews.map((interview) => (
-                      <InterviewCard key={interview.id} interview={interview} onClickCandidate={setSelectedApplicantId} />
-                    ))}
-                  </div>
-                </div>
-              )}
-              {pastInterviews.length > 0 && (
-                <div>
-                  <h2 className="text-sm font-medium text-vb-text-secondary mb-3">Past</h2>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {pastInterviews.map((interview) => (
-                      <InterviewCard key={interview.id} interview={interview} onClickCandidate={setSelectedApplicantId} />
-                    ))}
-                  </div>
-                </div>
-              )}
+          {upcomingInterviews.length > 0 && (
+            <div>
+              <h2 className="text-sm font-medium text-vb-text-secondary mb-3">Upcoming</h2>
+              <div className="grid gap-3 md:grid-cols-2">
+                {upcomingInterviews.map((interview) => (
+                  <InterviewCard key={interview.id} interview={interview} onClickCandidate={setSelectedApplicantId} onDelete={setDeleteConfirm} onStatusChange={handleStatusChange} />
+                ))}
+              </div>
             </div>
           )}
-        </>
+          {pastInterviews.length > 0 && (
+            <div>
+              <h2 className="text-sm font-medium text-vb-text-secondary mb-3">Past</h2>
+              <div className="grid gap-3 md:grid-cols-2">
+                {pastInterviews.map((interview) => (
+                  <InterviewCard key={interview.id} interview={interview} onClickCandidate={setSelectedApplicantId} onDelete={setDeleteConfirm} onStatusChange={handleStatusChange} />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* ── APPLICANT DETAIL DRAWER ── */}
@@ -765,6 +756,42 @@ export default function Interviews() {
         </div>
       )}
 
+      {/* ── DELETE CONFIRMATION MODAL ── */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setDeleteConfirm(null)} />
+          <div className="relative bg-vb-bg border border-vb-border rounded-xl w-full max-w-sm shadow-xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-vb-text">Delete Interview</h3>
+                <p className="text-xs text-vb-text-muted">This action cannot be undone.</p>
+              </div>
+            </div>
+            <p className="text-sm text-vb-text-secondary mb-5">
+              Are you sure you want to delete this scheduled interview?
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="px-4 py-2 text-sm text-vb-text-secondary hover:text-vb-text rounded-lg hover:bg-vb-card transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDelete(deleteConfirm)}
+                disabled={deleting}
+                className="px-4 py-2 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
+              >
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── SCHEDULE INTERVIEW MODAL ── */}
       {scheduleModal && (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-[5vh] overflow-y-auto">
@@ -931,10 +958,25 @@ export default function Interviews() {
 function InterviewCard({
   interview,
   onClickCandidate,
+  onDelete,
+  onStatusChange,
 }: {
   interview: Interview;
   onClickCandidate: (id: string) => void;
+  onDelete: (id: string) => void;
+  onStatusChange: (id: string, status: string) => void;
 }) {
+  const [statusOpen, setStatusOpen] = useState(false);
+
+  const STATUS_OPTIONS = [
+    { value: 'SCHEDULED', label: 'Scheduled' },
+    { value: 'CONFIRMED', label: 'Confirmed' },
+    { value: 'COMPLETED', label: 'Completed' },
+    { value: 'PASSED', label: 'Passed' },
+    { value: 'NO_SHOW', label: 'No Show' },
+    { value: 'CANCELLED', label: 'Cancelled' },
+  ];
+
   return (
     <div className="bg-vb-card border border-vb-border rounded-xl p-4 hover:border-vb-muted transition-colors">
       <div className="flex items-start justify-between">
@@ -950,13 +992,46 @@ function InterviewCard({
             <p className="text-vb-text-muted text-xs">{interview.jobTitle}</p>
           </div>
         </div>
-        <span
-          className={`text-[10px] px-2 py-0.5 rounded-full capitalize font-medium ${
-            STATUS_STYLES[interview.status] || ''
-          }`}
-        >
-          {interview.status.toLowerCase().replace('_', ' ')}
-        </span>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <button
+              onClick={() => setStatusOpen(!statusOpen)}
+              className={`text-xs px-2.5 py-1 rounded-lg font-medium cursor-pointer hover:ring-1 hover:ring-brand/40 transition-all flex items-center gap-1.5 ${
+                STATUS_STYLES[interview.status] || ''
+              }`}
+            >
+              {interview.status.toLowerCase().replace('_', ' ')}
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            {statusOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setStatusOpen(false)} />
+                <div className="absolute right-0 top-full mt-1 z-50 bg-vb-bg border border-vb-border rounded-lg shadow-xl py-1 min-w-[140px]">
+                  {STATUS_OPTIONS.filter((o) => o.value !== interview.status).map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => {
+                        onStatusChange(interview.id, opt.value);
+                        setStatusOpen(false);
+                      }}
+                      className="w-full text-left px-3 py-1.5 text-xs text-vb-text-secondary hover:bg-vb-surface hover:text-vb-text transition-colors flex items-center gap-2"
+                    >
+                      <span className={`w-2 h-2 rounded-full ${STATUS_STYLES[opt.value]?.split(' ')[0] || 'bg-gray-500/10'}`} />
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+          <button
+            onClick={() => onDelete(interview.id)}
+            className="p-1.5 text-vb-text-muted hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors"
+            title="Delete interview"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center gap-4 mt-3 text-xs text-vb-text-secondary">

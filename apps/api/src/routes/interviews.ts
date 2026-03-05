@@ -17,9 +17,52 @@ const scheduleInterviewSchema = z.object({
 export async function interviewRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate);
 
+  // Update interview status
+  app.patch('/:id/status', async (request) => {
+    const { organizationId } = request.user!;
+    const { id } = request.params as { id: string };
+    const { status } = request.body as { status: string };
+
+    const valid = ['SCHEDULED', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'NO_SHOW', 'PASSED'];
+    if (!valid.includes(status)) return app.httpErrors.badRequest('Invalid status');
+
+    const interview = await prisma.interview.findFirst({
+      where: { id, job: { organizationId } },
+    });
+    if (!interview) return app.httpErrors.notFound('Interview not found');
+
+    const updated = await prisma.interview.update({ where: { id }, data: { status: status as any } });
+    return updated;
+  });
+
+  // Delete an interview
+  app.delete('/:id', async (request) => {
+    const { organizationId } = request.user!;
+    const { id } = request.params as { id: string };
+
+    const interview = await prisma.interview.findFirst({
+      where: { id, job: { organizationId } },
+    });
+    if (!interview) return app.httpErrors.notFound('Interview not found');
+
+    await prisma.interview.delete({ where: { id } });
+    return { success: true };
+  });
+
   // List interviews
   app.get('/', async (request) => {
     const { organizationId } = request.user!;
+
+    // Auto-expire past scheduled interviews
+    const now = new Date();
+    await prisma.interview.updateMany({
+      where: {
+        job: { organizationId },
+        status: { in: ['SCHEDULED', 'CONFIRMED'] },
+        scheduledAt: { lt: now },
+      },
+      data: { status: 'PASSED' },
+    });
 
     const interviews = await prisma.interview.findMany({
       where: { job: { organizationId } },
@@ -64,7 +107,7 @@ export async function interviewRoutes(app: FastifyInstance) {
     const applicants = await prisma.applicant.findMany({
       where: {
         organizationId,
-        currentStage: { name: 'Interview' },
+        currentStage: { name: { contains: 'Interview', mode: 'insensitive' } },
       },
       include: {
         currentStage: true,

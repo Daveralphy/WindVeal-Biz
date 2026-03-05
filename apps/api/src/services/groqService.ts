@@ -151,10 +151,6 @@ function getFallbackInsights(ctx: InsightContext): AIDashboardInsight[] {
 // ─── AI Applicant Screening ─────────────────────────────
 
 interface ScreeningContext {
-  applicantName: string;
-  email: string;
-  phone: string | null;
-  linkedinUrl: string | null;
   applicationData: string;
   coverLetter: string;
   hasResume: boolean;
@@ -180,6 +176,75 @@ interface AIScreeningResult {
   };
 }
 
+// ─── Per-field AI Evaluation ─────────────────────────────
+
+export interface FieldEvaluationResult {
+  score: number;
+  feedback: string;
+  keywordsFound: string[];
+}
+
+export async function evaluateFieldContent(
+  fieldLabel: string,
+  content: string,
+  aiKeywords: string[],
+  jobTitle: string,
+): Promise<FieldEvaluationResult> {
+  if (!groq || !content.trim()) {
+    return getFallbackFieldEvaluation(content, aiKeywords);
+  }
+
+  try {
+    const keywordsStr = aiKeywords.length > 0 ? aiKeywords.join(', ') : 'general job relevance';
+    const prompt = `Evaluate this "${fieldLabel}" submission for a "${jobTitle}" role.\n\nKeywords to evaluate against: ${keywordsStr}\n\nContent:\n${content.slice(0, 2000)}\n\nRate 0-100 how well this content addresses the keywords and job requirements. Identify which keywords are present or addressed. Give 1-2 sentence feedback.`;
+
+    const completion = await groq.chat.completions.create({
+      model: 'llama-3.1-8b-instant',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are VealAI, a STRICT job application evaluator. Respond with valid JSON only — no markdown: { "score": number 0-100, "feedback": "1-2 sentences", "keywordsFound": ["kw1", "kw2"] }\n\nSCORING RULES (follow strictly):\n- 0-5: Content is completely irrelevant, nonsensical, a joke, or random text with zero connection to the job\n- 6-15: Content mentions the field topic but has no substance or job-relevant information\n- 16-30: Minimal relevant content, very few keywords addressed, mostly filler\n- 31-50: Some relevant content but missing key qualifications or keywords\n- 51-70: Decent content addressing several keywords with relevant detail\n- 71-85: Strong content covering most keywords with specific evidence\n- 86-100: Exceptional, addresses nearly all keywords with concrete specifics\n\nIMPORTANT: If the content does not contain actual job-relevant information (e.g. a random statement, a Bible quote, lorem ipsum, or unrelated text), score it 0-5. Do NOT be generous with irrelevant content. A cover letter must actually discuss qualifications. A resume must list real experience. Judge ONLY what is written.',
+        },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.3,
+      max_tokens: 300,
+    });
+
+    const text = completion.choices[0]?.message?.content?.trim() || '';
+    const parsed = JSON.parse(text);
+
+    return {
+      score: Math.min(100, Math.max(0, Number(parsed.score) ?? 0)),
+      feedback: String(parsed.feedback || 'Evaluation complete.').slice(0, 300),
+      keywordsFound: Array.isArray(parsed.keywordsFound) ? parsed.keywordsFound.slice(0, 10) : [],
+    };
+  } catch (err) {
+    console.error('Groq field evaluation error:', err);
+    return getFallbackFieldEvaluation(content, aiKeywords);
+  }
+}
+
+function getFallbackFieldEvaluation(content: string, aiKeywords: string[]): FieldEvaluationResult {
+  const lower = (content || '').toLowerCase();
+  const found = aiKeywords.filter((kw) => lower.includes(kw.toLowerCase()));
+  const score =
+    aiKeywords.length > 0
+      ? Math.round((found.length / aiKeywords.length) * 100)
+      : 0;
+
+  return {
+    score,
+    feedback:
+      found.length > 0
+        ? `Found ${found.length} of ${aiKeywords.length} keywords in this response.`
+        : 'No matching keywords detected.',
+    keywordsFound: found,
+  };
+}
+
+// ─── Full AI Applicant Screening ─────────────────────────────
+
 export async function screenApplicant(context: ScreeningContext): Promise<AIScreeningResult> {
   if (!groq) {
     return getFallbackScreening(context);
@@ -193,11 +258,22 @@ export async function screenApplicant(context: ScreeningContext): Promise<AIScre
       messages: [
         {
           role: 'system',
-          content: `You are VealAI, an intelligent ATS screening assistant. Analyze applicant data against job requirements and provide a detailed screening report. Always respond with valid JSON only — no markdown, no explanation. The JSON must have: overallScore (0-100), dimensionScores (object with skillsMatch, experienceRelevance, communicationQuality, cultureFit, completeness as 0-100 numbers), strengths (string array, max 5), concerns (string array, max 5), recommendation (one of: ADVANCE, REQUEST_INFO, CONSIDER_OTHER, REJECT), confidenceLevel (HIGH, MEDIUM, or LOW), resumeAnalysis (object with score 0-100 and feedback string array max 4).`,
+          content: `You are VealAI, a STRICT ATS screening assistant. Analyze applicant data rigorously against job requirements. Always respond with valid JSON only — no markdown, no explanation. The JSON must have: overallScore (0-100), dimensionScores (object with skillsMatch, experienceRelevance, communicationQuality, cultureFit, completeness as 0-100 numbers), strengths (string array, max 5), concerns (string array, max 5), recommendation (one of: ADVANCE, REQUEST_INFO, CONSIDER_OTHER, REJECT), confidenceLevel (HIGH, MEDIUM, or LOW), resumeAnalysis (object with score 0-100 and feedback string array max 4).
+
+SCORING RULES (follow strictly):
+- 0-10: Applicant provided no useful information, nonsensical content, or completely irrelevant submissions (random text, jokes, unrelated documents, single phrases)
+- 11-25: Very little relevant information, mostly empty or filler, no evidence of qualifications
+- 26-40: Some relevant info but major gaps, few keywords matched, unclear qualifications
+- 41-55: Moderate match — some relevant experience but missing important requirements
+- 56-70: Good match — addresses most requirements with evidence
+- 71-85: Strong match — clear evidence of most required skills and experience
+- 86-100: Exceptional — addresses virtually all requirements with specific details
+
+CRITICAL: If the applicant submitted irrelevant content (not a real resume, gibberish cover letter, unrelated documents), score them 0-10 regardless of other factors. Do NOT give points for simply submitting something — the content must be genuinely relevant. A cover letter with random words or phrases is 0-5. A file that is not a resume is 0-10. Recommend REJECT for scores under 25.`,
         },
         { role: 'user', content: prompt },
       ],
-      temperature: 0.5,
+      temperature: 0.3,
       max_tokens: 1000,
     });
 
@@ -205,14 +281,14 @@ export async function screenApplicant(context: ScreeningContext): Promise<AIScre
     const parsed = JSON.parse(text);
 
     return {
-      overallScore: Math.min(100, Math.max(0, Number(parsed.overallScore) || 50)),
+      overallScore: Math.min(100, Math.max(0, Number(parsed.overallScore) ?? 0)),
       dimensionScores: parsed.dimensionScores || {},
       strengths: Array.isArray(parsed.strengths) ? parsed.strengths.slice(0, 5) : [],
       concerns: Array.isArray(parsed.concerns) ? parsed.concerns.slice(0, 5) : [],
-      recommendation: ['ADVANCE', 'REQUEST_INFO', 'CONSIDER_OTHER', 'REJECT'].includes(parsed.recommendation) ? parsed.recommendation : 'REQUEST_INFO',
-      confidenceLevel: ['HIGH', 'MEDIUM', 'LOW'].includes(parsed.confidenceLevel) ? parsed.confidenceLevel : 'MEDIUM',
+      recommendation: ['ADVANCE', 'REQUEST_INFO', 'CONSIDER_OTHER', 'REJECT'].includes(parsed.recommendation) ? parsed.recommendation : 'REJECT',
+      confidenceLevel: ['HIGH', 'MEDIUM', 'LOW'].includes(parsed.confidenceLevel) ? parsed.confidenceLevel : 'LOW',
       resumeAnalysis: {
-        score: Math.min(100, Math.max(0, Number(parsed.resumeAnalysis?.score) || 50)),
+        score: Math.min(100, Math.max(0, Number(parsed.resumeAnalysis?.score) ?? 0)),
         feedback: Array.isArray(parsed.resumeAnalysis?.feedback) ? parsed.resumeAnalysis.feedback.slice(0, 4) : [],
       },
     };
@@ -238,13 +314,7 @@ function buildScreeningPrompt(ctx: ScreeningContext): string {
   }
 
   parts.push('');
-  parts.push('=== APPLICANT ===');
-  parts.push(`Name: ${ctx.applicantName}`);
-  parts.push(`Email: ${ctx.email}`);
-  if (ctx.phone) parts.push(`Phone: ${ctx.phone}`);
-  if (ctx.linkedinUrl) parts.push(`LinkedIn: ${ctx.linkedinUrl}`);
-  parts.push(`Has resume uploaded: ${ctx.hasResume ? 'Yes' : 'No'}`);
-  parts.push(`Has video intro: ${ctx.hasVideo ? 'Yes' : 'No'}`);
+  parts.push('=== APPLICANT SUBMISSION ===');
 
   if (ctx.applicationData) {
     parts.push('');
@@ -258,28 +328,29 @@ function buildScreeningPrompt(ctx: ScreeningContext): string {
     parts.push(ctx.coverLetter);
   }
 
+  if (!ctx.applicationData && !ctx.coverLetter) {
+    parts.push('No application responses or cover letter were provided. The applicant only submitted file uploads which cannot be read here.');
+  }
+
   parts.push('');
-  parts.push('Rate this applicant. For the resumeAnalysis, evaluate based on: completeness of information provided, relevance to job requirements, communication quality, and professional presentation.');
+  parts.push('Rate this applicant STRICTLY based ONLY on the text content above. If there are no application responses and no cover letter text, the score must be 0-5. Do not assume uploaded files contain relevant content — you cannot read them. A cover letter must contain actual professional content about qualifications — random phrases or quotes score 0-5. Do not give credit for simply submitting content — judge the actual quality and relevance. For the resumeAnalysis, evaluate based on: completeness of information provided, relevance to job requirements, communication quality, and professional presentation.');
 
   return parts.join('\n');
 }
 
 function getFallbackScreening(ctx: ScreeningContext): AIScreeningResult {
   // Simple heuristic-based scoring when AI is unavailable
-  let score = 40;
+  let score = 10;
   const strengths: string[] = [];
   const concerns: string[] = [];
 
-  if (ctx.applicationData && ctx.applicationData.length > 50) { score += 10; strengths.push('Provided detailed application responses'); }
-  if (ctx.coverLetter && ctx.coverLetter.length > 100) { score += 10; strengths.push('Submitted a cover letter'); }
-  if (ctx.hasResume) { score += 15; strengths.push('Resume uploaded'); }
-  if (ctx.hasVideo) { score += 5; strengths.push('Video introduction provided'); }
-  if (ctx.linkedinUrl) { score += 5; strengths.push('LinkedIn profile provided'); }
-  if (ctx.phone) { score += 5; }
+  if (ctx.applicationData && ctx.applicationData.length > 100) { score += 15; strengths.push('Provided detailed application responses'); }
+  if (ctx.coverLetter && ctx.coverLetter.length > 200) { score += 15; strengths.push('Submitted a substantial cover letter'); }
+  if (ctx.hasResume) { score += 20; strengths.push('Resume uploaded'); }
+  if (ctx.hasVideo) { score += 10; strengths.push('Video introduction provided'); }
 
   if (!ctx.hasResume) concerns.push('No resume uploaded');
   if (!ctx.coverLetter) concerns.push('No cover letter provided');
-  if (!ctx.linkedinUrl) concerns.push('No LinkedIn profile');
 
   score = Math.min(100, score);
 
@@ -287,17 +358,17 @@ function getFallbackScreening(ctx: ScreeningContext): AIScreeningResult {
     overallScore: score,
     dimensionScores: {
       skillsMatch: score,
-      experienceRelevance: Math.max(20, score - 10),
-      communicationQuality: ctx.coverLetter ? Math.min(100, score + 10) : Math.max(20, score - 15),
-      cultureFit: 50,
+      experienceRelevance: Math.max(0, score - 10),
+      communicationQuality: ctx.coverLetter ? Math.min(100, score + 10) : Math.max(0, score - 15),
+      cultureFit: 30,
       completeness: Math.round(((ctx.hasResume ? 25 : 0) + (ctx.coverLetter ? 25 : 0) + (ctx.hasVideo ? 25 : 0) + (ctx.applicationData ? 25 : 0))),
     },
     strengths,
     concerns,
-    recommendation: score >= 70 ? 'ADVANCE' : score >= 50 ? 'REQUEST_INFO' : 'CONSIDER_OTHER',
+    recommendation: score >= 70 ? 'ADVANCE' : score >= 50 ? 'REQUEST_INFO' : score >= 30 ? 'CONSIDER_OTHER' : 'REJECT',
     confidenceLevel: 'LOW',
     resumeAnalysis: {
-      score: ctx.hasResume ? Math.min(100, score + 5) : 20,
+      score: ctx.hasResume ? Math.min(100, score + 5) : 0,
       feedback: ctx.hasResume
         ? ['Resume was uploaded but content analysis requires AI', 'Manual review recommended']
         : ['No resume was uploaded', 'Applicant should be asked to provide a resume'],

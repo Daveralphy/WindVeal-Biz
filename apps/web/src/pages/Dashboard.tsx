@@ -2,38 +2,27 @@ import { useState, useEffect } from 'react';
 import {
   Briefcase,
   Users,
-  Clock,
-  CheckCircle,
-  XCircle,
-  Send,
   Calendar,
-  TrendingUp,
+  UserPlus,
   ArrowUpRight,
   Sparkles,
+  ChevronDown,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '@/lib/api';
 
 const METRIC_CONFIG = [
-  { key: 'activeJobs', label: 'Active Jobs', icon: Briefcase, color: 'text-green-400', bg: 'bg-green-500/10' },
-  { key: 'totalApplicants', label: 'Total Applicants', icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10' },
-  { key: 'pendingReview', label: 'Pending Review', icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10' },
-  { key: 'inPipeline', label: 'In Pipeline', icon: TrendingUp, color: 'text-purple-400', bg: 'bg-purple-500/10' },
-  { key: 'hired', label: 'Hired', icon: CheckCircle, color: 'text-green-400', bg: 'bg-green-500/10' },
-  { key: 'rejected', label: 'Rejected', icon: XCircle, color: 'text-red-400', bg: 'bg-red-500/10' },
-  { key: 'offersSent', label: 'Offers Sent', icon: Send, color: 'text-teal-400', bg: 'bg-teal-500/10' },
-  { key: 'interviewsToday', label: 'Interviews Today', icon: Calendar, color: 'text-orange-400', bg: 'bg-orange-500/10' },
+  { key: 'activeJobs', label: 'Active Jobs', icon: Briefcase, color: 'text-green-400', bg: 'bg-green-500/10', to: '/jobs' },
+  { key: 'totalApplicants', label: 'Total Applicants', icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10', to: '/applicants' },
+  { key: 'interviews', label: 'Interviews', icon: Calendar, color: 'text-orange-400', bg: 'bg-orange-500/10', to: '/interviews' },
+  { key: 'teamMembers', label: 'Team Members', icon: UserPlus, color: 'text-purple-400', bg: 'bg-purple-500/10', to: '/team' },
 ] as const;
 
 interface Stats {
   activeJobs: number;
   totalApplicants: number;
-  pendingReview: number;
-  inPipeline: number;
-  hired: number;
-  rejected: number;
-  offersSent: number;
-  interviewsToday: number;
+  interviews: number;
+  teamMembers: number;
 }
 
 interface Activity {
@@ -43,6 +32,12 @@ interface Activity {
   time: string;
   color: string;
 }
+
+const ACTIVITY_LINKS: Record<string, string> = {
+  application: '/applicants',
+  stage_change: '/applicants',
+  interview: '/interviews',
+};
 
 interface AIInsight {
   title: string;
@@ -62,6 +57,13 @@ function timeAgo(dateStr: string) {
   return `${days} day${days > 1 ? 's' : ''} ago`;
 }
 
+const DATE_FILTERS = [
+  { value: '7d', label: 'Last 7 days' },
+  { value: '30d', label: 'Last 30 days' },
+  { value: '90d', label: 'Last 90 days' },
+  { value: 'all', label: 'All time' },
+];
+
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [activity, setActivity] = useState<Activity[]>([]);
@@ -69,13 +71,15 @@ export default function Dashboard() {
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsFetched, setInsightsFetched] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [dateFilter, setDateFilter] = useState('30d');
 
   useEffect(() => {
+    setLoading(true);
     async function load() {
       try {
         const [statsRes, activityRes] = await Promise.all([
-          api.get('/dashboard/stats'),
-          api.get('/dashboard/activity'),
+          api.get(`/dashboard/stats?range=${dateFilter}`),
+          api.get(`/dashboard/activity?range=${dateFilter}`),
         ]);
         setStats(statsRes.data);
         setActivity(activityRes.data);
@@ -86,7 +90,7 @@ export default function Dashboard() {
       }
     }
     load();
-  }, []);
+  }, [dateFilter]);
 
   const fetchInsights = async () => {
     if (!stats) return;
@@ -123,25 +127,27 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-vb-text">Dashboard</h1>
-        <div className="flex gap-2">
-          <button className="px-4 py-2 bg-vb-card text-sm text-vb-text-secondary rounded-lg hover:bg-vb-muted transition-colors">
-            Export Report
-          </button>
-          <Link
-            to="/jobs/new"
-            className="px-4 py-2 bg-brand text-sm text-white rounded-lg hover:bg-brand-dark transition-colors"
+        <div className="relative">
+          <select
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="appearance-none bg-vb-card text-sm text-vb-text-secondary rounded-lg pl-3 pr-8 py-2 border border-vb-border outline-none hover:bg-vb-muted transition-colors cursor-pointer"
           >
-            + Create Job
-          </Link>
+            {DATE_FILTERS.map((f) => (
+              <option key={f.value} value={f.value}>{f.label}</option>
+            ))}
+          </select>
+          <ChevronDown className="w-4 h-4 text-vb-text-muted absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
       </div>
 
       {/* Metric Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {stats && METRIC_CONFIG.map(({ key, label, icon: Icon, color, bg }) => (
-          <div
+        {stats && METRIC_CONFIG.map(({ key, label, icon: Icon, color, bg, to }) => (
+          <Link
             key={key}
-            className="bg-vb-card rounded-xl p-4 border border-vb-border hover:border-vb-muted transition-colors"
+            to={to}
+            className="bg-vb-card rounded-xl p-4 border border-vb-border hover:border-brand/40 transition-colors"
           >
             <div className="flex items-center justify-between mb-3">
               <div className={`p-2 rounded-lg ${bg}`}>
@@ -151,7 +157,7 @@ export default function Dashboard() {
             </div>
             <p className="text-2xl font-bold text-vb-text">{stats[key].toLocaleString()}</p>
             <p className="text-xs text-vb-text-muted mt-1">{label}</p>
-          </div>
+          </Link>
         ))}
       </div>
 
@@ -164,9 +170,10 @@ export default function Dashboard() {
           </div>
           <div className="divide-y divide-vb-border">
             {activity.map((item, i) => (
-              <div
+              <Link
                 key={i}
-                className="flex items-start gap-3 px-5 py-3.5 hover:bg-vb-surface cursor-pointer transition-colors"
+                to={ACTIVITY_LINKS[item.type] || '/dashboard'}
+                className="flex items-start gap-3 px-5 py-3.5 hover:bg-vb-surface transition-colors"
               >
                 <div
                   className={`w-2 h-2 rounded-full ${item.color} mt-2 flex-shrink-0`}
@@ -178,7 +185,7 @@ export default function Dashboard() {
                 <span className="text-vb-text-muted text-xs flex-shrink-0">
                   {timeAgo(item.time)}
                 </span>
-              </div>
+              </Link>
             ))}
             {activity.length === 0 && (
               <p className="px-5 py-8 text-vb-text-muted text-sm text-center">No recent activity</p>

@@ -52,6 +52,7 @@ enum InterviewStatus {
   COMPLETED
   CANCELLED
   NO_SHOW
+  PASSED
 }
 
 enum OfferStatus {

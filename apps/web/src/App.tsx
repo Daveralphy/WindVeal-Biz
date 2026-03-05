@@ -11,6 +11,7 @@ import JobNew from '@/pages/JobNew';
 import JobDetail from '@/pages/JobDetail';
 import JobEdit from '@/pages/JobEdit';
 import Applicants from '@/pages/Applicants';
+import ApplicantDetail from '@/pages/ApplicantDetail';
 import Pipeline from '@/pages/Pipeline';
 import Interviews from '@/pages/Interviews';
 import Communications from '@/pages/Communications';
@@ -96,6 +97,7 @@ export default function App() {
           <Route path="/jobs/:id" element={<JobDetail />} />
           <Route path="/jobs/:id/edit" element={<JobEdit />} />
           <Route path="/applicants" element={<Applicants />} />
+          <Route path="/applicants/:id" element={<ApplicantDetail />} />
           <Route path="/pipeline" element={<Pipeline />} />
           <Route path="/interviews" element={<Interviews />} />
           <Route path="/communications" element={<Communications />} />

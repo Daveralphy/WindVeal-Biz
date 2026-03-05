@@ -2,70 +2,57 @@ import { FastifyInstance } from 'fastify';
 import prisma from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
 
+function getRangeSince(range?: string): Date | null {
+  if (!range || range === 'all') return null;
+  const now = new Date();
+  const days = range === '7d' ? 7 : range === '30d' ? 30 : range === '90d' ? 90 : 0;
+  if (!days) return null;
+  now.setDate(now.getDate() - days);
+  now.setHours(0, 0, 0, 0);
+  return now;
+}
+
 export async function dashboardRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate);
 
   // Dashboard stats
   app.get('/stats', async (request) => {
     const { organizationId } = request.user!;
+    const query = request.query as Record<string, string>;
+
+    const since = getRangeSince(query.range);
 
     const [
       activeJobs,
       totalApplicants,
-      applicantsByStage,
       interviews,
-      offers,
+      teamMembers,
     ] = await Promise.all([
       prisma.job.count({ where: { organizationId, status: 'ACTIVE' } }),
-      prisma.applicant.count({ where: { organizationId } }),
-      prisma.applicant.findMany({
-        where: { organizationId },
-        include: { currentStage: { select: { name: true } } },
+      prisma.applicant.count({ where: { organizationId, ...(since && { createdAt: { gte: since } }) } }),
+      prisma.interview.count({
+        where: { job: { organizationId }, status: 'COMPLETED', ...(since && { scheduledAt: { gte: since } }) },
       }),
-      prisma.interview.findMany({
-        where: { job: { organizationId } },
-        include: { job: true },
-      }),
-      prisma.offer.findMany({
-        where: { job: { organizationId } },
-      }),
+      prisma.user.count({ where: { organizationId } }),
     ]);
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    const interviewsToday = interviews.filter((i) => {
-      const d = new Date(i.scheduledAt);
-      return d >= today && d < tomorrow && i.status === 'SCHEDULED';
-    }).length;
-
-    const stageNames = applicantsByStage.map((a) => a.currentStage.name);
-    const pendingReview = stageNames.filter((n) => n === 'Applied').length;
-    const inPipeline = stageNames.filter((n) => !['Applied', 'Hired'].includes(n)).length;
-    const hired = stageNames.filter((n) => n === 'Hired').length;
-    const offersSent = offers.filter((o) => o.status === 'SENT' || o.status === 'VIEWED').length;
 
     return {
       activeJobs,
       totalApplicants,
-      pendingReview,
-      inPipeline,
-      hired,
-      rejected: 0, // no "Rejected" stage in our seed, would come from stage name
-      offersSent,
-      interviewsToday,
+      interviews,
+      teamMembers,
     };
   });
 
   // Recent activity
   app.get('/activity', async (request) => {
     const { organizationId } = request.user!;
+    const query = request.query as Record<string, string>;
+    const since = getRangeSince(query.range);
 
     // Get recent stage changes
     const recentHistory = await prisma.stageHistory.findMany({
-      where: { applicant: { organizationId } },
+      where: { applicant: { organizationId }, ...(since && { movedAt: { gte: since } }) },
       include: {
         applicant: true,
         toStage: true,
@@ -77,7 +64,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
 
     // Get recent applicants
     const recentApplicants = await prisma.applicant.findMany({
-      where: { organizationId },
+      where: { organizationId, ...(since && { createdAt: { gte: since } }) },
       include: { job: { select: { title: true } } },
       orderBy: { createdAt: 'desc' },
       take: 10,
@@ -85,7 +72,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
 
     // Get recent interviews
     const recentInterviews = await prisma.interview.findMany({
-      where: { job: { organizationId } },
+      where: { job: { organizationId }, ...(since && { createdAt: { gte: since } }) },
       include: { applicant: true, job: { select: { title: true } } },
       orderBy: { createdAt: 'desc' },
       take: 5,

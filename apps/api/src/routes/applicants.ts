@@ -9,7 +9,7 @@ import path from 'node:path';
 import prisma from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
 import { env } from '../config/env.js';
-import { screenApplicant } from '../services/groqService.js';
+import { screenApplicant, evaluateFieldContent } from '../services/groqService.js';
 
 const addApplicantSchema = z.object({
   firstName: z.string().min(1),
@@ -235,11 +235,10 @@ export async function applicantRoutes(app: FastifyInstance) {
     const isMovingBack = targetOrder < currentOrder;
 
     if (isMovingBack) {
-      // Remove the most recent forward history entry instead of adding a new one
-      const lastForward = await prisma.stageHistory.findFirst({
-        where: { applicantId: applicant.id, toStageId: applicant.currentStageId },
-        orderBy: { movedAt: 'desc' },
-      });
+      // Remove all forward history entries for stages above target
+      const stageIdsToRemove = allStages
+        .filter((s) => s.order > targetOrder && s.order <= currentOrder)
+        .map((s) => s.id);
 
       const [updated] = await prisma.$transaction([
         prisma.applicant.update({
@@ -247,9 +246,21 @@ export async function applicantRoutes(app: FastifyInstance) {
           data: { currentStageId: stageId },
           include: { currentStage: true },
         }),
-        ...(lastForward
-          ? [prisma.stageHistory.delete({ where: { id: lastForward.id } })]
-          : []),
+        prisma.stageHistory.deleteMany({
+          where: {
+            applicantId: applicant.id,
+            toStageId: { in: stageIdsToRemove },
+          },
+        }),
+        prisma.stageHistory.create({
+          data: {
+            applicantId: applicant.id,
+            fromStageId: applicant.currentStageId,
+            toStageId: stageId,
+            movedById: userId,
+            note,
+          },
+        }),
       ]);
 
       return updated;
@@ -304,6 +315,65 @@ export async function applicantRoutes(app: FastifyInstance) {
     return reply.status(201).send(note);
   });
 
+  // Update note
+  app.patch<{ Params: { id: string; noteId: string } }>('/:id/notes/:noteId', async (request, reply) => {
+    const { organizationId, userId } = request.user!;
+    const { content } = request.body as { content: string };
+
+    if (!content?.trim()) {
+      return reply.status(400).send({ error: 'Note content is required' });
+    }
+
+    const applicant = await prisma.applicant.findFirst({
+      where: { id: request.params.id, organizationId },
+    });
+
+    if (!applicant) {
+      return reply.status(404).send({ error: 'Applicant not found' });
+    }
+
+    const existing = await prisma.applicantNote.findFirst({
+      where: { id: request.params.noteId, applicantId: applicant.id, authorId: userId },
+    });
+
+    if (!existing) {
+      return reply.status(404).send({ error: 'Note not found or not yours' });
+    }
+
+    const updated = await prisma.applicantNote.update({
+      where: { id: request.params.noteId },
+      data: { content: content.trim() },
+      include: { author: { select: { firstName: true, lastName: true, avatarUrl: true } } },
+    });
+
+    return updated;
+  });
+
+  // Delete note
+  app.delete<{ Params: { id: string; noteId: string } }>('/:id/notes/:noteId', async (request, reply) => {
+    const { organizationId, userId } = request.user!;
+
+    const applicant = await prisma.applicant.findFirst({
+      where: { id: request.params.id, organizationId },
+    });
+
+    if (!applicant) {
+      return reply.status(404).send({ error: 'Applicant not found' });
+    }
+
+    const existing = await prisma.applicantNote.findFirst({
+      where: { id: request.params.noteId, applicantId: applicant.id, authorId: userId },
+    });
+
+    if (!existing) {
+      return reply.status(404).send({ error: 'Note not found or not yours' });
+    }
+
+    await prisma.applicantNote.delete({ where: { id: request.params.noteId } });
+
+    return { message: 'Note deleted' };
+  });
+
   // Delete applicant
   app.delete<{ Params: { id: string } }>('/:id', async (request, reply) => {
     const { organizationId } = request.user!;
@@ -317,6 +387,63 @@ export async function applicantRoutes(app: FastifyInstance) {
 
     await prisma.applicant.delete({ where: { id: applicant.id } });
     return { message: 'Applicant deleted' };
+  });
+
+  // AI evaluate a single field
+  app.post<{ Params: { id: string } }>('/:id/ai-evaluate-field', async (request, reply) => {
+    const { organizationId } = request.user!;
+    const { fieldId } = request.body as { fieldId: string };
+
+    if (!fieldId) {
+      return reply.status(400).send({ error: 'fieldId is required' });
+    }
+
+    const applicant = await prisma.applicant.findFirst({
+      where: { id: request.params.id, organizationId },
+      include: {
+        job: { select: { title: true, aiKeywords: true, applicationForm: true } },
+        applicationData: true,
+        uploadedFiles: true,
+      },
+    });
+
+    if (!applicant) {
+      return reply.status(404).send({ error: 'Applicant not found' });
+    }
+
+    const aiKeywords = (applicant.job.aiKeywords as string[]) || [];
+    let content = '';
+    let label = fieldId;
+
+    if (fieldId === 'resume' || fieldId === 'video') {
+      const hasFile = applicant.uploadedFiles.some((f) => f.type === fieldId);
+      if (!hasFile) {
+        return reply.status(400).send({ error: `No ${fieldId} uploaded` });
+      }
+      // For binary files, include all other text data for context
+      const otherText = applicant.applicationData
+        .map((d) => {
+          const val = typeof d.value === 'string' ? d.value : JSON.stringify(d.value);
+          return `${d.fieldId}: ${val}`;
+        })
+        .join('\n');
+      content = `[${fieldId} file was submitted]\n\nOther application data for context:\n${otherText}`;
+      label = fieldId === 'resume' ? 'Resume (file submitted)' : 'Video Introduction (file submitted)';
+    } else {
+      const data = applicant.applicationData.find((d) => d.fieldId === fieldId);
+      if (!data) {
+        return reply.status(400).send({ error: 'Field not found in application data' });
+      }
+      content = typeof data.value === 'string' ? data.value : JSON.stringify(data.value);
+
+      // Try to get a nice label from the form definition
+      const formFields = (applicant.job.applicationForm as { fields?: { id: string; label: string }[] })?.fields || [];
+      const formField = formFields.find((f) => f.id === fieldId);
+      if (formField) label = formField.label;
+    }
+
+    const result = await evaluateFieldContent(label, content, aiKeywords, applicant.job.title);
+    return result;
   });
 
   // AI Screen applicant
@@ -346,10 +473,19 @@ export async function applicantRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Applicant not found' });
     }
 
+    // Build field label lookup from application form
+    const formFields = (applicant.job.applicationForm?.fields as Array<{ id: string; label: string; type?: string }>) || [];
+    const fieldLabelMap = new Map(formFields.map((f) => [f.id, f.label]));
+
+    // Personal fields to exclude from AI evaluation
+    const personalFieldIds = new Set(['first_name', 'last_name', 'email', 'phone', 'linkedin', 'linkedin_url']);
+
     const applicationText = applicant.applicationData
+      .filter((d) => !personalFieldIds.has(d.fieldId) && d.fieldId !== 'cover_letter')
       .map((d) => {
+        const label = fieldLabelMap.get(d.fieldId) || d.fieldId;
         const val = typeof d.value === 'string' ? d.value : JSON.stringify(d.value);
-        return `${d.fieldId}: ${val}`;
+        return `${label}: ${val}`;
       })
       .join('\n');
 
@@ -357,10 +493,6 @@ export async function applicantRoutes(app: FastifyInstance) {
     const coverLetter = coverLetterData ? String(coverLetterData.value) : '';
 
     const report = await screenApplicant({
-      applicantName: `${applicant.firstName} ${applicant.lastName}`,
-      email: applicant.email,
-      phone: applicant.phone,
-      linkedinUrl: applicant.linkedinUrl,
       applicationData: applicationText,
       coverLetter,
       hasResume: applicant.uploadedFiles.some((f) => f.type === 'resume'),
