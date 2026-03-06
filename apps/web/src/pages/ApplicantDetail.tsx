@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -22,15 +22,11 @@ import {
   MoreVertical,
   Pencil,
   Check,
-  X,
-  Link2,
 } from 'lucide-react';
 import api from '@/lib/api';
-import { useAuthStore } from '@/stores/authStore';
-import RichTextEditor from '@/components/editor/RichTextEditor';
 
 
-// ── Types ──
+// â”€â”€ Types â”€â”€
 
 interface PipelineStage {
   id: string;
@@ -110,7 +106,7 @@ interface ApplicantDetail {
   notes: NoteItem[];
 }
 
-// ── Constants ──
+// â”€â”€ Constants â”€â”€
 
 const SOURCE_LABELS: Record<string, string> = {
   PORTAL: 'Careers Page',
@@ -126,36 +122,13 @@ const RECOMMENDATION_LABELS: Record<string, { label: string; color: string }> = 
   REJECT: { label: 'Reject', color: 'text-red-400' },
 };
 
-const MEDIUM_OPTIONS = [
-  { value: 'google_meet', label: 'Google Meet' },
-  { value: 'teams', label: 'Microsoft Teams' },
-  { value: 'zoom', label: 'Zoom' },
-];
 
-const DURATION_OPTIONS = [
-  { value: 15, label: '15 min' },
-  { value: 30, label: '30 min' },
-  { value: 45, label: '45 min' },
-  { value: 60, label: '1 hour' },
-  { value: 90, label: '1.5 hours' },
-  { value: 120, label: '2 hours' },
-];
 
-function formatDateTimeLocal(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  const h = String(date.getHours()).padStart(2, '0');
-  const min = String(date.getMinutes()).padStart(2, '0');
-  return `${y}-${m}-${d}T${h}:${min}`;
-}
-
-// ── Component ──
+// â”€â”€ Component â”€â”€
 
 export default function ApplicantDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const user = useAuthStore((s) => s.user);
 
   const [detail, setDetail] = useState<ApplicantDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -183,18 +156,6 @@ export default function ApplicantDetailPage() {
   // Delete
   const [showDelete, setShowDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
-
-  // Schedule interview
-  const [showSchedule, setShowSchedule] = useState(false);
-  const [scheduleForm, setScheduleForm] = useState({
-    scheduledAt: '',
-    durationMinutes: 60,
-    medium: 'google_meet',
-    meetingLink: '',
-    emailSubject: '',
-    emailBody: '',
-  });
-  const [scheduling, setScheduling] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -237,49 +198,16 @@ export default function ApplicantDetailPage() {
       const res = await api.get(`/applicants/${detail.id}`);
       setDetail(res.data);
 
-      // If moved to an interview stage, open the schedule modal
+      // If moved to an interview stage, navigate to schedule page
       const targetStage = detail.job.pipelineStages.find((s) => s.id === stageId);
       if (targetStage && targetStage.name.toLowerCase().includes('interview')) {
-        const defaultDate = new Date();
-        defaultDate.setDate(defaultDate.getDate() + 1);
-        defaultDate.setHours(10, 0, 0, 0);
-        setScheduleForm({
-          scheduledAt: formatDateTimeLocal(defaultDate),
-          durationMinutes: 60,
-          medium: 'google_meet',
-          meetingLink: '',
-          emailSubject: `Interview Invitation — ${detail.job.title}`,
-          emailBody: `<p>Hi ${detail.firstName},</p><p>We'd like to invite you for an interview for the <strong>${detail.job.title}</strong> position.</p><p>Please find the details below. We look forward to speaking with you!</p><p>Best regards</p>`,
-        });
-        setShowSchedule(true);
+        navigate(`/interviews/schedule/${detail.id}`);
       }
     } catch (err) {
       console.error('Failed to change stage:', err);
     } finally {
       setChangingStage(false);
       setStageDropdownOpen(false);
-    }
-  }
-
-  async function handleScheduleInterview() {
-    if (!detail || scheduling) return;
-    setScheduling(true);
-    try {
-      await api.post('/interviews', {
-        applicantId: detail.id,
-        jobId: detail.job.id,
-        scheduledAt: scheduleForm.scheduledAt,
-        durationMinutes: scheduleForm.durationMinutes,
-        medium: scheduleForm.medium,
-        meetingLink: scheduleForm.meetingLink || '',
-        emailSubject: scheduleForm.emailSubject,
-        emailBody: scheduleForm.emailBody,
-      });
-      setShowSchedule(false);
-    } catch (err) {
-      console.error('Failed to schedule interview:', err);
-    } finally {
-      setScheduling(false);
     }
   }
 
@@ -480,12 +408,12 @@ export default function ApplicantDetailPage() {
           <Calendar className="w-4 h-4" />
           Applied {new Date(detail.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
         </span>
-        <span>·</span>
+        <span>Â·</span>
         <span>Source: {SOURCE_LABELS[detail.source] || detail.source}</span>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* ── LEFT COLUMN (2/3) ── */}
+        {/* â”€â”€ LEFT COLUMN (2/3) â”€â”€ */}
         <div className="lg:col-span-2 space-y-6">
           {/* Contact Information */}
           <section className="bg-vb-card border border-vb-border rounded-xl p-5 space-y-3">
@@ -732,7 +660,7 @@ export default function ApplicantDetailPage() {
                     }`}>
                       {RECOMMENDATION_LABELS[detail.aiReport.recommendation]?.label ?? detail.aiReport.recommendation}
                     </span>
-                    <span className="text-xs text-vb-text-muted">·</span>
+                    <span className="text-xs text-vb-text-muted">Â·</span>
                     <span className="text-xs text-vb-text-muted">{detail.aiReport.confidenceLevel} confidence</span>
                   </div>
                   <p className="text-xs text-vb-text-secondary mt-0.5">
@@ -762,7 +690,7 @@ export default function ApplicantDetailPage() {
 
         </div>
 
-        {/* ── RIGHT COLUMN (1/3) ── */}
+        {/* â”€â”€ RIGHT COLUMN (1/3) â”€â”€ */}
         <div className="space-y-6">
           {/* Stage Timeline */}
           <section className="bg-vb-card border border-vb-border rounded-xl p-5 space-y-4">
@@ -822,7 +750,7 @@ export default function ApplicantDetailPage() {
         </div>
       </div>
 
-      {/* Notes – full width */}
+      {/* Notes â€“ full width */}
       <section className="bg-vb-card border border-vb-border rounded-xl p-5 space-y-4">
         <h3 className="text-sm font-medium text-vb-text flex items-center gap-2">
           <MessageSquare className="w-4 h-4 text-vb-text-muted" />
@@ -904,7 +832,7 @@ export default function ApplicantDetailPage() {
 
                 <div className="flex items-center gap-2 mt-2 text-xs text-vb-text-muted">
                   <span>{note.author.firstName} {note.author.lastName}</span>
-                  <span>·</span>
+                  <span>Â·</span>
                   <span>{new Date(note.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
                 </div>
               </div>
@@ -978,127 +906,6 @@ export default function ApplicantDetailPage() {
                 className="px-4 py-2 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
               >
                 {deleting ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Schedule Interview Modal */}
-      {showSchedule && detail && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-[5vh] overflow-y-auto">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowSchedule(false)} />
-          <div className="relative bg-vb-bg border border-vb-border rounded-xl w-full max-w-2xl shadow-xl mb-10">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-vb-border">
-              <div>
-                <h2 className="text-base font-semibold text-vb-text">Schedule Interview</h2>
-                <p className="text-xs text-vb-text-muted mt-0.5">
-                  {detail.firstName} {detail.lastName} · {detail.job.title}
-                </p>
-              </div>
-              <button onClick={() => setShowSchedule(false)} className="p-2 text-vb-text-muted hover:text-vb-text rounded-lg hover:bg-vb-card transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="px-6 py-5 space-y-5">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-vb-text-secondary mb-1.5">Date & Time</label>
-                  <input
-                    type="datetime-local"
-                    value={scheduleForm.scheduledAt}
-                    onChange={(e) => setScheduleForm({ ...scheduleForm, scheduledAt: e.target.value })}
-                    className="w-full bg-vb-surface border border-vb-border rounded-lg px-3 py-2 text-sm text-vb-text outline-none focus:border-brand"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-vb-text-secondary mb-1.5">Duration</label>
-                  <div className="relative">
-                    <select
-                      value={scheduleForm.durationMinutes}
-                      onChange={(e) => setScheduleForm({ ...scheduleForm, durationMinutes: Number(e.target.value) })}
-                      className="w-full appearance-none bg-vb-surface border border-vb-border rounded-lg px-3 py-2 text-sm text-vb-text outline-none focus:border-brand pr-8"
-                    >
-                      {DURATION_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="w-4 h-4 text-vb-text-muted absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-vb-text-secondary mb-1.5">Meeting Platform</label>
-                  <div className="relative">
-                    <select
-                      value={scheduleForm.medium}
-                      onChange={(e) => setScheduleForm({ ...scheduleForm, medium: e.target.value })}
-                      className="w-full appearance-none bg-vb-surface border border-vb-border rounded-lg px-3 py-2 text-sm text-vb-text outline-none focus:border-brand pr-8"
-                    >
-                      {MEDIUM_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="w-4 h-4 text-vb-text-muted absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-vb-text-secondary mb-1.5">Meeting Link</label>
-                  <div className="relative">
-                    <Link2 className="w-4 h-4 text-vb-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="url"
-                      placeholder="https://meet.google.com/..."
-                      value={scheduleForm.meetingLink}
-                      onChange={(e) => setScheduleForm({ ...scheduleForm, meetingLink: e.target.value })}
-                      className="w-full bg-vb-surface border border-vb-border rounded-lg pl-9 pr-3 py-2 text-sm text-vb-text outline-none focus:border-brand placeholder:text-vb-text-muted"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-3 border-t border-vb-border pt-5">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium text-vb-text">Interview Invitation Email</h3>
-                  <span className="text-xs text-vb-text-muted flex items-center gap-1">
-                    <Mail className="w-3.5 h-3.5" />
-                    From: {user?.email || 'you'}
-                  </span>
-                </div>
-                <div className="text-xs text-vb-text-muted">To: {detail.email}</div>
-                <div>
-                  <label className="block text-xs font-medium text-vb-text-secondary mb-1.5">Subject</label>
-                  <input
-                    type="text"
-                    value={scheduleForm.emailSubject}
-                    onChange={(e) => setScheduleForm({ ...scheduleForm, emailSubject: e.target.value })}
-                    className="w-full bg-vb-surface border border-vb-border rounded-lg px-3 py-2 text-sm text-vb-text outline-none focus:border-brand"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-vb-text-secondary mb-1.5">Email Body</label>
-                  <RichTextEditor
-                    value={scheduleForm.emailBody}
-                    onChange={(html) => setScheduleForm({ ...scheduleForm, emailBody: html })}
-                    placeholder="Write the interview invitation email..."
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-vb-border">
-              <button onClick={() => setShowSchedule(false)} className="px-4 py-2 text-sm text-vb-text-secondary hover:text-vb-text rounded-lg hover:bg-vb-card transition-colors">
-                Skip
-              </button>
-              <button
-                onClick={handleScheduleInterview}
-                disabled={scheduling || !scheduleForm.scheduledAt || !scheduleForm.emailSubject || !scheduleForm.emailBody}
-                className="flex items-center gap-2 px-5 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Send className="w-4 h-4" />
-                {scheduling ? 'Scheduling...' : 'Schedule & Save Email'}
               </button>
             </div>
           </div>

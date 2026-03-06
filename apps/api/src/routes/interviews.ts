@@ -2,6 +2,8 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import prisma from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
+import { composeInterviewEmail } from '../services/groqService.js';
+import { resolveSmtpConfig, sendEmail, verifySmtpConnection } from '../services/emailService.js';
 
 const scheduleInterviewSchema = z.object({
   applicantId: z.string().min(1),
@@ -125,6 +127,75 @@ export async function interviewRoutes(app: FastifyInstance) {
     return applicants;
   });
 
+  // ── SMTP / Email Settings ──────────────────────────────
+
+  // Get email settings
+  app.get('/email-settings', async (request) => {
+    const { organizationId } = request.user!;
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { smtpSettings: true },
+    });
+
+    const settings = (org?.smtpSettings as Record<string, unknown>) || null;
+    if (!settings) return { configured: false };
+
+    return {
+      configured: true,
+      host: settings.host || '',
+      port: settings.port || 587,
+      user: settings.user || '',
+      fromName: settings.fromName || '',
+      fromEmail: settings.fromEmail || '',
+      // Never return the password
+    };
+  });
+
+  // Save email settings
+  app.put('/email-settings', async (request) => {
+    const { organizationId } = request.user!;
+
+    const schema = z.object({
+      host: z.string().min(1),
+      port: z.coerce.number().int().min(1).max(65535),
+      user: z.string().min(1),
+      pass: z.string().min(1),
+      fromName: z.string().optional(),
+      fromEmail: z.string().email().optional(),
+    });
+
+    const data = schema.parse(request.body);
+
+    await prisma.organization.update({
+      where: { id: organizationId },
+      data: { smtpSettings: data },
+    });
+
+    return { success: true };
+  });
+
+  // Test SMTP connection
+  app.post('/email-settings/test', async (request) => {
+    const { organizationId } = request.user!;
+
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { smtpSettings: true },
+    });
+
+    const smtpConfig = resolveSmtpConfig(org?.smtpSettings as any);
+    if (!smtpConfig) {
+      return app.httpErrors.badRequest('No email settings configured');
+    }
+
+    try {
+      await verifySmtpConnection(smtpConfig);
+      return { success: true, message: 'Connection successful' };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Connection failed' };
+    }
+  });
+
   // Schedule a new interview
   app.post('/', async (request) => {
     const { userId, organizationId } = request.user!;
@@ -137,6 +208,12 @@ export async function interviewRoutes(app: FastifyInstance) {
     if (!applicant) {
       return app.httpErrors.notFound('Applicant not found');
     }
+
+    // Get org for SMTP settings
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { smtpSettings: true, name: true },
+    });
 
     const result = await prisma.$transaction(async (tx) => {
       const interview = await tx.interview.create({
@@ -153,7 +230,7 @@ export async function interviewRoutes(app: FastifyInstance) {
         },
       });
 
-      // Save email as a log (sending deferred)
+      // Save email log
       await tx.emailLog.create({
         data: {
           applicantId: data.applicantId,
@@ -166,6 +243,123 @@ export async function interviewRoutes(app: FastifyInstance) {
       return interview;
     });
 
+    // Actually send the email via SMTP  (best-effort, don't fail the schedule)
+    const smtpConfig = resolveSmtpConfig(org?.smtpSettings as any);
+    let emailSent = false;
+    if (smtpConfig && applicant.email) {
+      try {
+        await sendEmail(smtpConfig, {
+          to: applicant.email,
+          subject: data.emailSubject,
+          html: data.emailBody,
+        });
+        emailSent = true;
+      } catch (err) {
+        console.error('Failed to send interview email:', err);
+      }
+    }
+
+    return { ...result, emailSent };
+  });
+
+  // Compose interview email with AI
+  app.post('/compose-email', async (request) => {
+    const { userId, organizationId } = request.user!;
+
+    const schema = z.object({
+      applicantId: z.string().min(1),
+      jobId: z.string().min(1),
+      scheduledAt: z.string().min(1),
+      durationMinutes: z.number().int().min(15),
+      platform: z.string().min(1),
+      meetingLink: z.string().optional(),
+    });
+
+    const data = schema.parse(request.body);
+
+    const [applicant, job, user, org] = await Promise.all([
+      prisma.applicant.findFirst({
+        where: { id: data.applicantId, organizationId },
+        select: { firstName: true, lastName: true },
+      }),
+      prisma.job.findFirst({
+        where: { id: data.jobId, organizationId },
+        select: { title: true },
+      }),
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { firstName: true, lastName: true },
+      }),
+      prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { name: true },
+      }),
+    ]);
+
+    if (!applicant || !job) {
+      return app.httpErrors.notFound('Applicant or job not found');
+    }
+
+    const PLATFORM_LABELS: Record<string, string> = {
+      google_meet: 'Google Meet',
+      teams: 'Microsoft Teams',
+      zoom: 'Zoom',
+    };
+
+    const scheduledDate = new Date(data.scheduledAt);
+    const dateStr = scheduledDate.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+    const timeStr = scheduledDate.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+
+    const result = await composeInterviewEmail({
+      candidateFirstName: applicant.firstName,
+      candidateLastName: applicant.lastName,
+      jobTitle: job.title,
+      companyName: org?.name || 'Our Company',
+      scheduledDate: dateStr,
+      scheduledTime: timeStr,
+      durationMinutes: data.durationMinutes,
+      platform: PLATFORM_LABELS[data.platform] || data.platform,
+      meetingLink: data.meetingLink || '(to be provided)',
+      interviewerName: user ? `${user.firstName} ${user.lastName}` : 'Hiring Team',
+    });
+
     return result;
+  });
+
+  // Get email logs for an applicant
+  app.get('/emails/:applicantId', async (request) => {
+    const { organizationId } = request.user!;
+    const { applicantId } = request.params as { applicantId: string };
+
+    const applicant = await prisma.applicant.findFirst({
+      where: { id: applicantId, organizationId },
+      select: { id: true },
+    });
+    if (!applicant) return app.httpErrors.notFound('Applicant not found');
+
+    const emails = await prisma.emailLog.findMany({
+      where: { applicantId },
+      include: {
+        sentBy: { select: { firstName: true, lastName: true } },
+      },
+      orderBy: { sentAt: 'desc' },
+    });
+
+    return emails.map((e) => ({
+      id: e.id,
+      subject: e.subject,
+      body: e.body,
+      sentBy: e.sentBy ? `${e.sentBy.firstName} ${e.sentBy.lastName}` : 'System',
+      sentAt: e.sentAt,
+    }));
   });
 }

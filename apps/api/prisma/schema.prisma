@@ -117,6 +117,7 @@ model Organization {
   companySize      String?
   website          String?
   country          String?          @default("Nigeria")
+  smtpSettings     Json?            // { host, port, user, pass, fromName, fromEmail }
   subscriptionTier SubscriptionTier @default(STARTER)
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt

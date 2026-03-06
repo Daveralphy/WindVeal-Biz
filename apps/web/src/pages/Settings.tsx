@@ -1,13 +1,14 @@
-import { useState } from 'react';
-import { User, Building2, Bell, Shield, Palette, Key, ArrowLeft, Sun, Moon, Monitor, Check, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { User, Building2, Bell, Shield, Palette, Key, ArrowLeft, Sun, Moon, Monitor, Check, Eye, EyeOff, AlertCircle, Mail, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useTheme } from '@/contexts/ThemeContext';
 import api from '@/lib/api';
 
-type SettingsView = 'main' | 'appearance' | 'profile';
+type SettingsView = 'main' | 'appearance' | 'profile' | 'email';
 
 const SECTIONS = [
   { icon: User, label: 'Profile', desc: 'Manage your personal information', view: 'profile' as SettingsView },
+  { icon: Mail, label: 'Email Settings', desc: 'Configure SMTP for sending emails', view: 'email' as SettingsView },
   { icon: Building2, label: 'Organization', desc: 'Company settings and branding', view: null },
   { icon: Bell, label: 'Notifications', desc: 'Email and push notification preferences', view: null },
   { icon: Shield, label: 'Security', desc: 'Password and two-factor authentication', view: null },
@@ -49,6 +50,10 @@ export default function Settings() {
 
   if (view === 'appearance') {
     return <AppearanceSettings onBack={() => setView('main')} />;
+  }
+
+  if (view === 'email') {
+    return <EmailSettings onBack={() => setView('main')} />;
   }
 
   return (
@@ -414,6 +419,241 @@ function ProfileSettings({ onBack }: { onBack: () => void }) {
           </form>
         )}
       </div>
+    </div>
+  );
+}
+
+function EmailSettings({ onBack }: { onBack: () => void }) {
+  const [form, setForm] = useState({
+    host: '',
+    port: 587,
+    user: '',
+    pass: '',
+    fromName: '',
+    fromEmail: '',
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [configured, setConfigured] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showPass, setShowPass] = useState(false);
+
+  useEffect(() => {
+    api
+      .get('/interviews/email-settings')
+      .then((res) => {
+        if (res.data.configured) {
+          setConfigured(true);
+          setForm((prev) => ({
+            ...prev,
+            host: res.data.host || '',
+            port: res.data.port || 587,
+            user: res.data.user || '',
+            fromName: res.data.fromName || '',
+            fromEmail: res.data.fromEmail || '',
+          }));
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setMessage(null);
+    try {
+      await api.put('/interviews/email-settings', form);
+      setConfigured(true);
+      setMessage({ type: 'success', text: 'Email settings saved successfully.' });
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err?.response?.data?.error || 'Failed to save settings.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    setMessage(null);
+    try {
+      const res = await api.post('/interviews/email-settings/test');
+      if (res.data.success) {
+        setMessage({ type: 'success', text: 'SMTP connection verified successfully!' });
+      } else {
+        setMessage({ type: 'error', text: res.data.message || 'Connection test failed.' });
+      }
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err?.response?.data?.error || 'Connection test failed.' });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 max-w-3xl">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onBack}
+          className="p-2 rounded-lg hover:bg-vb-card text-vb-text-secondary hover:text-vb-text transition-colors"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div>
+          <h1 className="text-xl font-bold text-vb-text">Email Settings</h1>
+          <p className="text-vb-text-muted text-sm">Configure SMTP to send emails from VealBiz</p>
+        </div>
+      </div>
+
+      {message && (
+        <div
+          className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm ${
+            message.type === 'success'
+              ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+              : 'bg-red-500/10 text-red-400 border border-red-500/20'
+          }`}
+        >
+          {message.type === 'success' ? <Check className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          {message.text}
+        </div>
+      )}
+
+      {/* Info card */}
+      <div className="bg-brand/5 border border-brand/20 rounded-xl p-4">
+        <h3 className="text-sm font-medium text-vb-text mb-1">How it works</h3>
+        <p className="text-xs text-vb-text-secondary leading-relaxed">
+          VealBiz uses SMTP to send interview invitation emails on your behalf. You can use Gmail (with an App
+          Password), Outlook/Microsoft 365 (SMTP), or any other email provider. Once configured, emails will be
+          sent automatically when you schedule interviews.
+        </p>
+        <div className="mt-3 grid grid-cols-3 gap-2 text-[10px]">
+          <div className="bg-vb-surface rounded-lg p-2">
+            <p className="font-medium text-vb-text">Gmail</p>
+            <p className="text-vb-text-muted mt-0.5">smtp.gmail.com : 587</p>
+          </div>
+          <div className="bg-vb-surface rounded-lg p-2">
+            <p className="font-medium text-vb-text">Outlook</p>
+            <p className="text-vb-text-muted mt-0.5">smtp.office365.com : 587</p>
+          </div>
+          <div className="bg-vb-surface rounded-lg p-2">
+            <p className="font-medium text-vb-text">Yahoo</p>
+            <p className="text-vb-text-muted mt-0.5">smtp.mail.yahoo.com : 587</p>
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="bg-vb-card border border-vb-border rounded-xl p-8 flex items-center justify-center">
+          <Loader2 className="w-5 h-5 text-vb-text-muted animate-spin" />
+        </div>
+      ) : (
+        <form onSubmit={handleSave} className="bg-vb-card border border-vb-border rounded-xl p-6 space-y-5">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-vb-text-secondary mb-1.5">SMTP Host</label>
+              <input
+                type="text"
+                value={form.host}
+                onChange={(e) => setForm({ ...form, host: e.target.value })}
+                placeholder="smtp.gmail.com"
+                className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm outline-none focus:border-brand placeholder:text-vb-text-muted"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-vb-text-secondary mb-1.5">Port</label>
+              <input
+                type="number"
+                value={form.port}
+                onChange={(e) => setForm({ ...form, port: Number(e.target.value) })}
+                placeholder="587"
+                className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm outline-none focus:border-brand placeholder:text-vb-text-muted"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-vb-text-secondary mb-1.5">Username / Email</label>
+              <input
+                type="text"
+                value={form.user}
+                onChange={(e) => setForm({ ...form, user: e.target.value })}
+                placeholder="you@company.com"
+                className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm outline-none focus:border-brand placeholder:text-vb-text-muted"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-vb-text-secondary mb-1.5">Password / App Password</label>
+              <div className="relative">
+                <input
+                  type={showPass ? 'text' : 'password'}
+                  value={form.pass}
+                  onChange={(e) => setForm({ ...form, pass: e.target.value })}
+                  placeholder={configured ? '••••••••' : 'Enter password'}
+                  className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm outline-none focus:border-brand placeholder:text-vb-text-muted pr-10"
+                  required={!configured}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPass(!showPass)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-vb-text-muted hover:text-vb-text-secondary"
+                >
+                  {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-vb-text-secondary mb-1.5">From Name (optional)</label>
+              <input
+                type="text"
+                value={form.fromName}
+                onChange={(e) => setForm({ ...form, fromName: e.target.value })}
+                placeholder="Hiring Team"
+                className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm outline-none focus:border-brand placeholder:text-vb-text-muted"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-vb-text-secondary mb-1.5">From Email (optional)</label>
+              <input
+                type="email"
+                value={form.fromEmail}
+                onChange={(e) => setForm({ ...form, fromEmail: e.target.value })}
+                placeholder="hiring@company.com"
+                className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm outline-none focus:border-brand placeholder:text-vb-text-muted"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-2">
+            {configured && (
+              <button
+                type="button"
+                onClick={handleTest}
+                disabled={testing}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm text-vb-text-secondary hover:text-vb-text border border-vb-border rounded-lg hover:bg-vb-surface transition-colors disabled:opacity-50"
+              >
+                {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Mail className="w-3.5 h-3.5" />}
+                {testing ? 'Testing...' : 'Test Connection'}
+              </button>
+            )}
+            <button
+              type="submit"
+              disabled={saving || !form.host || !form.user || (!form.pass && !configured)}
+              className="flex items-center gap-1.5 px-6 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed ml-auto"
+            >
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+              {saving ? 'Saving...' : 'Save Settings'}
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }

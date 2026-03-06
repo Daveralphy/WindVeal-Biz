@@ -14,7 +14,7 @@ import Applicants from '@/pages/Applicants';
 import ApplicantDetail from '@/pages/ApplicantDetail';
 import Pipeline from '@/pages/Pipeline';
 import Interviews from '@/pages/Interviews';
-import Communications from '@/pages/Communications';
+import InterviewSchedule from '@/pages/InterviewSchedule';
 import Careers from '@/pages/Careers';
 import CareerDesign from '@/pages/CareerDesign';
 import Analytics from '@/pages/Analytics';
@@ -100,7 +100,7 @@ export default function App() {
           <Route path="/applicants/:id" element={<ApplicantDetail />} />
           <Route path="/pipeline" element={<Pipeline />} />
           <Route path="/interviews" element={<Interviews />} />
-          <Route path="/communications" element={<Communications />} />
+          <Route path="/interviews/schedule/:applicantId" element={<InterviewSchedule />} />
           <Route path="/careers" element={<Careers />} />
           <Route path="/careers/design" element={<CareerDesign />} />
           <Route path="/analytics" element={<Analytics />} />

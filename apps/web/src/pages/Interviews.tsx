@@ -1,29 +1,20 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Calendar,
   Clock,
   Video,
   User,
-  MapPin,
-  MoreHorizontal,
-  X,
-  Mail,
-  Phone,
-  Linkedin,
-  Briefcase,
-  ExternalLink,
-  FileText,
-  Sparkles,
-  CheckCircle2,
-  AlertCircle,
-  Send,
-  Link2,
   ChevronDown,
   Trash2,
+  Send,
+  Mail,
+  X,
+  ExternalLink,
+  ArrowLeft,
+  Briefcase,
 } from 'lucide-react';
 import api from '@/lib/api';
-import { useAuthStore } from '@/stores/authStore';
-import RichTextEditor from '@/components/editor/RichTextEditor';
 
 // ── Types ──
 
@@ -58,54 +49,12 @@ interface Interview {
   interviewer: string;
 }
 
-interface ApplicationDataItem {
+interface EmailLog {
   id: string;
-  fieldId: string;
-  value: unknown;
-}
-
-interface UploadedFileItem {
-  id: string;
-  type: string;
-  fileName: string;
-  storageUrl: string;
-  mimeType?: string;
-}
-
-interface ApplicationFormField {
-  id: string;
-  label: string;
-  type: string;
-  required: boolean;
-  system?: boolean;
-}
-
-interface ApplicantDetail {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string | null;
-  linkedinUrl: string | null;
-  source: string;
-  createdAt: string;
-  job: {
-    id: string;
-    title: string;
-    aiKeywords?: string[];
-    applicationForm?: { fields: ApplicationFormField[] } | null;
-  };
-  currentStage: { id: string; name: string; color: string };
-  aiReport: {
-    overallScore: number;
-    recommendation: string;
-    strengths: string[];
-    concerns: string[];
-    confidenceLevel: string;
-    dimensionScores: Record<string, number>;
-  } | null;
-  applicationData: ApplicationDataItem[];
-  uploadedFiles: UploadedFileItem[];
+  subject: string;
+  body: string;
+  sentBy: string;
+  sentAt: string;
 }
 
 // ── Constants ──
@@ -118,43 +67,6 @@ const STATUS_STYLES: Record<string, string> = {
   NO_SHOW: 'bg-gray-500/10 text-vb-text-secondary',
   PASSED: 'bg-amber-500/10 text-amber-400',
 };
-
-const RECOMMENDATION_STYLES: Record<string, { label: string; color: string }> = {
-  ADVANCE: { label: 'Advance', color: 'text-green-400' },
-  REQUEST_INFO: { label: 'Request Info', color: 'text-amber-400' },
-  CONSIDER_OTHER: { label: 'Consider Other', color: 'text-orange-400' },
-  REJECT: { label: 'Reject', color: 'text-red-400' },
-};
-
-const DIMENSION_LABELS: Record<string, string> = {
-  skillsMatch: 'Skills Match',
-  experienceRelevance: 'Experience',
-  communicationQuality: 'Communication',
-  cultureFit: 'Culture Fit',
-  completeness: 'Completeness',
-};
-
-const SOURCE_LABELS: Record<string, string> = {
-  PORTAL: 'Careers Page',
-  MANUAL: 'Manual',
-  IMPORTED: 'Imported',
-  REFERRAL: 'Referral',
-};
-
-const MEDIUM_OPTIONS = [
-  { value: 'google_meet', label: 'Google Meet' },
-  { value: 'teams', label: 'Microsoft Teams' },
-  { value: 'zoom', label: 'Zoom' },
-];
-
-const DURATION_OPTIONS = [
-  { value: 15, label: '15 min' },
-  { value: 30, label: '30 min' },
-  { value: 45, label: '45 min' },
-  { value: 60, label: '1 hour' },
-  { value: 90, label: '1.5 hours' },
-  { value: 120, label: '2 hours' },
-];
 
 // ── Helpers ──
 
@@ -176,41 +88,40 @@ function formatTime(dateStr: string) {
   return new Date(dateStr).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-function formatDateTimeLocal(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  const h = String(date.getHours()).padStart(2, '0');
-  const min = String(date.getMinutes()).padStart(2, '0');
-  return `${y}-${m}-${d}T${h}:${min}`;
+function stripHtml(html: string) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || '';
+}
+
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs > 1 ? 's' : ''} ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days > 1 ? 's' : ''} ago`;
 }
 
 // ── Component ──
 
 export default function Interviews() {
-  const user = useAuthStore((s) => s.user);
+  const navigate = useNavigate();
 
   // Data
   const [candidates, setCandidates] = useState<InterviewCandidate[]>([]);
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Detail drawer
-  const [selectedApplicantId, setSelectedApplicantId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<ApplicantDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
+  // Selected interview detail
+  const [selectedInterview, setSelectedInterview] = useState<Interview | null>(null);
+  const [emails, setEmails] = useState<EmailLog[]>([]);
+  const [emailsLoading, setEmailsLoading] = useState(false);
 
-  // Schedule modal
-  const [scheduleModal, setScheduleModal] = useState<InterviewCandidate | null>(null);
-  const [scheduleForm, setScheduleForm] = useState({
-    scheduledAt: '',
-    durationMinutes: 60,
-    medium: 'google_meet',
-    meetingLink: '',
-    emailSubject: '',
-    emailBody: '',
-  });
-  const [scheduling, setScheduling] = useState(false);
+  // Email body modal
+  const [emailModal, setEmailModal] = useState<EmailLog | null>(null);
 
   // Delete confirmation
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -221,10 +132,7 @@ export default function Interviews() {
 
   // ── Fetch data ──
   useEffect(() => {
-    Promise.all([
-      api.get('/interviews/candidates'),
-      api.get('/interviews'),
-    ])
+    Promise.all([api.get('/interviews/candidates'), api.get('/interviews')])
       .then(([candidatesRes, interviewsRes]) => {
         setCandidates(candidatesRes.data);
         setInterviews(interviewsRes.data);
@@ -233,24 +141,23 @@ export default function Interviews() {
       .finally(() => setLoading(false));
   }, []);
 
-  // ── Fetch applicant detail ──
+  // ── Fetch emails when interview selected ──
   useEffect(() => {
-    if (!selectedApplicantId) {
-      setDetail(null);
+    if (!selectedInterview) {
+      setEmails([]);
       return;
     }
-    setDetailLoading(true);
+    setEmailsLoading(true);
     api
-      .get(`/applicants/${selectedApplicantId}`)
-      .then((res) => setDetail(res.data))
+      .get(`/interviews/emails/${selectedInterview.applicantId}`)
+      .then((res) => setEmails(res.data))
       .catch(console.error)
-      .finally(() => setDetailLoading(false));
-  }, [selectedApplicantId]);
+      .finally(() => setEmailsLoading(false));
+  }, [selectedInterview]);
 
   // ── Interview grouping ──
-  const filteredInterviews = statusFilter === 'ALL'
-    ? interviews
-    : interviews.filter((i) => i.status === statusFilter);
+  const filteredInterviews =
+    statusFilter === 'ALL' ? interviews : interviews.filter((i) => i.status === statusFilter);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -269,68 +176,13 @@ export default function Interviews() {
     return new Date(i.scheduledAt) < today;
   });
 
-  // ── Open schedule modal ──
-  function openScheduleModal(candidate: InterviewCandidate) {
-    const defaultDate = new Date();
-    defaultDate.setDate(defaultDate.getDate() + 1);
-    defaultDate.setHours(10, 0, 0, 0);
-
-    setScheduleForm({
-      scheduledAt: formatDateTimeLocal(defaultDate),
-      durationMinutes: 60,
-      medium: 'google_meet',
-      meetingLink: '',
-      emailSubject: `Interview Invitation — ${candidate.job.title}`,
-      emailBody: `<p>Hi ${candidate.firstName},</p><p>We'd like to invite you for an interview for the <strong>${candidate.job.title}</strong> position.</p><p>Please find the details below. We look forward to speaking with you!</p><p>Best regards</p>`,
-    });
-    setScheduleModal(candidate);
-  }
-
-  // ── Submit schedule ──
-  async function handleSchedule() {
-    if (!scheduleModal || scheduling) return;
-    setScheduling(true);
-    try {
-      await api.post('/interviews', {
-        applicantId: scheduleModal.id,
-        jobId: scheduleModal.job.id,
-        scheduledAt: scheduleForm.scheduledAt,
-        durationMinutes: scheduleForm.durationMinutes,
-        medium: scheduleForm.medium,
-        meetingLink: scheduleForm.meetingLink || '',
-        emailSubject: scheduleForm.emailSubject,
-        emailBody: scheduleForm.emailBody,
-      });
-
-      // Refresh data
-      const [candidatesRes, interviewsRes] = await Promise.all([
-        api.get('/interviews/candidates'),
-        api.get('/interviews'),
-      ]);
-      setCandidates(candidatesRes.data);
-      setInterviews(interviewsRes.data);
-      setScheduleModal(null);
-    } catch (err) {
-      console.error('Failed to schedule interview:', err);
-    } finally {
-      setScheduling(false);
-    }
-  }
-
-  // ── Detail helpers ──
-  function getFieldValue(fieldId: string): string {
-    if (!detail) return '';
-    const d = detail.applicationData.find((ad) => ad.fieldId === fieldId);
-    if (!d) return '';
-    return typeof d.value === 'string' ? d.value : String(d.value ?? '');
-  }
-
   // ── Delete interview ──
   async function handleDelete(id: string) {
     setDeleting(true);
     try {
       await api.delete(`/interviews/${id}`);
       setInterviews((prev) => prev.filter((i) => i.id !== id));
+      if (selectedInterview?.id === id) setSelectedInterview(null);
       setDeleteConfirm(null);
     } catch (err) {
       console.error('Failed to delete interview:', err);
@@ -343,9 +195,10 @@ export default function Interviews() {
   async function handleStatusChange(id: string, status: string) {
     try {
       await api.patch(`/interviews/${id}/status`, { status });
-      setInterviews((prev) =>
-        prev.map((i) => (i.id === id ? { ...i, status } : i))
-      );
+      setInterviews((prev) => prev.map((i) => (i.id === id ? { ...i, status } : i)));
+      if (selectedInterview?.id === id) {
+        setSelectedInterview((prev) => (prev ? { ...prev, status } : null));
+      }
     } catch (err) {
       console.error('Failed to update interview status:', err);
     }
@@ -358,13 +211,305 @@ export default function Interviews() {
         <h1 className="text-xl font-bold text-vb-text">Interviews</h1>
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="bg-vb-card rounded-xl h-32 border border-vb-border animate-pulse" />
+            <div
+              key={i}
+              className="bg-vb-card rounded-xl h-32 border border-vb-border animate-pulse"
+            />
           ))}
         </div>
       </div>
     );
   }
 
+  // ── INTERVIEW DETAIL VIEW ──
+  if (selectedInterview) {
+    return (
+      <div className="space-y-6">
+        {/* Back header */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setSelectedInterview(null)}
+            className="p-2 text-vb-text-muted hover:text-vb-text rounded-lg hover:bg-vb-card transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div className="flex-1">
+            <h1 className="text-xl font-bold text-vb-text">
+              {selectedInterview.candidateName}
+            </h1>
+            <p className="text-sm text-vb-text-muted flex items-center gap-2">
+              <Briefcase className="w-3.5 h-3.5" />
+              {selectedInterview.jobTitle}
+            </p>
+          </div>
+          <span
+            className={`text-xs px-3 py-1.5 rounded-lg font-medium ${
+              STATUS_STYLES[selectedInterview.status] || ''
+            }`}
+          >
+            {selectedInterview.status.toLowerCase().replace('_', ' ')}
+          </span>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Left: Schedule details */}
+          <div className="space-y-5">
+            {/* Schedule info card */}
+            <div className="bg-vb-card border border-vb-border rounded-xl p-5 space-y-4">
+              <h3 className="text-sm font-semibold text-vb-text flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-brand" />
+                Schedule Details
+              </h3>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-[10px] text-vb-text-muted uppercase tracking-wider mb-1">
+                    Date
+                  </p>
+                  <p className="text-sm text-vb-text font-medium">
+                    {new Date(selectedInterview.scheduledAt).toLocaleDateString('en-US', {
+                      weekday: 'long',
+                      month: 'long',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-vb-text-muted uppercase tracking-wider mb-1">
+                    Time
+                  </p>
+                  <p className="text-sm text-vb-text font-medium">
+                    {new Date(selectedInterview.scheduledAt).toLocaleTimeString('en-US', {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-vb-text-muted uppercase tracking-wider mb-1">
+                    Duration
+                  </p>
+                  <p className="text-sm text-vb-text">
+                    {selectedInterview.durationMinutes} minutes
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-vb-text-muted uppercase tracking-wider mb-1">
+                    Platform
+                  </p>
+                  <p className="text-sm text-vb-text flex items-center gap-1.5">
+                    <Video className="w-3.5 h-3.5 text-vb-text-muted" />
+                    {selectedInterview.notes?.replace('Medium: ', '') || 'Video Call'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-vb-border space-y-2.5">
+                <div>
+                  <p className="text-[10px] text-vb-text-muted uppercase tracking-wider mb-1">
+                    Interviewer
+                  </p>
+                  <p className="text-sm text-vb-text">{selectedInterview.interviewer}</p>
+                </div>
+                {selectedInterview.meetingLink && (
+                  <div>
+                    <p className="text-[10px] text-vb-text-muted uppercase tracking-wider mb-1">
+                      Meeting Link
+                    </p>
+                    <a
+                      href={selectedInterview.meetingLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-brand hover:underline flex items-center gap-1"
+                    >
+                      {selectedInterview.meetingLink}
+                      <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Contact info */}
+            <div className="bg-vb-card border border-vb-border rounded-xl p-5 space-y-3">
+              <h3 className="text-sm font-semibold text-vb-text flex items-center gap-2">
+                <User className="w-4 h-4 text-brand" />
+                Contact Information
+              </h3>
+              <div className="space-y-2">
+                <div className="flex items-center gap-3 text-sm">
+                  <Mail className="w-4 h-4 text-vb-text-muted flex-shrink-0" />
+                  <a
+                    href={`mailto:${selectedInterview.candidateEmail}`}
+                    className="text-brand hover:underline"
+                  >
+                    {selectedInterview.candidateEmail}
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-3">
+              {selectedInterview.status === 'SCHEDULED' && selectedInterview.meetingLink && (
+                <a
+                  href={selectedInterview.meetingLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 px-4 py-2.5 bg-brand text-white text-sm rounded-lg hover:bg-brand-dark transition-colors"
+                >
+                  <Video className="w-4 h-4" />
+                  Join Meeting
+                </a>
+              )}
+              <button
+                onClick={() => setDeleteConfirm(selectedInterview.id)}
+                className="flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 bg-red-500/10 rounded-lg hover:bg-red-500/20 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete
+              </button>
+            </div>
+          </div>
+
+          {/* Right: Emails sent */}
+          <div className="space-y-5">
+            <div className="bg-vb-card border border-vb-border rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-vb-text flex items-center gap-2 mb-4">
+                <Mail className="w-4 h-4 text-brand" />
+                Messages Sent
+              </h3>
+
+              {emailsLoading ? (
+                <div className="space-y-3">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="h-20 bg-vb-muted rounded-lg animate-pulse" />
+                  ))}
+                </div>
+              ) : emails.length === 0 ? (
+                <div className="text-center py-8">
+                  <Mail className="w-8 h-8 text-vb-text-muted mx-auto mb-2" />
+                  <p className="text-sm text-vb-text-muted">No emails sent yet</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {emails.map((email) => {
+                    const snippet = stripHtml(email.body).slice(0, 120);
+                    return (
+                      <button
+                        key={email.id}
+                        onClick={() => setEmailModal(email)}
+                        className="w-full text-left bg-vb-surface border border-vb-border rounded-lg p-4 hover:border-brand/30 hover:bg-vb-surface/80 transition-colors group"
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <p className="text-sm font-medium text-vb-text group-hover:text-brand transition-colors truncate pr-3">
+                            {email.subject}
+                          </p>
+                          <span className="text-[10px] text-vb-text-muted flex-shrink-0">
+                            {timeAgo(email.sentAt)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-vb-text-muted line-clamp-2">
+                          {snippet}
+                          {snippet.length >= 120 ? '...' : ''}
+                        </p>
+                        <p className="text-[10px] text-vb-text-muted mt-2">
+                          Sent by {email.sentBy}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Delete confirmation modal */}
+        {deleteConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => setDeleteConfirm(null)}
+            />
+            <div className="relative bg-vb-bg border border-vb-border rounded-xl w-full max-w-sm shadow-xl p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
+                  <Trash2 className="w-5 h-5 text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-vb-text">Delete Interview</h3>
+                  <p className="text-xs text-vb-text-muted">This action cannot be undone.</p>
+                </div>
+              </div>
+              <p className="text-sm text-vb-text-secondary mb-5">
+                Are you sure you want to delete this scheduled interview?
+              </p>
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  onClick={() => setDeleteConfirm(null)}
+                  className="px-4 py-2 text-sm text-vb-text-secondary hover:text-vb-text rounded-lg hover:bg-vb-card transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDelete(deleteConfirm)}
+                  disabled={deleting}
+                  className="px-4 py-2 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
+                >
+                  {deleting ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Email body modal */}
+        {emailModal && (
+          <div className="fixed inset-0 z-50 flex items-start justify-center pt-[5vh] overflow-y-auto">
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => setEmailModal(null)}
+            />
+            <div className="relative bg-vb-bg border border-vb-border rounded-xl w-full max-w-2xl shadow-xl mb-10">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-vb-border">
+                <div>
+                  <h3 className="text-sm font-semibold text-vb-text">
+                    {emailModal.subject}
+                  </h3>
+                  <p className="text-xs text-vb-text-muted mt-0.5">
+                    Sent by {emailModal.sentBy} &middot;{' '}
+                    {new Date(emailModal.sentAt).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setEmailModal(null)}
+                  className="p-2 text-vb-text-muted hover:text-vb-text rounded-lg hover:bg-vb-card transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="px-6 py-5">
+                <div
+                  className="prose prose-sm max-w-none text-vb-text-secondary [&_a]:text-brand"
+                  dangerouslySetInnerHTML={{ __html: emailModal.body }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── MAIN LIST VIEW ──
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -377,12 +522,24 @@ export default function Interviews() {
             className="appearance-none bg-vb-surface border border-vb-border rounded-lg px-4 py-1.5 pr-8 text-sm text-vb-text outline-none focus:border-brand cursor-pointer"
           >
             <option value="ALL">All Interviews ({interviews.length})</option>
-            <option value="SCHEDULED">Scheduled ({interviews.filter((i) => i.status === 'SCHEDULED').length})</option>
-            <option value="CONFIRMED">Confirmed ({interviews.filter((i) => i.status === 'CONFIRMED').length})</option>
-            <option value="COMPLETED">Completed ({interviews.filter((i) => i.status === 'COMPLETED').length})</option>
-            <option value="PASSED">Passed ({interviews.filter((i) => i.status === 'PASSED').length})</option>
-            <option value="CANCELLED">Cancelled ({interviews.filter((i) => i.status === 'CANCELLED').length})</option>
-            <option value="NO_SHOW">No Show ({interviews.filter((i) => i.status === 'NO_SHOW').length})</option>
+            <option value="SCHEDULED">
+              Scheduled ({interviews.filter((i) => i.status === 'SCHEDULED').length})
+            </option>
+            <option value="CONFIRMED">
+              Confirmed ({interviews.filter((i) => i.status === 'CONFIRMED').length})
+            </option>
+            <option value="COMPLETED">
+              Completed ({interviews.filter((i) => i.status === 'COMPLETED').length})
+            </option>
+            <option value="PASSED">
+              Passed ({interviews.filter((i) => i.status === 'PASSED').length})
+            </option>
+            <option value="CANCELLED">
+              Cancelled ({interviews.filter((i) => i.status === 'CANCELLED').length})
+            </option>
+            <option value="NO_SHOW">
+              No Show ({interviews.filter((i) => i.status === 'NO_SHOW').length})
+            </option>
           </select>
           <ChevronDown className="w-4 h-4 text-vb-text-muted absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
@@ -391,7 +548,9 @@ export default function Interviews() {
       {/* ── CANDIDATES AWAITING SCHEDULE ── */}
       {(() => {
         const unscheduled = candidates.filter((c) => {
-          const hasActive = c.interviews.some((i) => i.status === 'SCHEDULED' || i.status === 'CONFIRMED');
+          const hasActive = c.interviews.some(
+            (i) => i.status === 'SCHEDULED' || i.status === 'CONFIRMED'
+          );
           return !hasActive;
         });
         if (unscheduled.length === 0) return null;
@@ -418,7 +577,7 @@ export default function Interviews() {
                     </div>
                   </div>
                   <button
-                    onClick={() => openScheduleModal(c)}
+                    onClick={() => navigate(`/interviews/schedule/${c.id}`)}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-brand text-white text-xs font-medium rounded-lg hover:bg-brand-dark transition-colors flex-shrink-0"
                   >
                     <Send className="w-3.5 h-3.5" />
@@ -436,7 +595,9 @@ export default function Interviews() {
         <div className="bg-vb-surface border border-vb-border rounded-xl p-12 text-center">
           <Calendar className="w-10 h-10 text-vb-text-muted mx-auto mb-3" />
           <p className="text-vb-text-secondary text-sm">
-            {statusFilter === 'ALL' ? 'No interviews yet.' : `No ${statusFilter.toLowerCase().replace('_', ' ')} interviews.`}
+            {statusFilter === 'ALL'
+              ? 'No interviews yet.'
+              : `No ${statusFilter.toLowerCase().replace('_', ' ')} interviews.`}
           </p>
         </div>
       ) : (
@@ -446,7 +607,13 @@ export default function Interviews() {
               <h2 className="text-sm font-medium text-vb-text-secondary mb-3">Today</h2>
               <div className="grid gap-3 md:grid-cols-2">
                 {todayInterviews.map((interview) => (
-                  <InterviewCard key={interview.id} interview={interview} onClickCandidate={setSelectedApplicantId} onDelete={setDeleteConfirm} onStatusChange={handleStatusChange} />
+                  <InterviewCard
+                    key={interview.id}
+                    interview={interview}
+                    onClickCard={setSelectedInterview}
+                    onDelete={setDeleteConfirm}
+                    onStatusChange={handleStatusChange}
+                  />
                 ))}
               </div>
             </div>
@@ -456,7 +623,13 @@ export default function Interviews() {
               <h2 className="text-sm font-medium text-vb-text-secondary mb-3">Upcoming</h2>
               <div className="grid gap-3 md:grid-cols-2">
                 {upcomingInterviews.map((interview) => (
-                  <InterviewCard key={interview.id} interview={interview} onClickCandidate={setSelectedApplicantId} onDelete={setDeleteConfirm} onStatusChange={handleStatusChange} />
+                  <InterviewCard
+                    key={interview.id}
+                    interview={interview}
+                    onClickCard={setSelectedInterview}
+                    onDelete={setDeleteConfirm}
+                    onStatusChange={handleStatusChange}
+                  />
                 ))}
               </div>
             </div>
@@ -466,7 +639,13 @@ export default function Interviews() {
               <h2 className="text-sm font-medium text-vb-text-secondary mb-3">Past</h2>
               <div className="grid gap-3 md:grid-cols-2">
                 {pastInterviews.map((interview) => (
-                  <InterviewCard key={interview.id} interview={interview} onClickCandidate={setSelectedApplicantId} onDelete={setDeleteConfirm} onStatusChange={handleStatusChange} />
+                  <InterviewCard
+                    key={interview.id}
+                    interview={interview}
+                    onClickCard={setSelectedInterview}
+                    onDelete={setDeleteConfirm}
+                    onStatusChange={handleStatusChange}
+                  />
                 ))}
               </div>
             </div>
@@ -474,292 +653,13 @@ export default function Interviews() {
         </div>
       )}
 
-      {/* ── APPLICANT DETAIL DRAWER ── */}
-      {selectedApplicantId && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setSelectedApplicantId(null)} />
-
-          <div className="relative w-full max-w-lg bg-vb-bg border-l border-vb-border flex flex-col animate-in slide-in-from-right">
-            {detailLoading || !detail ? (
-              <div className="p-6 space-y-4">
-                <div className="h-8 bg-vb-muted rounded animate-pulse w-48" />
-                <div className="h-4 bg-vb-muted rounded animate-pulse w-32" />
-                <div className="h-40 bg-vb-muted rounded animate-pulse" />
-              </div>
-            ) : (
-              <>
-                {/* Header */}
-                <div className="sticky top-0 bg-vb-bg border-b border-vb-border px-6 py-4 z-10 flex-shrink-0">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full bg-brand/10 flex items-center justify-center">
-                        <User className="w-6 h-6 text-brand" />
-                      </div>
-                      <div>
-                        <h2 className="text-lg font-semibold text-vb-text">
-                          {detail.firstName} {detail.lastName}
-                        </h2>
-                        <p className="text-sm text-vb-text-muted flex items-center gap-2">
-                          <Briefcase className="w-3.5 h-3.5" />
-                          {detail.job.title}
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setSelectedApplicantId(null)}
-                      className="p-2 text-vb-text-muted hover:text-vb-text rounded-lg hover:bg-vb-card transition-colors"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                  {/* Stage Badge + Date */}
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="text-xs px-2.5 py-1 rounded-full font-medium"
-                      style={{
-                        backgroundColor: `${detail.currentStage.color}15`,
-                        color: detail.currentStage.color,
-                      }}
-                    >
-                      {detail.currentStage.name}
-                    </span>
-                    <span className="text-xs text-vb-text-muted">
-                      Applied{' '}
-                      {new Date(detail.createdAt).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })}
-                    </span>
-                  </div>
-
-                  {/* Schedule Interview Button */}
-                  {(() => {
-                    const candidate = candidates.find((c) => c.id === detail.id);
-                    if (candidate) {
-                      return (
-                        <button
-                          onClick={() => {
-                            setSelectedApplicantId(null);
-                            openScheduleModal(candidate);
-                          }}
-                          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-brand text-white text-sm rounded-lg hover:bg-brand-dark transition-colors"
-                        >
-                          <Send className="w-4 h-4" />
-                          Send Interview Invite
-                        </button>
-                      );
-                    }
-                    return null;
-                  })()}
-
-                  {/* AI Report */}
-                  {detail.aiReport && (
-                    <div className="bg-vb-surface border border-vb-border rounded-lg p-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Sparkles className="w-4 h-4 text-purple-400" />
-                        <h4 className="text-sm font-medium text-vb-text">AI Screening</h4>
-                      </div>
-
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`text-2xl font-bold ${
-                                detail.aiReport.overallScore >= 80
-                                  ? 'text-green-400'
-                                  : detail.aiReport.overallScore >= 50
-                                  ? 'text-amber-400'
-                                  : 'text-red-400'
-                              }`}
-                            >
-                              {detail.aiReport.overallScore}%
-                            </span>
-                            <span className="text-xs text-vb-text-muted">Overall Score</span>
-                          </div>
-                          <span
-                            className={`text-xs font-medium ${
-                              RECOMMENDATION_STYLES[detail.aiReport.recommendation]?.color || 'text-vb-text-muted'
-                            }`}
-                          >
-                            {RECOMMENDATION_STYLES[detail.aiReport.recommendation]?.label ||
-                              detail.aiReport.recommendation}
-                          </span>
-                        </div>
-
-                        <div className="space-y-1.5">
-                          {Object.entries(detail.aiReport.dimensionScores).map(([key, val]) => (
-                            <div key={key} className="flex items-center gap-2">
-                              <span className="text-[10px] text-vb-text-muted w-24 truncate">
-                                {DIMENSION_LABELS[key] || key}
-                              </span>
-                              <div className="flex-1 h-1.5 bg-vb-muted rounded-full overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full ${
-                                    val >= 70 ? 'bg-green-500' : val >= 40 ? 'bg-amber-500' : 'bg-red-500'
-                                  }`}
-                                  style={{ width: `${val}%` }}
-                                />
-                              </div>
-                              <span className="text-[10px] text-vb-text-secondary w-7 text-right">{val}%</span>
-                            </div>
-                          ))}
-                        </div>
-
-                        {detail.aiReport.strengths.length > 0 && (
-                          <div>
-                            <p className="text-[10px] text-vb-text-muted mb-1">Strengths</p>
-                            {detail.aiReport.strengths.map((s, i) => (
-                              <div key={i} className="flex items-start gap-1.5 text-xs text-green-400 mb-0.5">
-                                <CheckCircle2 className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                                <span>{s}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {detail.aiReport.concerns.length > 0 && (
-                          <div>
-                            <p className="text-[10px] text-vb-text-muted mb-1">Concerns</p>
-                            {detail.aiReport.concerns.map((c, i) => (
-                              <div key={i} className="flex items-start gap-1.5 text-xs text-red-400 mb-0.5">
-                                <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                                <span>{c}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Contact Information */}
-                  <section className="space-y-3">
-                    <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">
-                      Contact Information
-                    </h4>
-                    <div className="bg-vb-surface border border-vb-border rounded-lg p-4 space-y-2.5">
-                      <div className="flex items-center gap-3 text-sm">
-                        <Mail className="w-4 h-4 text-vb-text-muted flex-shrink-0" />
-                        <a href={`mailto:${detail.email}`} className="text-brand hover:underline">
-                          {detail.email}
-                        </a>
-                      </div>
-                      {detail.phone && (
-                        <div className="flex items-center gap-3 text-sm">
-                          <Phone className="w-4 h-4 text-vb-text-muted flex-shrink-0" />
-                          <span className="text-vb-text">{detail.phone}</span>
-                        </div>
-                      )}
-                      {detail.linkedinUrl && (
-                        <div className="flex items-center gap-3 text-sm">
-                          <Linkedin className="w-4 h-4 text-vb-text-muted flex-shrink-0" />
-                          <a
-                            href={detail.linkedinUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-brand hover:underline flex items-center gap-1"
-                          >
-                            LinkedIn Profile <ExternalLink className="w-3 h-3" />
-                          </a>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-3 text-sm">
-                        <Briefcase className="w-4 h-4 text-vb-text-muted flex-shrink-0" />
-                        <span className="text-vb-text-secondary">
-                          Source: {SOURCE_LABELS[detail.source] || detail.source}
-                        </span>
-                      </div>
-                    </div>
-                  </section>
-
-                  {/* Application Responses */}
-                  {detail.applicationData.length > 0 && (
-                    <section className="space-y-3">
-                      <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">
-                        Application Responses
-                      </h4>
-                      <div className="bg-vb-surface border border-vb-border rounded-lg divide-y divide-vb-border">
-                        {detail.job.applicationForm?.fields
-                          ?.filter((f) => !f.system)
-                          .map((field) => {
-                            const value = getFieldValue(field.id);
-                            if (!value && !field.required) return null;
-                            return (
-                              <div key={field.id} className="px-4 py-3">
-                                <p className="text-xs text-vb-text-muted mb-1 flex items-center gap-1">
-                                  {field.label}
-                                  {field.required && <span className="text-red-400">*</span>}
-                                </p>
-                                {!value ? (
-                                  <p className="text-sm text-vb-text-faint italic">Not provided</p>
-                                ) : field.type === 'long_text' ? (
-                                  <p className="text-sm text-vb-text whitespace-pre-wrap">{value}</p>
-                                ) : field.type === 'url' ? (
-                                  <a
-                                    href={value}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-sm text-brand hover:underline flex items-center gap-1"
-                                  >
-                                    {value} <ExternalLink className="w-3 h-3" />
-                                  </a>
-                                ) : (
-                                  <p className="text-sm text-vb-text">{value}</p>
-                                )}
-                              </div>
-                            );
-                          })}
-                      </div>
-                    </section>
-                  )}
-
-                  {/* Uploaded Files */}
-                  {detail.uploadedFiles.length > 0 && (
-                    <section className="space-y-3">
-                      <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">
-                        Submitted Files
-                      </h4>
-                      <div className="space-y-2">
-                        {detail.uploadedFiles.map((file) => (
-                          <a
-                            key={file.id}
-                            href={`/api/uploads/${file.storageUrl.replace(/.*[/\\]/, '')}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-3 bg-vb-surface border border-vb-border rounded-lg px-4 py-3 hover:bg-vb-card transition-colors"
-                          >
-                            {file.mimeType?.startsWith('video/') ? (
-                              <Video className="w-5 h-5 text-brand flex-shrink-0" />
-                            ) : (
-                              <FileText className="w-5 h-5 text-brand flex-shrink-0" />
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm text-vb-text truncate">{file.fileName}</p>
-                              <p className="text-xs text-vb-text-muted capitalize">
-                                {file.type.replace('_', ' ')}
-                              </p>
-                            </div>
-                            <ExternalLink className="w-4 h-4 text-vb-text-muted" />
-                          </a>
-                        ))}
-                      </div>
-                    </section>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* ── DELETE CONFIRMATION MODAL ── */}
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setDeleteConfirm(null)} />
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setDeleteConfirm(null)}
+          />
           <div className="relative bg-vb-bg border border-vb-border rounded-xl w-full max-w-sm shadow-xl p-6">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
@@ -791,164 +691,6 @@ export default function Interviews() {
           </div>
         </div>
       )}
-
-      {/* ── SCHEDULE INTERVIEW MODAL ── */}
-      {scheduleModal && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-[5vh] overflow-y-auto">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setScheduleModal(null)} />
-
-          <div className="relative bg-vb-bg border border-vb-border rounded-xl w-full max-w-2xl shadow-xl mb-10">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-vb-border">
-              <div>
-                <h2 className="text-base font-semibold text-vb-text">Schedule Interview</h2>
-                <p className="text-xs text-vb-text-muted mt-0.5">
-                  {scheduleModal.firstName} {scheduleModal.lastName} · {scheduleModal.job.title}
-                </p>
-              </div>
-              <button
-                onClick={() => setScheduleModal(null)}
-                className="p-2 text-vb-text-muted hover:text-vb-text rounded-lg hover:bg-vb-card transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="px-6 py-5 space-y-5">
-              {/* Date/Time + Duration row */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-vb-text-secondary mb-1.5">
-                    Date & Time
-                  </label>
-                  <input
-                    type="datetime-local"
-                    value={scheduleForm.scheduledAt}
-                    onChange={(e) => setScheduleForm({ ...scheduleForm, scheduledAt: e.target.value })}
-                    className="w-full bg-vb-surface border border-vb-border rounded-lg px-3 py-2 text-sm text-vb-text outline-none focus:border-brand"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-vb-text-secondary mb-1.5">
-                    Duration
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={scheduleForm.durationMinutes}
-                      onChange={(e) =>
-                        setScheduleForm({ ...scheduleForm, durationMinutes: Number(e.target.value) })
-                      }
-                      className="w-full appearance-none bg-vb-surface border border-vb-border rounded-lg px-3 py-2 text-sm text-vb-text outline-none focus:border-brand pr-8"
-                    >
-                      {DURATION_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="w-4 h-4 text-vb-text-muted absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Medium + Link row */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-vb-text-secondary mb-1.5">
-                    Meeting Platform
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={scheduleForm.medium}
-                      onChange={(e) => setScheduleForm({ ...scheduleForm, medium: e.target.value })}
-                      className="w-full appearance-none bg-vb-surface border border-vb-border rounded-lg px-3 py-2 text-sm text-vb-text outline-none focus:border-brand pr-8"
-                    >
-                      {MEDIUM_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="w-4 h-4 text-vb-text-muted absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-vb-text-secondary mb-1.5">
-                    Meeting Link
-                  </label>
-                  <div className="relative">
-                    <Link2 className="w-4 h-4 text-vb-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="url"
-                      placeholder="https://meet.google.com/..."
-                      value={scheduleForm.meetingLink}
-                      onChange={(e) => setScheduleForm({ ...scheduleForm, meetingLink: e.target.value })}
-                      className="w-full bg-vb-surface border border-vb-border rounded-lg pl-9 pr-3 py-2 text-sm text-vb-text outline-none focus:border-brand placeholder:text-vb-text-muted"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Email Section */}
-              <div className="space-y-3 border-t border-vb-border pt-5">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium text-vb-text">Interview Invitation Email</h3>
-                  <span className="text-xs text-vb-text-muted flex items-center gap-1">
-                    <Mail className="w-3.5 h-3.5" />
-                    From: {user?.email || 'you'}
-                  </span>
-                </div>
-
-                <div className="text-xs text-vb-text-muted">
-                  To: {scheduleModal.email}
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-vb-text-secondary mb-1.5">
-                    Subject
-                  </label>
-                  <input
-                    type="text"
-                    value={scheduleForm.emailSubject}
-                    onChange={(e) => setScheduleForm({ ...scheduleForm, emailSubject: e.target.value })}
-                    className="w-full bg-vb-surface border border-vb-border rounded-lg px-3 py-2 text-sm text-vb-text outline-none focus:border-brand"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-vb-text-secondary mb-1.5">
-                    Email Body
-                  </label>
-                  <RichTextEditor
-                    value={scheduleForm.emailBody}
-                    onChange={(html) => setScheduleForm({ ...scheduleForm, emailBody: html })}
-                    placeholder="Write the interview invitation email..."
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-vb-border">
-              <button
-                onClick={() => setScheduleModal(null)}
-                className="px-4 py-2 text-sm text-vb-text-secondary hover:text-vb-text rounded-lg hover:bg-vb-card transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSchedule}
-                disabled={scheduling || !scheduleForm.scheduledAt || !scheduleForm.emailSubject || !scheduleForm.emailBody}
-                className="flex items-center gap-2 px-5 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Send className="w-4 h-4" />
-                {scheduling ? 'Scheduling...' : 'Schedule & Save Email'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -957,12 +699,12 @@ export default function Interviews() {
 
 function InterviewCard({
   interview,
-  onClickCandidate,
+  onClickCard,
   onDelete,
   onStatusChange,
 }: {
   interview: Interview;
-  onClickCandidate: (id: string) => void;
+  onClickCard: (interview: Interview) => void;
   onDelete: (id: string) => void;
   onStatusChange: (id: string, status: string) => void;
 }) {
@@ -978,12 +720,12 @@ function InterviewCard({
   ];
 
   return (
-    <div className="bg-vb-card border border-vb-border rounded-xl p-4 hover:border-vb-muted transition-colors">
+    <div
+      className="bg-vb-card border border-vb-border rounded-xl p-4 hover:border-brand/30 transition-colors cursor-pointer"
+      onClick={() => onClickCard(interview)}
+    >
       <div className="flex items-start justify-between">
-        <div
-          className="flex items-center gap-3 cursor-pointer"
-          onClick={() => onClickCandidate(interview.applicantId)}
-        >
+        <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-vb-muted flex items-center justify-center">
             <User className="w-4 h-4 text-vb-text-secondary" />
           </div>
@@ -992,7 +734,7 @@ function InterviewCard({
             <p className="text-vb-text-muted text-xs">{interview.jobTitle}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
           <div className="relative">
             <button
               onClick={() => setStatusOpen(!statusOpen)}
@@ -1005,7 +747,10 @@ function InterviewCard({
             </button>
             {statusOpen && (
               <>
-                <div className="fixed inset-0 z-40" onClick={() => setStatusOpen(false)} />
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setStatusOpen(false)}
+                />
                 <div className="absolute right-0 top-full mt-1 z-50 bg-vb-bg border border-vb-border rounded-lg shadow-xl py-1 min-w-[140px]">
                   {STATUS_OPTIONS.filter((o) => o.value !== interview.status).map((opt) => (
                     <button
@@ -1016,7 +761,11 @@ function InterviewCard({
                       }}
                       className="w-full text-left px-3 py-1.5 text-xs text-vb-text-secondary hover:bg-vb-surface hover:text-vb-text transition-colors flex items-center gap-2"
                     >
-                      <span className={`w-2 h-2 rounded-full ${STATUS_STYLES[opt.value]?.split(' ')[0] || 'bg-gray-500/10'}`} />
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          STATUS_STYLES[opt.value]?.split(' ')[0] || 'bg-gray-500/10'
+                        }`}
+                      />
                       {opt.label}
                     </button>
                   ))}
@@ -1041,7 +790,7 @@ function InterviewCard({
         </span>
         <span className="flex items-center gap-1">
           <Clock className="w-3.5 h-3.5" />
-          {formatTime(interview.scheduledAt)} · {interview.durationMinutes} min
+          {formatTime(interview.scheduledAt)} &middot; {interview.durationMinutes} min
         </span>
         <span className="flex items-center gap-1">
           <Video className="w-3.5 h-3.5" />
@@ -1050,13 +799,16 @@ function InterviewCard({
       </div>
 
       <div className="mt-3 pt-3 border-t border-vb-border flex items-center justify-between">
-        <span className="text-vb-text-muted text-xs">Interviewer: {interview.interviewer}</span>
+        <span className="text-vb-text-muted text-xs">
+          Interviewer: {interview.interviewer}
+        </span>
         {interview.status === 'SCHEDULED' && interview.meetingLink && (
           <a
             href={interview.meetingLink}
             target="_blank"
             rel="noopener noreferrer"
             className="text-brand text-xs hover:text-brand-light flex items-center gap-1"
+            onClick={(e) => e.stopPropagation()}
           >
             <Video className="w-3 h-3" />
             Join Meeting

@@ -148,7 +148,94 @@ function getFallbackInsights(ctx: InsightContext): AIDashboardInsight[] {
   return insights.slice(0, 3);
 }
 
-// ─── AI Applicant Screening ─────────────────────────────
+// ─── AI Interview Email Composition ─────────────────────────────
+
+interface ComposeEmailContext {
+  candidateFirstName: string;
+  candidateLastName: string;
+  jobTitle: string;
+  companyName: string;
+  scheduledDate: string;   // e.g. "Monday, June 2, 2025"
+  scheduledTime: string;   // e.g. "2:00 PM"
+  durationMinutes: number;
+  platform: string;        // e.g. "Google Meet"
+  meetingLink: string;
+  interviewerName: string;
+}
+
+export async function composeInterviewEmail(
+  context: ComposeEmailContext,
+): Promise<{ subject: string; body: string }> {
+  const fallback = getFallbackInterviewEmail(context);
+  if (!groq) return fallback;
+
+  try {
+    const prompt = `Write a professional interview invitation email for:
+- Candidate: ${context.candidateFirstName} ${context.candidateLastName}
+- Position: ${context.jobTitle}
+- Company: ${context.companyName}
+- Date: ${context.scheduledDate}
+- Time: ${context.scheduledTime}
+- Duration: ${context.durationMinutes} minutes
+- Platform: ${context.platform}
+- Meeting Link: ${context.meetingLink}
+- Interviewer: ${context.interviewerName}
+
+Write a warm, professional email. Include all the details above clearly. Do NOT use placeholder brackets. Use actual values provided.`;
+
+    const completion = await groq.chat.completions.create({
+      model: 'llama-3.1-8b-instant',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a professional HR email writer. Write interview invitation emails that are warm, clear, and informative. Respond with valid JSON only — no markdown, no explanation. The JSON must have: subject (string, concise email subject line), body (string, the full email body as clean HTML with <p>, <strong>, <ul>, <li> tags — do NOT use markdown). The email should include: greeting by first name, congratulations on being selected, interview details (date, time, duration, platform), meeting link as a clickable <a> tag, what to prepare, and a professional sign-off from the interviewer. Keep it concise but thorough.`,
+        },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.5,
+      max_tokens: 800,
+    });
+
+    const text = completion.choices[0]?.message?.content?.trim() || '';
+    const parsed = JSON.parse(text);
+
+    if (parsed.subject && parsed.body) {
+      return {
+        subject: String(parsed.subject).slice(0, 200),
+        body: String(parsed.body),
+      };
+    }
+
+    return fallback;
+  } catch (err) {
+    console.error('Groq interview email composition error:', err);
+    return fallback;
+  }
+}
+
+function getFallbackInterviewEmail(ctx: ComposeEmailContext): { subject: string; body: string } {
+  const subject = `Interview Invitation: ${ctx.jobTitle} at ${ctx.companyName}`;
+  const body = `<p>Dear ${ctx.candidateFirstName},</p>
+
+<p>We are pleased to invite you to an interview for the <strong>${ctx.jobTitle}</strong> position at <strong>${ctx.companyName}</strong>.</p>
+
+<p><strong>Interview Details:</strong></p>
+<ul>
+  <li><strong>Date:</strong> ${ctx.scheduledDate}</li>
+  <li><strong>Time:</strong> ${ctx.scheduledTime}</li>
+  <li><strong>Duration:</strong> ${ctx.durationMinutes} minutes</li>
+  <li><strong>Platform:</strong> ${ctx.platform}</li>
+  <li><strong>Meeting Link:</strong> <a href="${ctx.meetingLink}">${ctx.meetingLink}</a></li>
+</ul>
+
+<p>Please ensure you have a stable internet connection and a quiet environment for the interview. If you need to reschedule, please let us know as soon as possible.</p>
+
+<p>We look forward to speaking with you!</p>
+
+<p>Best regards,<br/>${ctx.interviewerName}<br/>${ctx.companyName}</p>`;
+
+  return { subject, body };
+}
 
 interface ScreeningContext {
   applicationData: string;
