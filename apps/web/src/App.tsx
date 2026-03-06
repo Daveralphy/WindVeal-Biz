@@ -12,9 +12,8 @@ import JobDetail from '@/pages/JobDetail';
 import JobEdit from '@/pages/JobEdit';
 import Applicants from '@/pages/Applicants';
 import ApplicantDetail from '@/pages/ApplicantDetail';
-import Pipeline from '@/pages/Pipeline';
-import Interviews from '@/pages/Interviews';
 import InterviewSchedule from '@/pages/InterviewSchedule';
+import JobApplicantDetail from '@/pages/JobApplicantDetail';
 import Careers from '@/pages/Careers';
 import CareerDesign from '@/pages/CareerDesign';
 import Analytics from '@/pages/Analytics';
@@ -95,12 +94,11 @@ export default function App() {
           <Route path="/jobs" element={<Jobs />} />
           <Route path="/jobs/new" element={<JobNew />} />
           <Route path="/jobs/:id" element={<JobDetail />} />
+          <Route path="/jobs/:jobId/applicants/:applicantId" element={<JobApplicantDetail />} />
           <Route path="/jobs/:id/edit" element={<JobEdit />} />
           <Route path="/applicants" element={<Applicants />} />
           <Route path="/applicants/:id" element={<ApplicantDetail />} />
-          <Route path="/pipeline" element={<Pipeline />} />
-          <Route path="/interviews" element={<Interviews />} />
-          <Route path="/interviews/schedule/:applicantId" element={<InterviewSchedule />} />
+          <Route path="/jobs/:jobId/schedule-interview" element={<InterviewSchedule />} />
           <Route path="/careers" element={<Careers />} />
           <Route path="/careers/design" element={<CareerDesign />} />
           <Route path="/analytics" element={<Analytics />} />

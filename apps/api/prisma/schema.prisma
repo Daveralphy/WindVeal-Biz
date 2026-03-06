@@ -301,6 +301,7 @@ model Applicant {
   linkedinUrl     String?
   currentStageId  String
   source          ApplicantSource @default(PORTAL)
+  qualified       Boolean?
   tags            String[]        @default([])
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
@@ -398,6 +399,7 @@ model Interview {
   id              String          @id @default(cuid())
   applicantId     String
   jobId           String
+  groupId         String?
   type            InterviewType
   scheduledAt     DateTime
   durationMinutes Int             @default(60)

@@ -286,6 +286,32 @@ export async function applicantRoutes(app: FastifyInstance) {
     return updated;
   });
 
+  // Qualify or disqualify an applicant
+  app.patch<{ Params: { id: string } }>('/:id/qualify', async (request, reply) => {
+    const { organizationId } = request.user!;
+    const { qualified } = request.body as { qualified: boolean };
+
+    if (typeof qualified !== 'boolean') {
+      return reply.status(400).send({ error: 'qualified must be a boolean' });
+    }
+
+    const applicant = await prisma.applicant.findFirst({
+      where: { id: request.params.id, organizationId },
+    });
+
+    if (!applicant) {
+      return reply.status(404).send({ error: 'Applicant not found' });
+    }
+
+    const updated = await prisma.applicant.update({
+      where: { id: applicant.id },
+      data: { qualified },
+      include: { currentStage: true },
+    });
+
+    return updated;
+  });
+
   // Add note to applicant
   app.post<{ Params: { id: string } }>('/:id/notes', async (request, reply) => {
     const { organizationId, userId } = request.user!;

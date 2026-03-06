@@ -200,4 +200,49 @@ export async function jobRoutes(app: FastifyInstance) {
 
     return job.pipelineStages;
   });
+
+  // Get interviews for a job
+  app.get<{ Params: { id: string } }>('/:id/interviews', async (request, reply) => {
+    const { organizationId } = request.user!;
+    const job = await prisma.job.findFirst({
+      where: { id: request.params.id, organizationId },
+      select: { id: true },
+    });
+
+    if (!job) {
+      return reply.status(404).send({ error: 'Job not found' });
+    }
+
+    const interviews = await prisma.interview.findMany({
+      where: { jobId: job.id },
+      include: {
+        applicant: { select: { id: true, firstName: true, lastName: true, email: true } },
+      },
+      orderBy: { scheduledAt: 'desc' },
+    });
+
+    // Resolve interviewer names
+    const interviewerIds = [...new Set(interviews.flatMap((i) => i.interviewerIds))];
+    const interviewers = await prisma.user.findMany({
+      where: { id: { in: interviewerIds } },
+      select: { id: true, firstName: true, lastName: true },
+    });
+    const interviewerMap = Object.fromEntries(
+      interviewers.map((u) => [u.id, `${u.firstName} ${u.lastName}`])
+    );
+
+    return interviews.map((i) => ({
+      id: i.id,
+      applicantId: i.applicantId,
+      candidateName: `${i.applicant.firstName} ${i.applicant.lastName}`,
+      candidateEmail: i.applicant.email,
+      type: i.type,
+      scheduledAt: i.scheduledAt,
+      durationMinutes: i.durationMinutes,
+      meetingLink: i.meetingLink,
+      status: i.status,
+      groupId: i.groupId,
+      interviewer: i.interviewerIds.map((id) => interviewerMap[id] || 'Unknown').join(', '),
+    }));
+  });
 }

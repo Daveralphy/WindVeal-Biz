@@ -14,7 +14,6 @@ import {
   Clock,
   Sparkles,
   Loader2,
-  ChevronDown,
   Trash2,
   XCircle,
   Send,
@@ -90,6 +89,7 @@ interface ApplicantDetail {
   phone: string | null;
   linkedinUrl: string | null;
   source: string;
+  qualified: boolean | null;
   createdAt: string;
   job: {
     id: string;
@@ -132,10 +132,6 @@ export default function ApplicantDetailPage() {
 
   const [detail, setDetail] = useState<ApplicantDetail | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // Stage change
-  const [stageDropdownOpen, setStageDropdownOpen] = useState(false);
-  const [changingStage, setChangingStage] = useState(false);
 
   // AI screening
   const [aiScreening, setAiScreening] = useState(false);
@@ -190,24 +186,13 @@ export default function ApplicantDetailPage() {
     return String(val ?? '');
   };
 
-  async function handleStageChange(stageId: string) {
-    if (!detail || changingStage) return;
-    setChangingStage(true);
+  async function handleQualify(qualified: boolean) {
+    if (!detail) return;
     try {
-      await api.patch(`/applicants/${detail.id}/stage`, { stageId });
-      const res = await api.get(`/applicants/${detail.id}`);
-      setDetail(res.data);
-
-      // If moved to an interview stage, navigate to schedule page
-      const targetStage = detail.job.pipelineStages.find((s) => s.id === stageId);
-      if (targetStage && targetStage.name.toLowerCase().includes('interview')) {
-        navigate(`/interviews/schedule/${detail.id}`);
-      }
+      await api.patch(`/applicants/${detail.id}/qualify`, { qualified });
+      setDetail({ ...detail, qualified });
     } catch (err) {
-      console.error('Failed to change stage:', err);
-    } finally {
-      setChangingStage(false);
-      setStageDropdownOpen(false);
+      console.error('Failed to update qualification:', err);
     }
   }
 
@@ -355,43 +340,35 @@ export default function ApplicantDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {/* Stage dropdown */}
-          <div className="relative">
+          {/* Qualification buttons */}
+          {detail.qualified !== true && (
             <button
-              onClick={() => setStageDropdownOpen(!stageDropdownOpen)}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-vb-border hover:border-brand/40 transition-colors"
-              style={{
-                backgroundColor: `${detail.currentStage.color}15`,
-                color: detail.currentStage.color,
-              }}
+              onClick={() => handleQualify(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors"
             >
-              {detail.currentStage.name}
-              <ChevronDown className="w-3.5 h-3.5" />
+              <Check className="w-4 h-4" />
+              Qualify
             </button>
-            {stageDropdownOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setStageDropdownOpen(false)} />
-                <div className="absolute right-0 top-full mt-1 z-50 bg-vb-bg border border-vb-border rounded-lg shadow-xl py-1 min-w-[160px]">
-                  {pipelineStages
-                    .filter((s) => s.id !== detail.currentStage.id)
-                    .map((stage) => (
-                      <button
-                        key={stage.id}
-                        onClick={() => handleStageChange(stage.id)}
-                        disabled={changingStage}
-                        className="w-full text-left px-3 py-2 text-sm text-vb-text-secondary hover:bg-vb-surface hover:text-vb-text transition-colors flex items-center gap-2 disabled:opacity-50"
-                      >
-                        <span
-                          className="w-2.5 h-2.5 rounded-full"
-                          style={{ backgroundColor: stage.color }}
-                        />
-                        {stage.name}
-                      </button>
-                    ))}
-                </div>
-              </>
-            )}
-          </div>
+          )}
+          {detail.qualified !== false && (
+            <button
+              onClick={() => handleQualify(false)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors"
+            >
+              <XCircle className="w-4 h-4" />
+              Disqualify
+            </button>
+          )}
+          {detail.qualified === true && (
+            <span className="px-3 py-2 rounded-lg text-sm font-medium bg-green-500/10 text-green-400 border border-green-500/20">
+              Qualified
+            </span>
+          )}
+          {detail.qualified === false && (
+            <span className="px-3 py-2 rounded-lg text-sm font-medium bg-red-500/10 text-red-400 border border-red-500/20">
+              Disqualified
+            </span>
+          )}
           <button
             onClick={() => setShowDelete(true)}
             className="p-2 text-vb-text-muted hover:text-red-400 rounded-lg hover:bg-red-500/10 transition-colors"

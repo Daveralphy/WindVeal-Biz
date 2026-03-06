@@ -44,8 +44,8 @@ const VISIBILITY_OPTIONS = [
 ];
 
 const DEFAULT_STAGES = [
-  'Applied', 'Screening', 'Interview',
-  'Technical Assessment', 'Final Interview', 'Offer Sent', 'Hired', 'Rejected',
+  'Applied', 'Screening', 'Technical Assessment',
+  'Final Review', 'Offer', 'Hired', 'Rejected',
 ];
 
 type Step = 1 | 2 | 3;

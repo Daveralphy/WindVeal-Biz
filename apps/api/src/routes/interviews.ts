@@ -196,7 +196,7 @@ export async function interviewRoutes(app: FastifyInstance) {
     }
   });
 
-  // Schedule a new interview
+  // Schedule a new interview (individual)
   app.post('/', async (request) => {
     const { userId, organizationId } = request.user!;
     const data = scheduleInterviewSchema.parse(request.body);
@@ -260,6 +260,116 @@ export async function interviewRoutes(app: FastifyInstance) {
     }
 
     return { ...result, emailSent };
+  });
+
+  // Schedule a group interview (multiple applicants, same meeting)
+  app.post('/group', async (request) => {
+    const { userId, organizationId } = request.user!;
+
+    const groupSchema = z.object({
+      applicantIds: z.array(z.string().min(1)).min(1),
+      jobId: z.string().min(1),
+      scheduledAt: z.string().min(1),
+      durationMinutes: z.number().int().min(15).max(480).default(60),
+      medium: z.enum(['teams', 'google_meet', 'zoom']),
+      meetingLink: z.string().url().optional().or(z.literal('')),
+      emailSubject: z.string().min(1),
+      emailBody: z.string().min(1),
+    });
+
+    const data = groupSchema.parse(request.body);
+
+    // Verify all applicants belong to the organization
+    const applicants = await prisma.applicant.findMany({
+      where: { id: { in: data.applicantIds }, organizationId },
+      select: { id: true, email: true, firstName: true, lastName: true },
+    });
+
+    if (applicants.length !== data.applicantIds.length) {
+      return app.httpErrors.badRequest('Some applicants were not found');
+    }
+
+    const org = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { smtpSettings: true, name: true },
+    });
+
+    const groupId = `grp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const results = await prisma.$transaction(async (tx) => {
+      const interviews = [];
+      for (const applicant of applicants) {
+        const interview = await tx.interview.create({
+          data: {
+            applicantId: applicant.id,
+            jobId: data.jobId,
+            groupId,
+            type: 'VIDEO_CALL',
+            scheduledAt: new Date(data.scheduledAt),
+            durationMinutes: data.durationMinutes,
+            meetingLink: data.meetingLink || null,
+            notes: `Medium: ${data.medium} | Group Interview`,
+            interviewerIds: [userId],
+            status: 'SCHEDULED',
+          },
+        });
+
+        // Personalize the email body by replacing placeholders
+        const personalizedBody = data.emailBody
+          .replace(/\{\{firstName\}\}/g, applicant.firstName)
+          .replace(/\{\{lastName\}\}/g, applicant.lastName)
+          .replace(/\{\{fullName\}\}/g, `${applicant.firstName} ${applicant.lastName}`);
+
+        const personalizedSubject = data.emailSubject
+          .replace(/\{\{firstName\}\}/g, applicant.firstName)
+          .replace(/\{\{lastName\}\}/g, applicant.lastName)
+          .replace(/\{\{fullName\}\}/g, `${applicant.firstName} ${applicant.lastName}`);
+
+        await tx.emailLog.create({
+          data: {
+            applicantId: applicant.id,
+            subject: personalizedSubject,
+            body: personalizedBody,
+            sentById: userId,
+          },
+        });
+
+        interviews.push({ interview, applicant });
+      }
+      return interviews;
+    });
+
+    // Send emails (best-effort)
+    const smtpConfig = resolveSmtpConfig(org?.smtpSettings as any);
+    let emailsSent = 0;
+    if (smtpConfig) {
+      for (const { interview, applicant } of results) {
+        try {
+          const personalizedBody = data.emailBody
+            .replace(/\{\{firstName\}\}/g, applicant.firstName)
+            .replace(/\{\{lastName\}\}/g, applicant.lastName)
+            .replace(/\{\{fullName\}\}/g, `${applicant.firstName} ${applicant.lastName}`);
+
+          await sendEmail(smtpConfig, {
+            to: applicant.email,
+            subject: data.emailSubject
+              .replace(/\{\{firstName\}\}/g, applicant.firstName)
+              .replace(/\{\{lastName\}\}/g, applicant.lastName)
+              .replace(/\{\{fullName\}\}/g, `${applicant.firstName} ${applicant.lastName}`),
+            html: personalizedBody,
+          });
+          emailsSent++;
+        } catch (err) {
+          console.error(`Failed to send group interview email to ${applicant.email}:`, err);
+        }
+      }
+    }
+
+    return {
+      groupId,
+      interviewCount: results.length,
+      emailsSent,
+    };
   });
 
   // Compose interview email with AI

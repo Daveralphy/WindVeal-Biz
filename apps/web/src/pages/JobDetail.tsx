@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -13,6 +13,7 @@ import {
   Play,
   XCircle,
   Edit3,
+  Phone,
 } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -36,6 +37,7 @@ interface Applicant {
   firstName: string;
   lastName: string;
   email: string;
+  qualified: boolean | null;
   currentStage: { id: string; name: string; color: string };
   aiReport?: { overallScore: number; recommendation: string } | null;
   createdAt: string;
@@ -92,9 +94,9 @@ export default function JobDetail() {
   const [showActions, setShowActions] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [tab, setTab] = useState<'overview' | 'applicants' | 'pipeline'>('overview');
+  const [tab, setTab] = useState('overview');
 
-  useEffect(() => {
+  const fetchJob = useCallback(() => {
     if (!id) return;
     api.get(`/jobs/${id}`)
       .then((res) => setJob(res.data))
@@ -102,15 +104,15 @@ export default function JobDetail() {
       .finally(() => setLoading(false));
   }, [id, navigate]);
 
+  useEffect(() => { fetchJob(); }, [fetchJob]);
+
   async function updateStatus(status: string) {
     if (!job) return;
     try {
       await api.patch(`/jobs/${job.id}`, { status });
       setJob({ ...job, status });
       setShowActions(false);
-    } catch {
-      // silently fail
-    }
+    } catch { /* silently fail */ }
   }
 
   async function deleteJob() {
@@ -135,10 +137,39 @@ export default function JobDetail() {
 
   if (!job) return null;
 
-  const stageApplicantCounts = job.pipelineStages.map((stage) => ({
-    ...stage,
-    count: job.applicants.filter((a) => a.currentStage.id === stage.id).length,
-  }));
+  const sortedStages = [...job.pipelineStages].sort((a, b) => a.order - b.order);
+
+  // Build tabs: overview + pipeline stages
+  const tabs: { key: string; label: string; stageId?: string; color?: string }[] = [
+    { key: 'overview', label: 'Overview' },
+  ];
+  sortedStages.forEach((stage, idx) => {
+    // First stage is "Applicants" label for clarity
+    tabs.push({
+      key: `stage-${stage.id}`,
+      label: idx === 0 ? 'Applicants' : stage.name,
+      stageId: stage.id,
+      color: stage.color,
+    });
+  });
+
+  // Build stage order map for funnel filtering
+  const stageOrderMap: Record<string, number> = {};
+  sortedStages.forEach((s) => { stageOrderMap[s.id] = s.order; });
+
+  // Funnel helper: count applicants who reached at least this stage
+  function funnelCount(stageId: string) {
+    const order = stageOrderMap[stageId];
+    if (order === undefined || !job) return 0;
+    return job.applicants.filter((a) => (stageOrderMap[a.currentStage.id] ?? -1) >= order).length;
+  }
+
+  // Get applicants for the currently selected stage tab (funnel: shows all who reached this stage or beyond)
+  const activeTab = tabs.find((t) => t.key === tab);
+  const activeStageOrder = activeTab?.stageId !== undefined ? stageOrderMap[activeTab.stageId] : undefined;
+  const stageApplicants = activeTab?.stageId && activeStageOrder !== undefined
+    ? job.applicants.filter((a) => (stageOrderMap[a.currentStage.id] ?? -1) >= activeStageOrder)
+    : [];
 
   return (
     <div className="space-y-5">
@@ -246,39 +277,51 @@ export default function JobDetail() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-vb-border">
-        {(['overview', 'applicants', 'pipeline'] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-2.5 text-xs font-medium capitalize transition-colors border-b-2 -mb-px ${
-              tab === t
-                ? 'border-brand text-brand'
-                : 'border-transparent text-vb-text-secondary hover:text-vb-text'
-            }`}
-          >
-            {t}
-          </button>
-        ))}
+      <div className="flex gap-1 border-b border-vb-border overflow-x-auto">
+        {tabs.map((t) => {
+          const count = t.stageId ? funnelCount(t.stageId) : undefined;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
+                tab === t.key
+                  ? 'border-brand text-brand'
+                  : 'border-transparent text-vb-text-secondary hover:text-vb-text'
+              }`}
+            >
+              {t.color && (
+                <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} />
+              )}
+              {t.label}
+              {count !== undefined && (
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                  tab === t.key ? 'bg-brand/10 text-brand' : 'bg-vb-muted text-vb-text-muted'
+                }`}>
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Overview Tab */}
+      {/* ── Overview Tab ── */}
       {tab === 'overview' && (
         <div className="grid grid-cols-3 gap-5">
           <div className="col-span-2 space-y-4">
             {job.companyDescription && (
               <div className="bg-vb-card border border-vb-border rounded-xl p-5">
                 <h3 className="text-sm font-medium text-vb-text mb-3">About Company</h3>
-                <div 
+                <div
                   className="text-xs text-vb-text-secondary leading-relaxed prose prose-sm prose-invert max-w-none"
                   dangerouslySetInnerHTML={{ __html: job.companyDescription }}
                 />
               </div>
             )}
-
             <div className="bg-vb-card border border-vb-border rounded-xl p-5">
               <h3 className="text-sm font-medium text-vb-text mb-3">Description</h3>
-              <div 
+              <div
                 className="text-xs text-vb-text-secondary leading-relaxed prose prose-sm prose-invert max-w-none"
                 dangerouslySetInnerHTML={{ __html: job.description }}
               />
@@ -322,125 +365,114 @@ export default function JobDetail() {
                     {job.aiScreeningEnabled ? 'Enabled' : 'Disabled'}
                   </span>
                 </div>
-                {job.aiScreeningEnabled && job.aiScoreThreshold && (
-                  <div className="flex justify-between">
-                    <span className="text-vb-text-muted">Score Threshold</span>
-                    <span className="text-vb-text">{job.aiScoreThreshold}%</span>
-                  </div>
-                )}
               </div>
             </div>
 
-            {/* Pipeline Stages Card */}
+            {/* Pipeline Progress */}
             <div className="bg-vb-card border border-vb-border rounded-xl p-5 space-y-3">
               <h3 className="text-sm font-medium text-vb-text">Pipeline</h3>
-              <div className="space-y-1.5">
-                {stageApplicantCounts.map((stage) => (
-                  <div key={stage.id} className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-vb-bg">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: stage.color }} />
-                      <span className="text-xs text-vb-text">{stage.name}</span>
-                    </div>
-                    <span className="text-xs text-vb-text-muted">{stage.count}</span>
-                  </div>
-                ))}
+              <div className="space-y-2">
+                {sortedStages.map((stage, idx) => {
+                  const count = funnelCount(stage.id);
+                  return (
+                    <button
+                      key={stage.id}
+                      onClick={() => setTab(`stage-${stage.id}`)}
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs hover:bg-vb-muted transition-colors group"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: stage.color }} />
+                        <span className="text-vb-text-secondary group-hover:text-vb-text transition-colors">
+                          {idx === 0 ? 'Applicants' : stage.name}
+                        </span>
+                      </div>
+                      <span className="text-vb-text-muted font-medium">{count}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Applicants Tab */}
-      {tab === 'applicants' && (
-        <div className="space-y-2">
-          {job.applicants.length === 0 ? (
+      {/* ── Pipeline Stage Tabs ── */}
+      {activeTab?.stageId && (
+        <div className="space-y-4">
+          {/* Stage action bar */}
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-vb-text-muted">
+              {stageApplicants.length} applicant{stageApplicants.length !== 1 ? 's' : ''}
+            </p>
+            <button
+              onClick={() => navigate(`/jobs/${job.id}/schedule-interview?type=group`)}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs bg-brand/10 text-brand rounded-lg hover:bg-brand/20 transition-colors"
+            >
+              <Phone className="w-3.5 h-3.5" />
+              Group Call
+            </button>
+          </div>
+
+          {stageApplicants.length === 0 ? (
             <div className="text-center py-16 bg-vb-card border border-vb-border rounded-xl">
               <Users className="w-10 h-10 text-vb-text-faint mx-auto mb-3" />
-              <p className="text-sm text-vb-text-secondary">No applicants yet</p>
-              <p className="text-xs text-vb-text-muted mt-1">Applicants will appear here when they apply</p>
+              <p className="text-sm text-vb-text-secondary">
+                No applicants in this stage
+              </p>
+              <p className="text-xs text-vb-text-muted mt-1">
+                New applicants will appear here as they progress through the pipeline
+              </p>
             </div>
           ) : (
-            job.applicants.map((applicant) => (
-              <div
-                key={applicant.id}
-                className="flex items-center justify-between bg-vb-card border border-vb-border rounded-xl px-5 py-3.5 hover:border-vb-muted transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-brand/10 flex items-center justify-center text-brand text-xs font-bold">
-                    {applicant.firstName[0]}{applicant.lastName[0]}
-                  </div>
-                  <div>
-                    <p className="text-sm text-vb-text font-medium">
-                      {applicant.firstName} {applicant.lastName}
-                    </p>
-                    <p className="text-xs text-vb-text-muted">{applicant.email}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  {applicant.aiReport && (
-                    <div className="flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                      <span className="text-xs font-medium text-vb-text">{applicant.aiReport.overallScore}%</span>
-                    </div>
-                  )}
-                  <span
-                    className="text-[10px] px-2 py-0.5 rounded-full font-medium"
-                    style={{
-                      backgroundColor: `${applicant.currentStage.color}15`,
-                      color: applicant.currentStage.color,
-                    }}
+            <div className="space-y-2">
+              {stageApplicants.map((applicant) => (
+                <div
+                  key={applicant.id}
+                  className="flex items-center justify-between bg-vb-card border border-vb-border rounded-xl px-5 py-3.5 hover:border-vb-muted transition-colors"
+                >
+                  <button
+                    onClick={() => navigate(`/jobs/${job.id}/applicants/${applicant.id}?stage=${activeTab?.stageId}`)}                    className="flex items-center gap-3 text-left group flex-1"
                   >
-                    {applicant.currentStage.name}
-                  </span>
-                  <span className="text-xs text-vb-text-muted">{formatDate(applicant.createdAt)}</span>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-
-      {/* Pipeline Tab */}
-      {tab === 'pipeline' && (
-        <div className="flex gap-3 overflow-x-auto pb-4">
-          {stageApplicantCounts.map((stage) => {
-            const stageApplicants = job.applicants.filter((a) => a.currentStage.id === stage.id);
-            return (
-              <div key={stage.id} className="flex-shrink-0 w-64">
-                <div className="flex items-center justify-between mb-2 px-1">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: stage.color }} />
-                    <span className="text-xs font-medium text-vb-text">{stage.name}</span>
-                  </div>
-                  <span className="text-xs text-vb-text-muted">{stage.count}</span>
-                </div>
-                <div className="bg-vb-card/50 border border-vb-border rounded-xl p-2 min-h-[120px] space-y-2">
-                  {stageApplicants.map((applicant) => (
-                    <div
-                      key={applicant.id}
-                      className="bg-vb-card border border-vb-border rounded-lg p-3 hover:border-vb-muted transition-colors"
-                    >
-                      <p className="text-xs font-medium text-vb-text">
+                    <div className="w-9 h-9 rounded-full bg-brand/10 flex items-center justify-center text-brand text-xs font-bold">
+                      {applicant.firstName[0]}{applicant.lastName[0]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-vb-text font-medium group-hover:text-brand transition-colors">
                         {applicant.firstName} {applicant.lastName}
                       </p>
-                      <p className="text-[10px] text-vb-text-muted mt-0.5">{applicant.email}</p>
-                      {applicant.aiReport && (
-                        <div className="flex items-center gap-1 mt-1.5">
-                          <Sparkles className="w-3 h-3 text-purple-400" />
-                          <span className="text-[10px] font-medium text-vb-text">
-                            {applicant.aiReport.overallScore}% match
-                          </span>
-                        </div>
-                      )}
+                      <p className="text-xs text-vb-text-muted">{applicant.email}</p>
                     </div>
-                  ))}
-                  {stageApplicants.length === 0 && (
-                    <p className="text-[10px] text-vb-text-muted text-center py-6">No applicants</p>
-                  )}
+                  </button>
+
+                  <div className="flex items-center gap-3">
+                    {applicant.aiReport && (
+                      <div className="flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                        <span className={`text-xs font-medium ${
+                          applicant.aiReport.overallScore >= 80 ? 'text-green-400' :
+                          applicant.aiReport.overallScore >= 50 ? 'text-amber-400' : 'text-red-400'
+                        }`}>
+                          {applicant.aiReport.overallScore}%
+                        </span>
+                      </div>
+                    )}
+                    {applicant.qualified === true && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-400 font-medium">Qualified</span>
+                    )}
+                    {applicant.qualified === false && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400 font-medium">Disqualified</span>
+                    )}
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${applicant.currentStage.color}15`, color: applicant.currentStage.color }}>
+                      {applicant.currentStage.name}
+                    </span>
+                    <span className="text-[10px] text-vb-text-muted">
+                      {formatDate(applicant.createdAt)}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              ))}
+            </div>
+          )}
         </div>
       )}
 

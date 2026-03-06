@@ -35,6 +35,7 @@ interface Applicant {
   currentStage: { id: string; name: string; color: string };
   aiReport: { overallScore: number; recommendation: string } | null;
   source: string;
+  qualified: boolean | null;
   createdAt: string;
 }
 
@@ -123,7 +124,7 @@ const RECOMMENDATION_LABELS: Record<string, { label: string; color: string }> = 
   REJECT: { label: 'Reject', color: 'text-red-400' },
 };
 
-const COLUMNS = ['Name', 'Job', 'Stage', 'Score', 'Source', 'Applied', 'Actions'];
+const COLUMNS = ['Name', 'Job', 'Status', 'Score', 'Source', 'Applied', 'Actions'];
 
 interface JobOption {
   id: string;
@@ -167,7 +168,7 @@ export default function Applicants() {
   const [applicants, setApplicants] = useState<Applicant[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [stageFilter, setStageFilter] = useState<string>('all');
+  const [qualFilter, setQualFilter] = useState<string>('all');
 
 
 
@@ -231,7 +232,6 @@ export default function Applicants() {
 
 
 
-  const stages = ['all', ...new Set(applicants.map((a) => a.currentStage.name))];
 
   const filtered = applicants.filter((a) => {
     const name = `${a.firstName} ${a.lastName}`;
@@ -239,8 +239,11 @@ export default function Applicants() {
       name.toLowerCase().includes(search.toLowerCase()) ||
       a.email.toLowerCase().includes(search.toLowerCase()) ||
       a.job.title.toLowerCase().includes(search.toLowerCase());
-    const matchesStage = stageFilter === 'all' || a.currentStage.name === stageFilter;
-    return matchesSearch && matchesStage;
+    const matchesQual = qualFilter === 'all'
+      || (qualFilter === 'pending' && a.qualified === null)
+      || (qualFilter === 'qualified' && a.qualified === true)
+      || (qualFilter === 'disqualified' && a.qualified === false);
+    return matchesSearch && matchesQual;
   });
 
   // Open stage timeline modal
@@ -513,12 +516,12 @@ export default function Applicants() {
           />
         </div>
         <div className="flex gap-1 ml-2">
-          {stages.map((s) => (
+          {(['all', 'pending', 'qualified', 'disqualified'] as const).map((s) => (
             <button
               key={s}
-              onClick={() => setStageFilter(s)}
+              onClick={() => setQualFilter(s)}
               className={`px-3 py-1.5 text-xs rounded-lg capitalize transition-colors ${
-                stageFilter === s
+                qualFilter === s
                   ? 'bg-brand/10 text-brand'
                   : 'text-vb-text-secondary hover:text-vb-text hover:bg-vb-card'
               }`}
@@ -579,18 +582,19 @@ export default function Applicants() {
                     {applicant.job.title}
                   </button>
                 </td>
-                {/* Stage — clickable, opens timeline popup */}
+                {/* Status — qualification badge */}
                 <td className="px-4 py-3">
-                  <button
-                    onClick={() => handleStageClick(applicant.id)}
-                    className="text-xs px-2 py-1 rounded-full font-medium hover:ring-2 ring-brand/30 transition-all"
-                    style={{
-                      backgroundColor: `${applicant.currentStage.color}15`,
-                      color: applicant.currentStage.color,
-                    }}
+                  <span
+                    className={`text-xs px-2 py-1 rounded-full font-medium ${
+                      applicant.qualified === true
+                        ? 'bg-green-500/10 text-green-400'
+                        : applicant.qualified === false
+                        ? 'bg-red-500/10 text-red-400'
+                        : 'bg-amber-500/10 text-amber-400'
+                    }`}
                   >
-                    {applicant.currentStage.name}
-                  </button>
+                    {applicant.qualified === true ? 'Qualified' : applicant.qualified === false ? 'Disqualified' : 'Pending'}
+                  </span>
                 </td>
                 {/* Score — clickable, opens AI analysis popup */}
                 <td className="px-4 py-3">
@@ -622,14 +626,44 @@ export default function Applicants() {
                     day: 'numeric',
                   })}
                 </td>
-                {/* Actions — pipeline button */}
+                {/* Actions — qualify/disqualify */}
                 <td className="px-4 py-3">
-                  <button
-                    onClick={() => navigate('/pipeline')}
-                    className="text-vb-text-muted hover:text-brand text-sm flex items-center gap-1"
-                  >
-                    Pipeline <ChevronRight className="w-3 h-3" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    {applicant.qualified !== true && (
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            await api.patch(`/applicants/${applicant.id}/qualify`, { qualified: true });
+                            setApplicants((prev) => prev.map((a) => a.id === applicant.id ? { ...a, qualified: true } : a));
+                          } catch { /* ignore */ }
+                        }}
+                        className="text-xs px-2 py-1 rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
+                      >
+                        Qualify
+                      </button>
+                    )}
+                    {applicant.qualified !== false && (
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          try {
+                            await api.patch(`/applicants/${applicant.id}/qualify`, { qualified: false });
+                            setApplicants((prev) => prev.map((a) => a.id === applicant.id ? { ...a, qualified: false } : a));
+                          } catch { /* ignore */ }
+                        }}
+                        className="text-xs px-2 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                      >
+                        Disqualify
+                      </button>
+                    )}
+                    <button
+                      onClick={() => navigate(`/applicants/${applicant.id}`)}
+                      className="text-vb-text-muted hover:text-brand text-sm flex items-center gap-1 ml-1"
+                    >
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
