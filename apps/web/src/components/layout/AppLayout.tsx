@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import {
   LayoutDashboard,
@@ -82,6 +82,11 @@ export default function AppLayout() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Main pages are top-level routes without dynamic segments
+  const MAIN_PATHS = ['/dashboard', '/jobs', '/applicants', '/careers', '/analytics', '/team', '/settings', '/communications', '/interviews', '/pipeline'];
+  const isMainPage = MAIN_PATHS.includes(location.pathname);
 
   const loadNotifications = useCallback(async () => {
     setNotifLoading(true);
@@ -238,8 +243,8 @@ export default function AppLayout() {
         </main>
       </div>
 
-      {/* VealAI Chat */}
-      <VealAIChat />
+      {/* VealAI Chat — only on main pages */}
+      {isMainPage && <VealAIChat />}
 
       {/* Notifications Drawer */}
       {notificationsOpen && (

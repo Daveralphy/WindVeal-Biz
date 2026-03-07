@@ -268,6 +268,7 @@ model PipelineStage {
   job             Job     @relation(fields: [jobId], references: [id], onDelete: Cascade)
 
   applicants      Applicant[]    @relation("CurrentStage")
+  interviews      Interview[]
   historyFrom     StageHistory[] @relation("FromStage")
   historyTo       StageHistory[] @relation("ToStage")
 
@@ -399,6 +400,7 @@ model Interview {
   id              String          @id @default(cuid())
   applicantId     String
   jobId           String
+  stageId         String?
   groupId         String?
   type            InterviewType
   scheduledAt     DateTime
@@ -414,11 +416,13 @@ model Interview {
 
   applicant       Applicant   @relation(fields: [applicantId], references: [id], onDelete: Cascade)
   job             Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  stage           PipelineStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
 
   scorecards      Scorecard[]
 
   @@index([applicantId])
   @@index([jobId])
+  @@index([stageId])
   @@index([scheduledAt])
   @@map("interviews")
 }

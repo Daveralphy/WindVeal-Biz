@@ -3,20 +3,9 @@ import { useNavigate, Link } from 'react-router-dom';
 import { AuthLayout } from '@/components/auth/AuthLayout';
 import { useAuthStore } from '@/stores/authStore';
 import api from '@/lib/api';
-import { Eye, EyeOff, GripVertical, X, Plus } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 
-const STEPS = ['Personal Info', 'Pipeline', 'Company', 'Account'];
-
-const DEFAULT_STAGES = [
-  'Applied',
-  'Screening',
-  'Interview',
-  'Technical Assessment',
-  'Final Interview',
-  'Offer Sent',
-  'Hired',
-  'Rejected',
-];
+const STEPS = ['Personal Info', 'Company', 'Account'];
 
 export default function Register() {
   const navigate = useNavigate();
@@ -40,42 +29,22 @@ export default function Register() {
     username: '',
     password: '',
     confirmPassword: '',
-    pipelineStages: [...DEFAULT_STAGES],
   });
 
   const update = (field: string, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
-  const addStage = () =>
-    setForm((prev) => ({
-      ...prev,
-      pipelineStages: [...prev.pipelineStages, ''],
-    }));
-
-  const removeStage = (index: number) =>
-    setForm((prev) => ({
-      ...prev,
-      pipelineStages: prev.pipelineStages.filter((_, i) => i !== index),
-    }));
-
-  const updateStage = (index: number, value: string) =>
-    setForm((prev) => ({
-      ...prev,
-      pipelineStages: prev.pipelineStages.map((s, i) => (i === index ? value : s)),
-    }));
-
   const canProceed = () => {
     if (step === 0) return form.firstName && form.lastName;
-    if (step === 1) return form.pipelineStages.filter((s) => s.trim()).length >= 3;
-    if (step === 2) return form.organizationName;
-    if (step === 3)
+    if (step === 1) return form.organizationName;
+    if (step === 2)
       return form.email && form.password && form.password === form.confirmPassword;
     return false;
   };
 
   const handleNext = async () => {
     setError('');
-    if (step < 3) {
+    if (step < 2) {
       setStep(step + 1);
       return;
     }
@@ -96,7 +65,6 @@ export default function Register() {
         companySize: form.companySize || undefined,
         website: form.website || undefined,
         country: form.country || undefined,
-        pipelineStages: form.pipelineStages.filter((s) => s.trim()),
       });
 
       setAuth(data.user, data.accessToken);
@@ -187,51 +155,8 @@ export default function Register() {
           </>
         )}
 
-        {/* Step 2: Pipeline Design */}
+        {/* Step 2: Company Info */}
         {step === 1 && (
-          <>
-            <h2 className="text-2xl font-bold text-gray-900">
-              Design your hiring pipeline
-            </h2>
-            <p className="text-gray-500 text-sm">
-              Customize the stages candidates move through during your hiring process.
-            </p>
-            <div className="space-y-2 max-h-[340px] overflow-y-auto scrollbar-thin">
-              {form.pipelineStages.map((stage, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-2 group"
-                >
-                  <GripVertical className="w-4 h-4 text-gray-300 cursor-grab" />
-                  <input
-                    type="text"
-                    value={stage}
-                    onChange={(e) => updateStage(i, e.target.value)}
-                    className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
-                    placeholder="Stage name"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeStage(i)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-100 rounded"
-                  >
-                    <X className="w-4 h-4 text-gray-400" />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={addStage}
-              className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700"
-            >
-              <Plus className="w-4 h-4" /> Add new stage
-            </button>
-          </>
-        )}
-
-        {/* Step 3: Company Info */}
-        {step === 2 && (
           <>
             <h2 className="text-2xl font-bold text-gray-900">
               Tell us about your company
@@ -282,8 +207,8 @@ export default function Register() {
           </>
         )}
 
-        {/* Step 4: Account Credentials */}
-        {step === 3 && (
+        {/* Step 3: Account Credentials */}
+        {step === 2 && (
           <>
             <h2 className="text-2xl font-bold text-gray-900">
               Create your account
@@ -345,7 +270,7 @@ export default function Register() {
           disabled={!canProceed() || loading}
           className="w-full py-3 bg-gray-900 text-white rounded-lg font-medium text-sm hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          {loading ? 'Creating account...' : step < 3 ? 'Continue' : 'Create Account'}
+          {loading ? 'Creating account...' : step < 2 ? 'Continue' : 'Create Account'}
         </button>
 
         {step > 0 && (

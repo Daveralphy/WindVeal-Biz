@@ -9,7 +9,6 @@ import {
   FileText,
   Clock,
   Star,
-  ChevronRight,
   Calendar,
   Plus,
   Upload,
@@ -124,7 +123,7 @@ const RECOMMENDATION_LABELS: Record<string, { label: string; color: string }> = 
   REJECT: { label: 'Reject', color: 'text-red-400' },
 };
 
-const COLUMNS = ['Name', 'Job', 'Status', 'Score', 'Source', 'Applied', 'Actions'];
+const COLUMNS = ['Name', 'Job', 'Score', 'Source', 'Applied'];
 
 interface JobOption {
   id: string;
@@ -168,7 +167,7 @@ export default function Applicants() {
   const [applicants, setApplicants] = useState<Applicant[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [qualFilter, setQualFilter] = useState<string>('all');
+
 
 
 
@@ -239,11 +238,7 @@ export default function Applicants() {
       name.toLowerCase().includes(search.toLowerCase()) ||
       a.email.toLowerCase().includes(search.toLowerCase()) ||
       a.job.title.toLowerCase().includes(search.toLowerCase());
-    const matchesQual = qualFilter === 'all'
-      || (qualFilter === 'pending' && a.qualified === null)
-      || (qualFilter === 'qualified' && a.qualified === true)
-      || (qualFilter === 'disqualified' && a.qualified === false);
-    return matchesSearch && matchesQual;
+    return matchesSearch;
   });
 
   // Open stage timeline modal
@@ -515,21 +510,7 @@ export default function Applicants() {
             className="w-full pl-10 pr-4 py-2 bg-vb-card border border-vb-border rounded-lg text-sm text-vb-text placeholder-vb-text-muted outline-none focus:border-brand"
           />
         </div>
-        <div className="flex gap-1 ml-2">
-          {(['all', 'pending', 'qualified', 'disqualified'] as const).map((s) => (
-            <button
-              key={s}
-              onClick={() => setQualFilter(s)}
-              className={`px-3 py-1.5 text-xs rounded-lg capitalize transition-colors ${
-                qualFilter === s
-                  ? 'bg-brand/10 text-brand'
-                  : 'text-vb-text-secondary hover:text-vb-text hover:bg-vb-card'
-              }`}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
+
       </div>
 
       {/* Table */}
@@ -544,7 +525,7 @@ export default function Applicants() {
                 >
                   <span className="flex items-center gap-1 cursor-pointer hover:text-vb-text-secondary">
                     {col}
-                    {col !== 'Actions' && <ArrowUpDown className="w-3 h-3" />}
+                    <ArrowUpDown className="w-3 h-3" />
                   </span>
                 </th>
               ))}
@@ -582,20 +563,7 @@ export default function Applicants() {
                     {applicant.job.title}
                   </button>
                 </td>
-                {/* Status — qualification badge */}
-                <td className="px-4 py-3">
-                  <span
-                    className={`text-xs px-2 py-1 rounded-full font-medium ${
-                      applicant.qualified === true
-                        ? 'bg-green-500/10 text-green-400'
-                        : applicant.qualified === false
-                        ? 'bg-red-500/10 text-red-400'
-                        : 'bg-amber-500/10 text-amber-400'
-                    }`}
-                  >
-                    {applicant.qualified === true ? 'Qualified' : applicant.qualified === false ? 'Disqualified' : 'Pending'}
-                  </span>
-                </td>
+
                 {/* Score — clickable, opens AI analysis popup */}
                 <td className="px-4 py-3">
                   {applicant.aiReport ? (
@@ -626,45 +594,7 @@ export default function Applicants() {
                     day: 'numeric',
                   })}
                 </td>
-                {/* Actions — qualify/disqualify */}
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1">
-                    {applicant.qualified !== true && (
-                      <button
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          try {
-                            await api.patch(`/applicants/${applicant.id}/qualify`, { qualified: true });
-                            setApplicants((prev) => prev.map((a) => a.id === applicant.id ? { ...a, qualified: true } : a));
-                          } catch { /* ignore */ }
-                        }}
-                        className="text-xs px-2 py-1 rounded-lg bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors"
-                      >
-                        Qualify
-                      </button>
-                    )}
-                    {applicant.qualified !== false && (
-                      <button
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          try {
-                            await api.patch(`/applicants/${applicant.id}/qualify`, { qualified: false });
-                            setApplicants((prev) => prev.map((a) => a.id === applicant.id ? { ...a, qualified: false } : a));
-                          } catch { /* ignore */ }
-                        }}
-                        className="text-xs px-2 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
-                      >
-                        Disqualify
-                      </button>
-                    )}
-                    <button
-                      onClick={() => navigate(`/applicants/${applicant.id}`)}
-                      className="text-vb-text-muted hover:text-brand text-sm flex items-center gap-1 ml-1"
-                    >
-                      <ChevronRight className="w-3 h-3" />
-                    </button>
-                  </div>
-                </td>
+
               </tr>
             ))}
           </tbody>

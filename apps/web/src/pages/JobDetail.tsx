@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   ArrowLeft,
   MapPin,
@@ -94,7 +94,14 @@ export default function JobDetail() {
   const [showActions, setShowActions] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [tab, setTab] = useState('overview');
+  const [applicantMenuId, setApplicantMenuId] = useState<string | null>(null);
+  const [deleteApplicantId, setDeleteApplicantId] = useState<string | null>(null);
+  const [deletingApplicant, setDeletingApplicant] = useState(false);
+  const [rejectApplicantId, setRejectApplicantId] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get('tab') || 'overview';
+  const setTab = (t: string) => setSearchParams({ tab: t }, { replace: true });
 
   const fetchJob = useCallback(() => {
     if (!id) return;
@@ -113,6 +120,29 @@ export default function JobDetail() {
       setJob({ ...job, status });
       setShowActions(false);
     } catch { /* silently fail */ }
+  }
+
+  async function deleteApplicant(applicantId: string) {
+    setDeletingApplicant(true);
+    try {
+      await api.delete(`/applicants/${applicantId}`);
+      setDeleteApplicantId(null);
+      fetchJob();
+    } catch { /* ignore */ }
+    finally { setDeletingApplicant(false); }
+  }
+
+  async function rejectApplicant(applicantId: string) {
+    if (!job) return;
+    const rejectedStage = job.pipelineStages.find((s) => s.name.toLowerCase().includes('reject'));
+    if (!rejectedStage) return;
+    setRejecting(true);
+    try {
+      await api.patch(`/applicants/${applicantId}/stage`, { stageId: rejectedStage.id });
+      setRejectApplicantId(null);
+      fetchJob();
+    } catch { /* ignore */ }
+    finally { setRejecting(false); }
   }
 
   async function deleteJob() {
@@ -277,7 +307,7 @@ export default function JobDetail() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-vb-border overflow-x-auto">
+      <div className="flex gap-1 border-b border-vb-border flex-wrap">
         {tabs.map((t) => {
           const count = t.stageId ? funnelCount(t.stageId) : undefined;
           return (
@@ -308,10 +338,11 @@ export default function JobDetail() {
 
       {/* ── Overview Tab ── */}
       {tab === 'overview' && (
-        <div className="grid grid-cols-3 gap-5">
-          <div className="col-span-2 space-y-4">
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-5">
+            {/* About Company */}
             {job.companyDescription && (
-              <div className="bg-vb-card border border-vb-border rounded-xl p-5">
+              <div className="col-span-2 bg-vb-card border border-vb-border rounded-xl p-5">
                 <h3 className="text-sm font-medium text-vb-text mb-3">About Company</h3>
                 <div
                   className="text-xs text-vb-text-secondary leading-relaxed prose prose-sm prose-invert max-w-none"
@@ -319,18 +350,9 @@ export default function JobDetail() {
                 />
               </div>
             )}
-            <div className="bg-vb-card border border-vb-border rounded-xl p-5">
-              <h3 className="text-sm font-medium text-vb-text mb-3">Description</h3>
-              <div
-                className="text-xs text-vb-text-secondary leading-relaxed prose prose-sm prose-invert max-w-none"
-                dangerouslySetInnerHTML={{ __html: job.description }}
-              />
-            </div>
-          </div>
 
-          <div className="space-y-4">
             {/* Job Info Card */}
-            <div className="bg-vb-card border border-vb-border rounded-xl p-5 space-y-3">
+            <div className={`bg-vb-card border border-vb-border rounded-xl p-5 space-y-3 ${!job.companyDescription ? 'col-span-3' : ''}`}>
               <h3 className="text-sm font-medium text-vb-text">Job Details</h3>
               <div className="space-y-2.5 text-xs">
                 <div className="flex justify-between">
@@ -367,31 +389,15 @@ export default function JobDetail() {
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* Pipeline Progress */}
-            <div className="bg-vb-card border border-vb-border rounded-xl p-5 space-y-3">
-              <h3 className="text-sm font-medium text-vb-text">Pipeline</h3>
-              <div className="space-y-2">
-                {sortedStages.map((stage, idx) => {
-                  const count = funnelCount(stage.id);
-                  return (
-                    <button
-                      key={stage.id}
-                      onClick={() => setTab(`stage-${stage.id}`)}
-                      className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs hover:bg-vb-muted transition-colors group"
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: stage.color }} />
-                        <span className="text-vb-text-secondary group-hover:text-vb-text transition-colors">
-                          {idx === 0 ? 'Applicants' : stage.name}
-                        </span>
-                      </div>
-                      <span className="text-vb-text-muted font-medium">{count}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+          {/* Description — full width */}
+          <div className="bg-vb-card border border-vb-border rounded-xl p-5">
+            <h3 className="text-sm font-medium text-vb-text mb-3">Description</h3>
+            <div
+              className="text-xs text-vb-text-secondary leading-relaxed prose prose-sm prose-invert max-w-none"
+              dangerouslySetInnerHTML={{ __html: job.description }}
+            />
           </div>
         </div>
       )}
@@ -456,18 +462,38 @@ export default function JobDetail() {
                         </span>
                       </div>
                     )}
-                    {applicant.qualified === true && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-400 font-medium">Qualified</span>
-                    )}
-                    {applicant.qualified === false && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400 font-medium">Disqualified</span>
-                    )}
                     <span className="text-[10px] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: `${applicant.currentStage.color}15`, color: applicant.currentStage.color }}>
                       {applicant.currentStage.name}
                     </span>
                     <span className="text-[10px] text-vb-text-muted">
                       {formatDate(applicant.createdAt)}
                     </span>
+                    <div className="relative">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setApplicantMenuId(applicantMenuId === applicant.id ? null : applicant.id); }}
+                        className="p-1.5 text-vb-text-muted hover:text-vb-text hover:bg-vb-muted rounded-lg transition-colors"
+                      >
+                        <MoreHorizontal className="w-4 h-4" />
+                      </button>
+                      {applicantMenuId === applicant.id && (
+                        <div className="absolute right-0 top-8 z-20 bg-vb-card border border-vb-border rounded-lg shadow-xl py-1 min-w-[140px]">
+                          {!applicant.currentStage.name.toLowerCase().includes('reject') && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setApplicantMenuId(null); setRejectApplicantId(applicant.id); }}
+                              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-amber-400 hover:bg-amber-500/10 transition-colors"
+                            >
+                              <XCircle className="w-3.5 h-3.5" /> Reject
+                            </button>
+                          )}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setApplicantMenuId(null); setDeleteApplicantId(applicant.id); }}
+                            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -476,7 +502,7 @@ export default function JobDetail() {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Job Confirmation Modal */}
       {showDelete && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-vb-card border border-vb-border rounded-xl p-6 w-full max-w-sm">
@@ -497,6 +523,66 @@ export default function JobDetail() {
                 className="px-3 py-2 text-xs bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
               >
                 {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Applicant Confirmation Modal */}
+      {deleteApplicantId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-vb-card border border-vb-border rounded-xl p-6 w-full max-w-sm">
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold text-vb-text">Delete Applicant</h3>
+              <p className="text-xs text-vb-text-muted mt-1">This action cannot be undone.</p>
+            </div>
+            <p className="text-xs text-vb-text-secondary mb-5">
+              Are you sure you want to delete this applicant and all their data?
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setDeleteApplicantId(null)}
+                className="px-3 py-2 text-xs text-vb-text-secondary hover:text-vb-text rounded-lg hover:bg-vb-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteApplicant(deleteApplicantId)}
+                disabled={deletingApplicant}
+                className="px-3 py-2 text-xs bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
+              >
+                {deletingApplicant ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Applicant Confirmation Modal */}
+      {rejectApplicantId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-vb-card border border-vb-border rounded-xl p-6 w-full max-w-sm">
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold text-vb-text">Reject Applicant</h3>
+              <p className="text-xs text-vb-text-muted mt-1">Move this applicant to the Rejected stage.</p>
+            </div>
+            <p className="text-xs text-vb-text-secondary mb-5">
+              Are you sure you want to reject this applicant? They will be moved out of the pipeline.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setRejectApplicantId(null)}
+                className="px-3 py-2 text-xs text-vb-text-secondary hover:text-vb-text rounded-lg hover:bg-vb-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => rejectApplicant(rejectApplicantId)}
+                disabled={rejecting}
+                className="px-3 py-2 text-xs bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50"
+              >
+                {rejecting ? 'Rejecting...' : 'Reject'}
               </button>
             </div>
           </div>

@@ -161,6 +161,7 @@ interface ComposeEmailContext {
   platform: string;        // e.g. "Google Meet"
   meetingLink: string;
   interviewerName: string;
+  stageName?: string;      // e.g. "Panel Interview", "Final Review"
 }
 
 export async function composeInterviewEmail(
@@ -170,10 +171,12 @@ export async function composeInterviewEmail(
   if (!groq) return fallback;
 
   try {
+    const stageLabel = context.stageName || 'Interview';
     const prompt = `Write a professional interview invitation email for:
 - Candidate: ${context.candidateFirstName} ${context.candidateLastName}
 - Position: ${context.jobTitle}
 - Company: ${context.companyName}
+- Interview Stage: ${stageLabel}
 - Date: ${context.scheduledDate}
 - Time: ${context.scheduledTime}
 - Duration: ${context.durationMinutes} minutes
@@ -181,14 +184,14 @@ export async function composeInterviewEmail(
 - Meeting Link: ${context.meetingLink}
 - Interviewer: ${context.interviewerName}
 
-Write a warm, professional email. Include all the details above clearly. Do NOT use placeholder brackets. Use actual values provided.`;
+This is a "${stageLabel}" stage interview. Tailor the tone and content to match this stage — for example, a "Final Review" or "Panel Interview" should sound different from an initial "Interview" or "Phone Screen". Mention the stage name naturally in the email. Write a warm, professional email. Include all the details above clearly. Do NOT use placeholder brackets. Use actual values provided.`;
 
     const completion = await groq.chat.completions.create({
       model: 'llama-3.1-8b-instant',
       messages: [
         {
           role: 'system',
-          content: `You are a professional HR email writer. Write interview invitation emails that are warm, clear, and informative. Respond with valid JSON only — no markdown, no explanation. The JSON must have: subject (string, concise email subject line), body (string, the full email body as clean HTML with <p>, <strong>, <ul>, <li> tags — do NOT use markdown). The email should include: greeting by first name, congratulations on being selected, interview details (date, time, duration, platform), meeting link as a clickable <a> tag, what to prepare, and a professional sign-off from the interviewer. Keep it concise but thorough.`,
+          content: `You are a professional HR email writer. Write interview invitation emails that are warm, clear, and informative. Tailor the email based on the interview stage — an initial interview should be welcoming, a phone screen should be casual and brief, a panel interview should mention meeting multiple team members, and a final review should convey excitement about being a top candidate. Respond with valid JSON only — no markdown, no explanation. The JSON must have: subject (string, concise email subject line that reflects the stage), body (string, the full email body as clean HTML with <p>, <strong>, <ul>, <li> tags — do NOT use markdown). The email should include: greeting by first name, context appropriate to the stage, interview details (date, time, duration, platform), meeting link as a clickable <a> tag, what to prepare for this specific stage, and a professional sign-off from the interviewer. Keep it concise but thorough.`,
         },
         { role: 'user', content: prompt },
       ],
@@ -214,10 +217,11 @@ Write a warm, professional email. Include all the details above clearly. Do NOT 
 }
 
 function getFallbackInterviewEmail(ctx: ComposeEmailContext): { subject: string; body: string } {
-  const subject = `Interview Invitation: ${ctx.jobTitle} at ${ctx.companyName}`;
+  const stageLabel = ctx.stageName || 'Interview';
+  const subject = `${stageLabel} Invitation: ${ctx.jobTitle} at ${ctx.companyName}`;
   const body = `<p>Dear ${ctx.candidateFirstName},</p>
 
-<p>We are pleased to invite you to an interview for the <strong>${ctx.jobTitle}</strong> position at <strong>${ctx.companyName}</strong>.</p>
+<p>We are pleased to invite you to a <strong>${stageLabel}</strong> for the <strong>${ctx.jobTitle}</strong> position at <strong>${ctx.companyName}</strong>.</p>
 
 <p><strong>Interview Details:</strong></p>
 <ul>
@@ -240,6 +244,11 @@ function getFallbackInterviewEmail(ctx: ComposeEmailContext): { subject: string;
 interface ScreeningContext {
   applicationData: string;
   coverLetter: string;
+  resumeText: string;
+  linkedinProfileData: string;
+  applicantName: string;
+  applicantEmail: string;
+  applicantPhone: string;
   hasResume: boolean;
   hasVideo: boolean;
   jobTitle: string;
@@ -263,73 +272,6 @@ interface AIScreeningResult {
   };
 }
 
-// ─── Per-field AI Evaluation ─────────────────────────────
-
-export interface FieldEvaluationResult {
-  score: number;
-  feedback: string;
-  keywordsFound: string[];
-}
-
-export async function evaluateFieldContent(
-  fieldLabel: string,
-  content: string,
-  aiKeywords: string[],
-  jobTitle: string,
-): Promise<FieldEvaluationResult> {
-  if (!groq || !content.trim()) {
-    return getFallbackFieldEvaluation(content, aiKeywords);
-  }
-
-  try {
-    const keywordsStr = aiKeywords.length > 0 ? aiKeywords.join(', ') : 'general job relevance';
-    const prompt = `Evaluate this "${fieldLabel}" submission for a "${jobTitle}" role.\n\nKeywords to evaluate against: ${keywordsStr}\n\nContent:\n${content.slice(0, 2000)}\n\nRate 0-100 how well this content addresses the keywords and job requirements. Identify which keywords are present or addressed. Give 1-2 sentence feedback.`;
-
-    const completion = await groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are VealAI, a STRICT job application evaluator. Respond with valid JSON only — no markdown: { "score": number 0-100, "feedback": "1-2 sentences", "keywordsFound": ["kw1", "kw2"] }\n\nSCORING RULES (follow strictly):\n- 0-5: Content is completely irrelevant, nonsensical, a joke, or random text with zero connection to the job\n- 6-15: Content mentions the field topic but has no substance or job-relevant information\n- 16-30: Minimal relevant content, very few keywords addressed, mostly filler\n- 31-50: Some relevant content but missing key qualifications or keywords\n- 51-70: Decent content addressing several keywords with relevant detail\n- 71-85: Strong content covering most keywords with specific evidence\n- 86-100: Exceptional, addresses nearly all keywords with concrete specifics\n\nIMPORTANT: If the content does not contain actual job-relevant information (e.g. a random statement, a Bible quote, lorem ipsum, or unrelated text), score it 0-5. Do NOT be generous with irrelevant content. A cover letter must actually discuss qualifications. A resume must list real experience. Judge ONLY what is written.',
-        },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.3,
-      max_tokens: 300,
-    });
-
-    const text = completion.choices[0]?.message?.content?.trim() || '';
-    const parsed = JSON.parse(text);
-
-    return {
-      score: Math.min(100, Math.max(0, Number(parsed.score) ?? 0)),
-      feedback: String(parsed.feedback || 'Evaluation complete.').slice(0, 300),
-      keywordsFound: Array.isArray(parsed.keywordsFound) ? parsed.keywordsFound.slice(0, 10) : [],
-    };
-  } catch (err) {
-    console.error('Groq field evaluation error:', err);
-    return getFallbackFieldEvaluation(content, aiKeywords);
-  }
-}
-
-function getFallbackFieldEvaluation(content: string, aiKeywords: string[]): FieldEvaluationResult {
-  const lower = (content || '').toLowerCase();
-  const found = aiKeywords.filter((kw) => lower.includes(kw.toLowerCase()));
-  const score =
-    aiKeywords.length > 0
-      ? Math.round((found.length / aiKeywords.length) * 100)
-      : 0;
-
-  return {
-    score,
-    feedback:
-      found.length > 0
-        ? `Found ${found.length} of ${aiKeywords.length} keywords in this response.`
-        : 'No matching keywords detected.',
-    keywordsFound: found,
-  };
-}
-
 // ─── Full AI Applicant Screening ─────────────────────────────
 
 export async function screenApplicant(context: ScreeningContext): Promise<AIScreeningResult> {
@@ -345,7 +287,7 @@ export async function screenApplicant(context: ScreeningContext): Promise<AIScre
       messages: [
         {
           role: 'system',
-          content: `You are VealAI, a STRICT ATS screening assistant. Analyze applicant data rigorously against job requirements. Always respond with valid JSON only — no markdown, no explanation. The JSON must have: overallScore (0-100), dimensionScores (object with skillsMatch, experienceRelevance, communicationQuality, cultureFit, completeness as 0-100 numbers), strengths (string array, max 5), concerns (string array, max 5), recommendation (one of: ADVANCE, REQUEST_INFO, CONSIDER_OTHER, REJECT), confidenceLevel (HIGH, MEDIUM, or LOW), resumeAnalysis (object with score 0-100 and feedback string array max 4).
+          content: `You are VealAI, a STRICT ATS screening assistant. Analyze applicant data rigorously against job requirements. You have access to the applicant's resume text (extracted from PDF), all application responses, cover letter, and LinkedIn profile data. Use ALL of this information holistically. Always respond with valid JSON only — no markdown, no explanation. The JSON must have: overallScore (0-100), dimensionScores (object with skillsMatch, experienceRelevance, communicationQuality, cultureFit, completeness, identityConsistency as 0-100 numbers), strengths (string array, max 5), concerns (string array, max 5), recommendation (one of: ADVANCE, REQUEST_INFO, CONSIDER_OTHER, REJECT), confidenceLevel (HIGH, MEDIUM, or LOW), resumeAnalysis (object with score 0-100 and feedback string array max 4).
 
 SCORING RULES (follow strictly):
 - 0-10: Applicant provided no useful information, nonsensical content, or completely irrelevant submissions (random text, jokes, unrelated documents, single phrases)
@@ -356,7 +298,12 @@ SCORING RULES (follow strictly):
 - 71-85: Strong match — clear evidence of most required skills and experience
 - 86-100: Exceptional — addresses virtually all requirements with specific details
 
-CRITICAL: If the applicant submitted irrelevant content (not a real resume, gibberish cover letter, unrelated documents), score them 0-10 regardless of other factors. Do NOT give points for simply submitting something — the content must be genuinely relevant. A cover letter with random words or phrases is 0-5. A file that is not a resume is 0-10. Recommend REJECT for scores under 25.`,
+IDENTITY & CONSISTENCY CHECKS:
+- Verify the resume contains the applicant's registered name. If the name differs, flag it as a concern and lower identityConsistency score.
+- Cross-reference claims across resume, cover letter, application responses, and LinkedIn. Flag contradictions.
+- Check that experience levels, job titles, and skills are consistent across all sources.
+
+CRITICAL: If the applicant submitted irrelevant content (not a real resume, gibberish cover letter, unrelated documents), score them 0-10 regardless of other factors. Recommend REJECT for scores under 25.`,
         },
         { role: 'user', content: prompt },
       ],
@@ -401,7 +348,19 @@ function buildScreeningPrompt(ctx: ScreeningContext): string {
   }
 
   parts.push('');
+  parts.push('=== APPLICANT IDENTITY ===');
+  parts.push(`Name: ${ctx.applicantName}`);
+  if (ctx.applicantEmail) parts.push(`Email: ${ctx.applicantEmail}`);
+  if (ctx.applicantPhone) parts.push(`Phone: ${ctx.applicantPhone}`);
+
+  parts.push('');
   parts.push('=== APPLICANT SUBMISSION ===');
+
+  if (ctx.resumeText) {
+    parts.push('');
+    parts.push('=== RESUME CONTENT (extracted from PDF) ===');
+    parts.push(ctx.resumeText.slice(0, 6000));
+  }
 
   if (ctx.applicationData) {
     parts.push('');
@@ -415,12 +374,25 @@ function buildScreeningPrompt(ctx: ScreeningContext): string {
     parts.push(ctx.coverLetter);
   }
 
-  if (!ctx.applicationData && !ctx.coverLetter) {
-    parts.push('No application responses or cover letter were provided. The applicant only submitted file uploads which cannot be read here.');
+  if (ctx.linkedinProfileData) {
+    parts.push('');
+    parts.push('=== LINKEDIN PROFILE ===');
+    parts.push(ctx.linkedinProfileData.slice(0, 4000));
+  }
+
+  if (!ctx.applicationData && !ctx.coverLetter && !ctx.resumeText) {
+    parts.push('No application responses, cover letter, or resume text were provided.');
   }
 
   parts.push('');
-  parts.push('Rate this applicant STRICTLY based ONLY on the text content above. If there are no application responses and no cover letter text, the score must be 0-5. Do not assume uploaded files contain relevant content — you cannot read them. A cover letter must contain actual professional content about qualifications — random phrases or quotes score 0-5. Do not give credit for simply submitting content — judge the actual quality and relevance. For the resumeAnalysis, evaluate based on: completeness of information provided, relevance to job requirements, communication quality, and professional presentation.');
+  parts.push('=== EVALUATION INSTRUCTIONS ===');
+  parts.push('Evaluate this applicant HOLISTICALLY using ALL the data above. Specifically:');
+  parts.push('1. IDENTITY VERIFICATION: Confirm the resume contains the applicant\'s name and contact details. Flag if the name on the resume does not match the applicant\'s registered name.');
+  parts.push('2. CONSISTENCY CHECK: Verify that information across the resume, cover letter, application responses, and LinkedIn profile is consistent. Flag any contradictions (e.g. different job titles, date mismatches, conflicting claims).');
+  parts.push('3. ROLE MATCH: Evaluate how well the applicant\'s skills, experience, and qualifications match the job requirements, responsibilities, and keywords.');
+  parts.push('4. CONTENT QUALITY: Assess the quality of all written submissions — cover letter professionalism, resume completeness, application response depth.');
+  parts.push('5. RED FLAGS: Note any concerns such as missing information, generic/template content, or irrelevant submissions.');
+  parts.push('If there is no resume text and no meaningful application data, the score must be very low (0-10).');
 
   return parts.join('\n');
 }
@@ -434,7 +406,9 @@ function getFallbackScreening(ctx: ScreeningContext): AIScreeningResult {
   if (ctx.applicationData && ctx.applicationData.length > 100) { score += 15; strengths.push('Provided detailed application responses'); }
   if (ctx.coverLetter && ctx.coverLetter.length > 200) { score += 15; strengths.push('Submitted a substantial cover letter'); }
   if (ctx.hasResume) { score += 20; strengths.push('Resume uploaded'); }
+  if (ctx.resumeText && ctx.resumeText.length > 100) { score += 10; strengths.push('Resume content was readable and parsed'); }
   if (ctx.hasVideo) { score += 10; strengths.push('Video introduction provided'); }
+  if (ctx.linkedinProfileData) { score += 5; strengths.push('LinkedIn profile data available'); }
 
   if (!ctx.hasResume) concerns.push('No resume uploaded');
   if (!ctx.coverLetter) concerns.push('No cover letter provided');
@@ -448,7 +422,8 @@ function getFallbackScreening(ctx: ScreeningContext): AIScreeningResult {
       experienceRelevance: Math.max(0, score - 10),
       communicationQuality: ctx.coverLetter ? Math.min(100, score + 10) : Math.max(0, score - 15),
       cultureFit: 30,
-      completeness: Math.round(((ctx.hasResume ? 25 : 0) + (ctx.coverLetter ? 25 : 0) + (ctx.hasVideo ? 25 : 0) + (ctx.applicationData ? 25 : 0))),
+      completeness: Math.round(((ctx.hasResume ? 20 : 0) + (ctx.coverLetter ? 20 : 0) + (ctx.hasVideo ? 20 : 0) + (ctx.applicationData ? 20 : 0) + (ctx.linkedinProfileData ? 20 : 0))),
+      identityConsistency: 50,
     },
     strengths,
     concerns,

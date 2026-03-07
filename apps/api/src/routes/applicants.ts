@@ -9,7 +9,7 @@ import path from 'node:path';
 import prisma from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
 import { env } from '../config/env.js';
-import { screenApplicant, evaluateFieldContent } from '../services/groqService.js';
+import { screenApplicant } from '../services/groqService.js';
 
 const addApplicantSchema = z.object({
   firstName: z.string().min(1),
@@ -243,7 +243,7 @@ export async function applicantRoutes(app: FastifyInstance) {
       const [updated] = await prisma.$transaction([
         prisma.applicant.update({
           where: { id: applicant.id },
-          data: { currentStageId: stageId },
+          data: { currentStageId: stageId, qualified: null },
           include: { currentStage: true },
         }),
         prisma.stageHistory.deleteMany({
@@ -269,7 +269,7 @@ export async function applicantRoutes(app: FastifyInstance) {
     const [updated] = await prisma.$transaction([
       prisma.applicant.update({
         where: { id: applicant.id },
-        data: { currentStageId: stageId },
+        data: { currentStageId: stageId, qualified: null },
         include: { currentStage: true },
       }),
       prisma.stageHistory.create({
@@ -289,10 +289,10 @@ export async function applicantRoutes(app: FastifyInstance) {
   // Qualify or disqualify an applicant
   app.patch<{ Params: { id: string } }>('/:id/qualify', async (request, reply) => {
     const { organizationId } = request.user!;
-    const { qualified } = request.body as { qualified: boolean };
+    const { qualified } = request.body as { qualified: boolean | null };
 
-    if (typeof qualified !== 'boolean') {
-      return reply.status(400).send({ error: 'qualified must be a boolean' });
+    if (qualified !== null && typeof qualified !== 'boolean') {
+      return reply.status(400).send({ error: 'qualified must be a boolean or null' });
     }
 
     const applicant = await prisma.applicant.findFirst({
@@ -415,63 +415,6 @@ export async function applicantRoutes(app: FastifyInstance) {
     return { message: 'Applicant deleted' };
   });
 
-  // AI evaluate a single field
-  app.post<{ Params: { id: string } }>('/:id/ai-evaluate-field', async (request, reply) => {
-    const { organizationId } = request.user!;
-    const { fieldId } = request.body as { fieldId: string };
-
-    if (!fieldId) {
-      return reply.status(400).send({ error: 'fieldId is required' });
-    }
-
-    const applicant = await prisma.applicant.findFirst({
-      where: { id: request.params.id, organizationId },
-      include: {
-        job: { select: { title: true, aiKeywords: true, applicationForm: true } },
-        applicationData: true,
-        uploadedFiles: true,
-      },
-    });
-
-    if (!applicant) {
-      return reply.status(404).send({ error: 'Applicant not found' });
-    }
-
-    const aiKeywords = (applicant.job.aiKeywords as string[]) || [];
-    let content = '';
-    let label = fieldId;
-
-    if (fieldId === 'resume' || fieldId === 'video') {
-      const hasFile = applicant.uploadedFiles.some((f) => f.type === fieldId);
-      if (!hasFile) {
-        return reply.status(400).send({ error: `No ${fieldId} uploaded` });
-      }
-      // For binary files, include all other text data for context
-      const otherText = applicant.applicationData
-        .map((d) => {
-          const val = typeof d.value === 'string' ? d.value : JSON.stringify(d.value);
-          return `${d.fieldId}: ${val}`;
-        })
-        .join('\n');
-      content = `[${fieldId} file was submitted]\n\nOther application data for context:\n${otherText}`;
-      label = fieldId === 'resume' ? 'Resume (file submitted)' : 'Video Introduction (file submitted)';
-    } else {
-      const data = applicant.applicationData.find((d) => d.fieldId === fieldId);
-      if (!data) {
-        return reply.status(400).send({ error: 'Field not found in application data' });
-      }
-      content = typeof data.value === 'string' ? data.value : JSON.stringify(data.value);
-
-      // Try to get a nice label from the form definition
-      const formFields = (applicant.job.applicationForm as { fields?: { id: string; label: string }[] })?.fields || [];
-      const formField = formFields.find((f) => f.id === fieldId);
-      if (formField) label = formField.label;
-    }
-
-    const result = await evaluateFieldContent(label, content, aiKeywords, applicant.job.title);
-    return result;
-  });
-
   // AI Screen applicant
   app.post<{ Params: { id: string } }>('/:id/ai-screen', async (request, reply) => {
     const { organizationId } = request.user!;
@@ -503,7 +446,7 @@ export async function applicantRoutes(app: FastifyInstance) {
     const formFields = (applicant.job.applicationForm?.fields as Array<{ id: string; label: string; type?: string }>) || [];
     const fieldLabelMap = new Map(formFields.map((f) => [f.id, f.label]));
 
-    // Personal fields to exclude from AI evaluation
+    // Personal fields to exclude from AI evaluation text (but we pass identity separately)
     const personalFieldIds = new Set(['first_name', 'last_name', 'email', 'phone', 'linkedin', 'linkedin_url']);
 
     const applicationText = applicant.applicationData
@@ -518,9 +461,65 @@ export async function applicantRoutes(app: FastifyInstance) {
     const coverLetterData = applicant.applicationData.find((d) => d.fieldId === 'cover_letter');
     const coverLetter = coverLetterData ? String(coverLetterData.value) : '';
 
+    // Extract text from PDF resume files
+    let resumeText = '';
+    const pdfFiles = applicant.uploadedFiles.filter(
+      (f) => f.mimeType === 'application/pdf'
+    );
+    for (const pdfFile of pdfFiles) {
+      try {
+        const filePath = path.join(env.UPLOAD_DIR, pdfFile.storageUrl.replace(/.*[/\\]/, ''));
+        const { readFile } = await import('node:fs/promises');
+        const pdfParse = (await import('pdf-parse')).default;
+        const dataBuffer = await readFile(filePath);
+        const parsed = await pdfParse(dataBuffer);
+        if (parsed.text) {
+          resumeText += (resumeText ? '\n\n--- Next Document ---\n\n' : '') + parsed.text;
+        }
+      } catch (err) {
+        console.error(`Failed to parse PDF ${pdfFile.fileName}:`, err);
+      }
+    }
+
+    // Fetch LinkedIn profile data if available
+    let linkedinProfileData = '';
+    if (applicant.linkedinUrl) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch(applicant.linkedinUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; VealATS/1.0)',
+            'Accept': 'text/html',
+          },
+          signal: controller.signal,
+          redirect: 'follow',
+        });
+        clearTimeout(timeout);
+        if (res.ok) {
+          const html = await res.text();
+          // Extract text content from HTML, stripping tags
+          linkedinProfileData = html
+            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 5000);
+        }
+      } catch (err) {
+        console.error('Failed to fetch LinkedIn profile:', err);
+      }
+    }
+
     const report = await screenApplicant({
       applicationData: applicationText,
       coverLetter,
+      resumeText,
+      linkedinProfileData,
+      applicantName: `${applicant.firstName} ${applicant.lastName}`,
+      applicantEmail: applicant.email,
+      applicantPhone: applicant.phone || '',
       hasResume: applicant.uploadedFiles.some((f) => f.type === 'resume'),
       hasVideo: applicant.uploadedFiles.some((f) => f.type === 'video'),
       jobTitle: applicant.job.title,

@@ -434,14 +434,9 @@ export default function Interviews() {
               onClick={() => setDeleteConfirm(null)}
             />
             <div className="relative bg-vb-bg border border-vb-border rounded-xl w-full max-w-sm shadow-xl p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
-                  <Trash2 className="w-5 h-5 text-red-400" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-vb-text">Delete Interview</h3>
-                  <p className="text-xs text-vb-text-muted">This action cannot be undone.</p>
-                </div>
+              <div className="mb-4">
+                <h3 className="text-sm font-semibold text-vb-text">Delete Interview</h3>
+                <p className="text-xs text-vb-text-muted mt-1">This action cannot be undone.</p>
               </div>
               <p className="text-sm text-vb-text-secondary mb-5">
                 Are you sure you want to delete this scheduled interview?
@@ -661,14 +656,9 @@ export default function Interviews() {
             onClick={() => setDeleteConfirm(null)}
           />
           <div className="relative bg-vb-bg border border-vb-border rounded-xl w-full max-w-sm shadow-xl p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
-                <Trash2 className="w-5 h-5 text-red-400" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-vb-text">Delete Interview</h3>
-                <p className="text-xs text-vb-text-muted">This action cannot be undone.</p>
-              </div>
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold text-vb-text">Delete Interview</h3>
+              <p className="text-xs text-vb-text-muted mt-1">This action cannot be undone.</p>
             </div>
             <p className="text-sm text-vb-text-secondary mb-5">
               Are you sure you want to delete this scheduled interview?

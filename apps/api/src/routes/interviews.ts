@@ -8,6 +8,7 @@ import { resolveSmtpConfig, sendEmail, verifySmtpConnection } from '../services/
 const scheduleInterviewSchema = z.object({
   applicantId: z.string().min(1),
   jobId: z.string().min(1),
+  stageId: z.string().min(1).optional(),
   scheduledAt: z.string().min(1),
   durationMinutes: z.number().int().min(15).max(480).default(60),
   medium: z.enum(['teams', 'google_meet', 'zoom']),
@@ -88,6 +89,7 @@ export async function interviewRoutes(app: FastifyInstance) {
     return interviews.map((i) => ({
       id: i.id,
       applicantId: i.applicantId,
+      stageId: i.stageId,
       candidateName: `${i.applicant.firstName} ${i.applicant.lastName}`,
       candidateEmail: i.applicant.email,
       jobTitle: i.job.title,
@@ -220,6 +222,7 @@ export async function interviewRoutes(app: FastifyInstance) {
         data: {
           applicantId: data.applicantId,
           jobId: data.jobId,
+          stageId: data.stageId || null,
           type: 'VIDEO_CALL',
           scheduledAt: new Date(data.scheduledAt),
           durationMinutes: data.durationMinutes,
@@ -269,6 +272,7 @@ export async function interviewRoutes(app: FastifyInstance) {
     const groupSchema = z.object({
       applicantIds: z.array(z.string().min(1)).min(1),
       jobId: z.string().min(1),
+      stageId: z.string().min(1).optional(),
       scheduledAt: z.string().min(1),
       durationMinutes: z.number().int().min(15).max(480).default(60),
       medium: z.enum(['teams', 'google_meet', 'zoom']),
@@ -303,6 +307,7 @@ export async function interviewRoutes(app: FastifyInstance) {
           data: {
             applicantId: applicant.id,
             jobId: data.jobId,
+            stageId: data.stageId || null,
             groupId,
             type: 'VIDEO_CALL',
             scheduledAt: new Date(data.scheduledAt),
@@ -383,6 +388,7 @@ export async function interviewRoutes(app: FastifyInstance) {
       durationMinutes: z.number().int().min(15),
       platform: z.string().min(1),
       meetingLink: z.string().optional(),
+      stageName: z.string().optional(),
     });
 
     const data = schema.parse(request.body);
@@ -440,6 +446,7 @@ export async function interviewRoutes(app: FastifyInstance) {
       platform: PLATFORM_LABELS[data.platform] || data.platform,
       meetingLink: data.meetingLink || '(to be provided)',
       interviewerName: user ? `${user.firstName} ${user.lastName}` : 'Hiring Team',
+      stageName: data.stageName,
     });
 
     return result;

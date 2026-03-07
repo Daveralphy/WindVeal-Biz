@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import RichTextEditor from '@/components/editor/RichTextEditor';
 import {
   ArrowLeft,
@@ -43,7 +43,13 @@ const VISIBILITY_OPTIONS = [
   { value: 'DRAFT', label: 'Draft', desc: 'Save as draft, publish later' },
 ];
 
-type Section = 'basic' | 'description' | 'applicants' | 'settings';
+const AVAILABLE_STAGES = [
+  'Applied', 'Screening', 'Phone Screen', 'Interview', 'Technical Assessment',
+  'Panel Interview', 'Final Review', 'Background Check', 'Reference Check',
+  'Offer', 'Hired', 'Rejected',
+];
+
+type Section = 'basic' | 'description' | 'applicants' | 'pipeline' | 'settings';
 
 type ApplicantFieldType = 'short_text' | 'long_text' | 'email' | 'url' | 'phone' | 'file';
 
@@ -69,16 +75,19 @@ const SECTIONS = [
   { key: 'basic' as Section, label: 'Basic Info' },
   { key: 'description' as Section, label: 'Description' },
   { key: 'applicants' as Section, label: 'Applicant Fields' },
+  { key: 'pipeline' as Section, label: 'Pipeline' },
   { key: 'settings' as Section, label: 'Settings' },
 ];
 
 export default function JobEdit() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const section = (searchParams.get('section') || 'basic') as Section;
+  const setSection = (s: Section) => setSearchParams({ section: s }, { replace: true });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [section, setSection] = useState<Section>('basic');
 
   // Basic Info
   const [title, setTitle] = useState('');
@@ -108,6 +117,9 @@ export default function JobEdit() {
   const [aiScoreThreshold, setAiScoreThreshold] = useState('50');
   const [aiKeywords, setAiKeywords] = useState<string[]>([]);
   const [newKeyword, setNewKeyword] = useState('');
+
+  // Pipeline Stages
+  const [stages, setStages] = useState<string[]>([]);
 
   function normalizeApplicantFields(fields: ApplicantField[] | undefined) {
     if (!fields || fields.length === 0) return [...DEFAULT_APPLICANT_FIELDS];
@@ -164,6 +176,9 @@ export default function JobEdit() {
         setAiScreeningEnabled(j.aiScreeningEnabled);
         setAiScoreThreshold(j.aiScoreThreshold != null ? String(j.aiScoreThreshold) : '50');
         setAiKeywords(j.aiKeywords || []);
+        if (j.pipelineStages?.length) {
+          setStages(j.pipelineStages.map((s: { name: string }) => s.name));
+        }
       })
       .catch(() => navigate('/jobs'))
       .finally(() => setLoading(false));
@@ -203,6 +218,7 @@ export default function JobEdit() {
         aiScoreThreshold: aiScoreThreshold ? parseInt(aiScoreThreshold) : null,
         aiKeywords,
         applicationForm: { fields: applicantFields },
+        pipelineStages: stages,
       };
 
       await api.patch(`/jobs/${id}`, payload);
@@ -612,6 +628,71 @@ export default function JobEdit() {
         </div>
       )}
 
+      {/* Pipeline */}
+      {section === 'pipeline' && (
+        <div className="bg-vb-card border border-vb-border rounded-xl p-6 space-y-4">
+          <div>
+            <h3 className="text-sm font-medium text-vb-text">Pipeline Stages</h3>
+            <p className="text-xs text-vb-text-muted mt-1">
+              Select the stages applicants will go through in the hiring process. Minimum 3 stages required.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {AVAILABLE_STAGES.map((stageName) => {
+              const isSelected = stages.includes(stageName);
+              const isDisabled = isSelected && stages.length <= 3;
+              return (
+                <button
+                  key={stageName}
+                  onClick={() => {
+                    if (isSelected) {
+                      if (stages.length <= 3) return;
+                      setStages(stages.filter((s) => s !== stageName));
+                    } else {
+                      setStages([...stages, stageName]);
+                    }
+                  }}
+                  disabled={isDisabled}
+                  className={`px-3 py-2.5 rounded-lg border text-left transition-colors ${
+                    isSelected
+                      ? 'bg-brand/10 border-brand/30'
+                      : 'bg-vb-bg border-vb-border hover:border-vb-muted'
+                  } ${isDisabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                      isSelected ? 'bg-brand border-brand' : 'border-vb-border'
+                    }`}>
+                      {isSelected && (
+                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                    <span className={`text-xs font-medium ${isSelected ? 'text-brand' : 'text-vb-text'}`}>
+                      {stageName}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Selected stages preview */}
+          <div className="border-t border-vb-border pt-3">
+            <p className="text-[10px] uppercase tracking-wide text-vb-text-muted mb-2">Selected pipeline order</p>
+            <div className="flex flex-wrap gap-1.5">
+              {stages.map((stage, i) => (
+                <span key={stage} className="inline-flex items-center gap-1 px-2.5 py-1 bg-brand/10 text-brand text-xs rounded-lg border border-brand/20">
+                  <span className="text-[10px] text-brand/60">{i + 1}.</span> {stage}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Settings */}
       {section === 'settings' && (
         <div className="space-y-4">
@@ -666,23 +747,6 @@ export default function JobEdit() {
             </p>
             {aiScreeningEnabled && (
               <div className="mt-2 space-y-4">
-                <div>
-                  <label className="block text-xs text-vb-text-secondary mb-1">
-                    Minimum AI Score Threshold
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={aiScoreThreshold}
-                      onChange={(e) => setAiScoreThreshold(e.target.value)}
-                      className="flex-1 accent-brand"
-                    />
-                    <span className="text-sm font-mono text-vb-text w-8 text-right">{aiScoreThreshold}%</span>
-                  </div>
-                </div>
-
                 <div>
                   <label className="block text-xs text-vb-text-secondary mb-1">
                     Screening Keywords

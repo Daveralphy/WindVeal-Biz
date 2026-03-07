@@ -8,8 +8,6 @@ import {
   Calendar,
   Sparkles,
   Eye,
-  ChevronDown,
-  ChevronUp,
   Plus,
   X,
   Loader2,
@@ -43,17 +41,24 @@ const VISIBILITY_OPTIONS = [
   { value: 'DRAFT', label: 'Draft', desc: 'Save as draft, publish later' },
 ];
 
+const AVAILABLE_STAGES = [
+  'Applied', 'Screening', 'Phone Screen', 'Interview', 'Technical Assessment',
+  'Panel Interview', 'Final Review', 'Background Check', 'Reference Check',
+  'Offer', 'Hired', 'Rejected',
+];
+
 const DEFAULT_STAGES = [
-  'Applied', 'Screening', 'Technical Assessment',
+  'Applied', 'Screening', 'Interview', 'Technical Assessment',
   'Final Review', 'Offer', 'Hired', 'Rejected',
 ];
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2 | 3 | 4;
 
 const STEPS = [
   { num: 1 as Step, label: 'Basic Info', desc: 'Title, location, and type' },
   { num: 2 as Step, label: 'Description', desc: 'Details and requirements' },
-  { num: 3 as Step, label: 'Settings', desc: 'Pipeline, AI, and visibility' },
+  { num: 3 as Step, label: 'Pipeline', desc: 'Hiring stages' },
+  { num: 4 as Step, label: 'AI Evaluation', desc: 'AI screening settings' },
 ];
 
 export default function JobNew() {
@@ -80,39 +85,23 @@ export default function JobNew() {
   // Step 3: Settings
   const [visibility, setVisibility] = useState('PORTAL');
   const [aiScreeningEnabled, setAiScreeningEnabled] = useState(true);
-  const [aiScoreThreshold, setAiScoreThreshold] = useState('50');
-  const [customStages, setCustomStages] = useState(false);
   const [stages, setStages] = useState<string[]>([...DEFAULT_STAGES]);
-  const [newStage, setNewStage] = useState('');
   const [aiKeywords, setAiKeywords] = useState<string[]>([]);
   const [newKeyword, setNewKeyword] = useState('');
 
   function canProceed(): boolean {
     if (step === 1) return title.trim().length > 0;
     if (step === 2) return description.trim().length > 0;
+    if (step === 3) return stages.length >= 3;
     return true;
   }
 
-  function addStage() {
-    const name = newStage.trim();
-    if (name && !stages.includes(name)) {
-      setStages([...stages.slice(0, -1), name, ...stages.slice(-1)]);
-      setNewStage('');
-    }
-  }
-
-  function removeStage(index: number) {
-    if (stages.length > 3) {
-      setStages(stages.filter((_, i) => i !== index));
-    }
-  }
-
-  function moveStage(index: number, direction: 'up' | 'down') {
-    const newStages = [...stages];
-    const target = direction === 'up' ? index - 1 : index + 1;
-    if (target >= 0 && target < stages.length) {
-      [newStages[index], newStages[target]] = [newStages[target], newStages[index]];
-      setStages(newStages);
+  function toggleStage(stageName: string) {
+    if (stages.includes(stageName)) {
+      if (stages.length <= 3) return;
+      setStages(stages.filter((s) => s !== stageName));
+    } else {
+      setStages([...stages, stageName]);
     }
   }
 
@@ -137,9 +126,8 @@ export default function JobNew() {
       if (salaryMin) payload.salaryMin = parseInt(salaryMin);
       if (salaryMax) payload.salaryMax = parseInt(salaryMax);
       if (deadline) payload.deadline = new Date(deadline).toISOString();
-      if (aiScoreThreshold) payload.aiScoreThreshold = parseInt(aiScoreThreshold);
       if (aiKeywords.length > 0) payload.aiKeywords = aiKeywords;
-      if (customStages) payload.pipelineStages = stages;
+      payload.pipelineStages = stages;
 
       await api.post('/jobs', payload);
       navigate('/jobs');
@@ -381,8 +369,66 @@ export default function JobNew() {
         </div>
       )}
 
-      {/* Step 3: Settings */}
+      {/* Step 3: Pipeline */}
       {step === 3 && (
+        <div className="bg-vb-card border border-vb-border rounded-xl p-6 space-y-4">
+          <div>
+            <h3 className="text-sm font-medium text-vb-text">Pipeline Stages</h3>
+            <p className="text-xs text-vb-text-muted mt-1">
+              Select the stages applicants will go through in the hiring process. Minimum 3 stages required.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {AVAILABLE_STAGES.map((stageName) => {
+              const isSelected = stages.includes(stageName);
+              const isDisabled = isSelected && stages.length <= 3;
+              return (
+                <button
+                  key={stageName}
+                  onClick={() => toggleStage(stageName)}
+                  disabled={isDisabled}
+                  className={`px-3 py-2.5 rounded-lg border text-left transition-colors ${
+                    isSelected
+                      ? 'bg-brand/10 border-brand/30'
+                      : 'bg-vb-bg border-vb-border hover:border-vb-muted'
+                  } ${isDisabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                      isSelected ? 'bg-brand border-brand' : 'border-vb-border'
+                    }`}>
+                      {isSelected && (
+                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </div>
+                    <span className={`text-xs font-medium ${isSelected ? 'text-brand' : 'text-vb-text'}`}>
+                      {stageName}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Selected stages preview */}
+          <div className="border-t border-vb-border pt-3">
+            <p className="text-[10px] uppercase tracking-wide text-vb-text-muted mb-2">Selected pipeline order</p>
+            <div className="flex flex-wrap gap-1.5">
+              {stages.map((stage, i) => (
+                <span key={stage} className="inline-flex items-center gap-1 px-2.5 py-1 bg-brand/10 text-brand text-xs rounded-lg border border-brand/20">
+                  <span className="text-[10px] text-brand/60">{i + 1}.</span> {stage}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Step 4: AI Evaluation */}
+      {step === 4 && (
         <div className="space-y-4">
           {/* Visibility */}
           <div className="bg-vb-card border border-vb-border rounded-xl p-6 space-y-3">
@@ -431,33 +477,16 @@ export default function JobNew() {
               </button>
             </div>
             <p className="text-xs text-vb-text-muted">
-              AI will automatically analyze and score resumes uploaded for this job
+              AI will analyze resumes, cover letters, and application responses to evaluate applicants against your job requirements.
             </p>
             {aiScreeningEnabled && (
               <div className="mt-2 space-y-4">
                 <div>
                   <label className="block text-xs text-vb-text-secondary mb-1">
-                    Minimum AI Score Threshold
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={aiScoreThreshold}
-                      onChange={(e) => setAiScoreThreshold(e.target.value)}
-                      className="flex-1 accent-brand"
-                    />
-                    <span className="text-sm font-mono text-vb-text w-8 text-right">{aiScoreThreshold}%</span>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs text-vb-text-secondary mb-1">
                     Screening Keywords
                   </label>
                   <p className="text-[10px] text-vb-text-muted mb-2">
-                    Add keywords the AI should evaluate applicants against. These reduce unnecessary API calls by focusing the screening.
+                    Add keywords the AI should evaluate applicants against.
                   </p>
                   {aiKeywords.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-2">
@@ -513,83 +542,6 @@ export default function JobNew() {
               </div>
             )}
           </div>
-
-          {/* Pipeline Stages */}
-          <div className="bg-vb-card border border-vb-border rounded-xl p-6 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-medium text-vb-text">Pipeline Stages</h3>
-              <button
-                onClick={() => {
-                  setCustomStages(!customStages);
-                  if (customStages) setStages([...DEFAULT_STAGES]);
-                }}
-                className="text-xs text-brand hover:text-brand-dark"
-              >
-                {customStages ? 'Reset to default' : 'Customize'}
-              </button>
-            </div>
-
-            <div className="space-y-1.5">
-              {stages.map((stage, i) => (
-                <div
-                  key={`${stage}-${i}`}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
-                    customStages
-                      ? 'bg-vb-bg border border-vb-border'
-                      : 'bg-vb-bg/50'
-                  }`}
-                >
-                  <span className="text-vb-text-muted text-xs w-5 text-center">{i + 1}</span>
-                  <span className="flex-1 text-vb-text text-xs">{stage}</span>
-                  {customStages && (
-                    <div className="flex items-center gap-0.5">
-                      <button
-                        onClick={() => moveStage(i, 'up')}
-                        disabled={i === 0}
-                        className="p-0.5 text-vb-text-muted hover:text-vb-text disabled:opacity-30"
-                      >
-                        <ChevronUp className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => moveStage(i, 'down')}
-                        disabled={i === stages.length - 1}
-                        className="p-0.5 text-vb-text-muted hover:text-vb-text disabled:opacity-30"
-                      >
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => removeStage(i)}
-                        disabled={stages.length <= 3}
-                        className="p-0.5 text-vb-text-muted hover:text-red-400 disabled:opacity-30 ml-1"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {customStages && (
-              <div className="flex gap-2 mt-2">
-                <input
-                  type="text"
-                  value={newStage}
-                  onChange={(e) => setNewStage(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && addStage()}
-                  placeholder="Add new stage..."
-                  className="flex-1 px-3 py-2 bg-vb-bg border border-vb-border rounded-lg text-xs text-vb-text placeholder-vb-text-muted outline-none focus:border-brand"
-                />
-                <button
-                  onClick={addStage}
-                  disabled={!newStage.trim()}
-                  className="px-3 py-2 bg-brand/10 text-brand text-xs rounded-lg hover:bg-brand/20 disabled:opacity-50"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-          </div>
         </div>
       )}
 
@@ -615,7 +567,7 @@ export default function JobNew() {
             Cancel
           </button>
 
-          {step < 3 ? (
+          {step < 4 ? (
             <button
               onClick={() => canProceed() && setStep((step + 1) as Step)}
               disabled={!canProceed()}

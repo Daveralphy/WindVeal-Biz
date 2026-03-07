@@ -72,6 +72,8 @@ export default function InterviewSchedule() {
 
   const mode = searchParams.get('type') === 'group' ? 'group' : 'individual';
   const preselectedApplicantId = searchParams.get('applicantId');
+  const stageId = searchParams.get('stageId');
+  const stageName = searchParams.get('stageName') || '';
 
   const STEPS = mode === 'group' ? STEPS_GROUP : STEPS_INDIVIDUAL;
 
@@ -168,6 +170,7 @@ export default function InterviewSchedule() {
         durationMinutes: form.durationMinutes,
         platform: form.medium,
         meetingLink: form.meetingLink || '',
+        stageName: stageName || undefined,
       });
       let body = res.data.body || '';
       let subject = res.data.subject || '';
@@ -203,6 +206,7 @@ export default function InterviewSchedule() {
         const res = await api.post('/interviews/group', {
           applicantIds: Array.from(selectedIds),
           jobId,
+          stageId: stageId || undefined,
           scheduledAt: form.scheduledAt,
           durationMinutes: form.durationMinutes,
           medium: form.medium,
@@ -216,6 +220,7 @@ export default function InterviewSchedule() {
         const res = await api.post('/interviews', {
           applicantId: candidate.id,
           jobId,
+          stageId: stageId || undefined,
           scheduledAt: form.scheduledAt,
           durationMinutes: form.durationMinutes,
           medium: form.medium,
@@ -232,7 +237,7 @@ export default function InterviewSchedule() {
     }
   }
 
-  const backPath = `/jobs/${jobId}`;
+  const goBack = () => navigate(-1);
 
   // ── Loading ──
   if (loading) {
@@ -272,7 +277,7 @@ export default function InterviewSchedule() {
             : 'Interview(s) scheduled, but email was not sent (no email settings configured).'}
         </p>
         <button
-          onClick={() => navigate(backPath)}
+          onClick={goBack}
           className="mt-4 flex items-center gap-2 px-5 py-2.5 bg-brand text-white text-sm rounded-lg hover:bg-brand-dark transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -321,7 +326,7 @@ export default function InterviewSchedule() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <button
-          onClick={() => navigate(backPath)}
+          onClick={goBack}
           className="p-2 text-vb-text-muted hover:text-vb-text rounded-lg hover:bg-vb-card transition-colors"
         >
           <ArrowLeft className="w-5 h-5" />
@@ -728,7 +733,7 @@ export default function InterviewSchedule() {
       {/* Footer navigation */}
       <div className="flex items-center justify-between">
         <button
-          onClick={() => (step === 1 ? navigate(backPath) : setStep((s) => s - 1))}
+          onClick={() => (step === 1 ? goBack() : setStep((s) => s - 1))}
           disabled={scheduling}
           className="flex items-center gap-1.5 px-4 py-2.5 text-sm text-vb-text-secondary hover:text-vb-text rounded-lg hover:bg-vb-card transition-colors disabled:opacity-50"
         >

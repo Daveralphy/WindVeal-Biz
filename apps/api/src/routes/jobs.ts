@@ -137,8 +137,10 @@ export async function jobRoutes(app: FastifyInstance) {
 
     const body = request.body as Record<string, unknown>;
     const applicationForm = body.applicationForm as { fields?: unknown } | undefined;
+    const pipelineStages = body.pipelineStages as string[] | undefined;
     const jobData = { ...body };
     delete jobData.applicationForm;
+    delete jobData.pipelineStages;
 
     await prisma.job.update({
       where: { id: job.id },
@@ -151,6 +153,49 @@ export async function jobRoutes(app: FastifyInstance) {
         update: { fields: applicationForm.fields },
         create: { jobId: job.id, fields: applicationForm.fields },
       });
+    }
+
+    // Update pipeline stages if provided
+    if (pipelineStages && Array.isArray(pipelineStages) && pipelineStages.length >= 3) {
+      const existingStages = await prisma.pipelineStage.findMany({
+        where: { jobId: job.id },
+        orderBy: { order: 'asc' },
+        include: { _count: { select: { applicants: true, historyFrom: true, historyTo: true } } },
+      });
+
+      const existingByName = new Map(existingStages.map((s) => [s.name, s]));
+      const newNames = new Set(pipelineStages);
+
+      // Delete stages that are no longer in the list and have no applicants
+      for (const existing of existingStages) {
+        if (!newNames.has(existing.name)) {
+          const hasData = existing._count.applicants > 0 || existing._count.historyFrom > 0 || existing._count.historyTo > 0;
+          if (!hasData) {
+            await prisma.pipelineStage.delete({ where: { id: existing.id } });
+          }
+        }
+      }
+
+      // Upsert stages with new order
+      for (let i = 0; i < pipelineStages.length; i++) {
+        const name = pipelineStages[i];
+        const existing = existingByName.get(name);
+        if (existing) {
+          await prisma.pipelineStage.update({
+            where: { id: existing.id },
+            data: { order: i, name },
+          });
+        } else {
+          await prisma.pipelineStage.create({
+            data: {
+              jobId: job.id,
+              name,
+              order: i,
+              color: STAGE_COLORS[name] || '#6B7280',
+            },
+          });
+        }
+      }
     }
 
     const updated = await prisma.job.findFirst({
