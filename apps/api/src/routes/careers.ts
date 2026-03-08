@@ -6,6 +6,7 @@ import { pipeline } from 'node:stream/promises';
 import { env } from '../config/env.js';
 import prisma from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
+import { notifyOrgUsers } from '../services/notificationService.js';
 
 interface CareerDesignPayload {
   heroTitle?: string;
@@ -369,6 +370,12 @@ export async function publicCareersRoutes(app: FastifyInstance) {
         })),
       });
     }
+
+    // Notify org users about the new application
+    notifyOrgUsers(org.id, 'APPLICATION_RECEIVED', {
+      applicantName: `${firstName} ${lastName}`,
+      jobTitle: job.title,
+    }).catch(() => {});
 
     return reply.status(201).send({
       message: 'Application submitted successfully',

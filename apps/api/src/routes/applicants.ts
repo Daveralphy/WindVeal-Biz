@@ -8,6 +8,7 @@ import { pipeline } from 'node:stream/promises';
 import path from 'node:path';
 import prisma from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
+import { notifyOrgUsers } from '../services/notificationService.js';
 import { env } from '../config/env.js';
 import { screenApplicant } from '../services/groqService.js';
 
@@ -204,6 +205,12 @@ export async function applicantRoutes(app: FastifyInstance) {
       },
     });
 
+    // Notify org users about the new application
+    notifyOrgUsers(organizationId, 'APPLICATION_RECEIVED', {
+      applicantName: `${applicant.firstName} ${applicant.lastName}`,
+      jobTitle: applicant.job.title,
+    }, request.user!.userId).catch(() => {});
+
     return reply.status(201).send(applicant);
   });
 
@@ -306,8 +313,19 @@ export async function applicantRoutes(app: FastifyInstance) {
     const updated = await prisma.applicant.update({
       where: { id: applicant.id },
       data: { qualified },
-      include: { currentStage: true },
+      include: { currentStage: true, job: { select: { title: true } } },
     });
+
+    // If qualified on an offer stage, notify as offer accepted
+    if (qualified === true && updated.currentStage) {
+      const stageName = updated.currentStage.name.toLowerCase();
+      if (stageName.includes('offer')) {
+        notifyOrgUsers(organizationId, 'OFFER_SIGNED', {
+          applicantName: `${updated.firstName} ${updated.lastName}`,
+          jobTitle: updated.job.title,
+        }, request.user!.userId).catch(() => {});
+      }
+    }
 
     return updated;
   });

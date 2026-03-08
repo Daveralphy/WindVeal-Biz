@@ -4,6 +4,7 @@ import { persist } from 'zustand/middleware';
 interface User {
   id: string;
   email: string;
+  username?: string;
   firstName: string;
   lastName: string;
   role: string;
@@ -12,6 +13,9 @@ interface User {
   organizationName: string;
   avatarUrl?: string;
   organizationLogo?: string;
+  timezone?: string;
+  jobTitle?: string;
+  phone?: string;
 }
 
 interface AuthState {
@@ -20,6 +24,7 @@ interface AuthState {
   isAuthenticated: boolean;
   setAuth: (user: User, accessToken: string) => void;
   setAccessToken: (token: string) => void;
+  updateUser: (partial: Partial<User>) => void;
   logout: () => void;
 }
 
@@ -33,6 +38,8 @@ export const useAuthStore = create<AuthState>()(
         set({ user, accessToken, isAuthenticated: true }),
       setAccessToken: (accessToken) =>
         set({ accessToken }),
+      updateUser: (partial) =>
+        set((state) => ({ user: state.user ? { ...state.user, ...partial } : null })),
       logout: () =>
         set({ user: null, accessToken: null, isAuthenticated: false }),
     }),

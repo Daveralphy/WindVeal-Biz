@@ -13,9 +13,9 @@ import {
   Wand2,
   Send,
   Loader2,
-  Check,
   ExternalLink,
   Users,
+  Check,
 } from 'lucide-react';
 import api from '@/lib/api';
 import RichTextEditor from '@/components/editor/RichTextEditor';
@@ -103,7 +103,6 @@ export default function InterviewSchedule() {
 
   const [composing, setComposing] = useState(false);
   const [scheduling, setScheduling] = useState(false);
-  const [result, setResult] = useState<{ sent: boolean; count?: number } | null>(null);
 
   // ── Fetch job & applicants ──
   useEffect(() => {
@@ -203,7 +202,7 @@ export default function InterviewSchedule() {
     setScheduling(true);
     try {
       if (mode === 'group') {
-        const res = await api.post('/interviews/group', {
+        await api.post('/interviews/group', {
           applicantIds: Array.from(selectedIds),
           jobId,
           stageId: stageId || undefined,
@@ -214,10 +213,11 @@ export default function InterviewSchedule() {
           emailSubject: form.emailSubject,
           emailBody: form.emailBody,
         });
-        setResult({ sent: res.data.emailsSent > 0, count: res.data.interviewCount });
+        // Go back to the job detail page
+        navigate(`/jobs/${jobId}`);
       } else {
         if (!candidate) return;
-        const res = await api.post('/interviews', {
+        await api.post('/interviews', {
           applicantId: candidate.id,
           jobId,
           stageId: stageId || undefined,
@@ -228,7 +228,9 @@ export default function InterviewSchedule() {
           emailSubject: form.emailSubject,
           emailBody: form.emailBody,
         });
-        setResult({ sent: !!res.data.emailSent });
+        // Navigate back to the applicant detail on the interview stage
+        const stageParam = stageId ? `?stage=${stageId}` : '';
+        navigate(`/jobs/${jobId}/applicants/${candidate.id}${stageParam}`);
       }
     } catch {
       // ignore
@@ -250,42 +252,6 @@ export default function InterviewSchedule() {
   }
 
   if (!job) return null;
-
-  // ── Success state ──
-  if (result) {
-    return (
-      <div className="max-w-3xl mx-auto py-16 flex flex-col items-center gap-5">
-        <div
-          className={`w-16 h-16 rounded-full flex items-center justify-center ${
-            result.sent ? 'bg-green-500/10' : 'bg-amber-500/10'
-          }`}
-        >
-          {result.sent ? (
-            <Check className="w-8 h-8 text-green-400" />
-          ) : (
-            <Mail className="w-8 h-8 text-amber-400" />
-          )}
-        </div>
-        <h2 className="text-xl font-semibold text-vb-text">
-          {mode === 'group' ? `${result.count} Interviews Scheduled!` : 'Interview Scheduled!'}
-        </h2>
-        <p className="text-sm text-vb-text-muted text-center max-w-md">
-          {result.sent
-            ? mode === 'group'
-              ? 'Interview invitation emails have been sent to all selected applicants.'
-              : `Interview invitation email has been sent to ${candidate?.email}.`
-            : 'Interview(s) scheduled, but email was not sent (no email settings configured).'}
-        </p>
-        <button
-          onClick={goBack}
-          className="mt-4 flex items-center gap-2 px-5 py-2.5 bg-brand text-white text-sm rounded-lg hover:bg-brand-dark transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to Job
-        </button>
-      </div>
-    );
-  }
 
   // ── Can proceed check ──
   function canProceed(): boolean {

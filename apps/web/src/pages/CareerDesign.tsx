@@ -20,6 +20,28 @@ interface CareerDesignData {
 }
 
 const THEMES = [
+    {
+      id: 'light',
+      name: 'Light',
+      desc: 'Bright and clean default',
+      heroBg: 'from-white via-gray-100 to-white',
+      accent: 'from-blue-400 to-blue-200',
+      badge: 'bg-blue-100 text-blue-600 border-blue-200',
+      btnBg: 'bg-blue-600 text-white hover:bg-blue-700',
+      cardAccent: 'text-blue-600',
+      preview: ['#ffffff', '#f3f4f6'],
+    },
+    {
+      id: 'dark',
+      name: 'Dark',
+      desc: 'Dark mode for low light',
+      heroBg: 'from-gray-900 via-gray-800 to-black',
+      accent: 'from-gray-700 to-gray-900',
+      badge: 'bg-gray-700 text-gray-300 border-gray-800',
+      btnBg: 'bg-gray-900 text-white hover:bg-gray-700',
+      cardAccent: 'text-gray-300',
+      preview: ['#111827', '#000000'],
+    },
   {
     id: 'midnight',
     name: 'Midnight',

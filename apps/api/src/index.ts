@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
+import sensible from '@fastify/sensible';
 import { createReadStream, promises as fsPromises } from 'node:fs';
 import path from 'node:path';
 import { env } from './config/env.js';
@@ -17,12 +18,15 @@ import { careersRoutes, publicCareersRoutes } from './routes/careers.js';
 import { aiRoutes } from './routes/ai.js';
 import { chatRoutes } from './routes/chat.js';
 import { adminRoutes } from './routes/admin.js';
+import { offerRoutes } from './routes/offers.js';
 
 const app = Fastify({
   logger: env.NODE_ENV === 'development',
 });
 
 // Plugins
+await app.register(sensible);
+
 await app.register(cors, {
   origin: env.CORS_ORIGIN,
   credentials: true,
@@ -48,6 +52,7 @@ await app.register(publicCareersRoutes, { prefix: '/api/public/careers' });
 await app.register(aiRoutes, { prefix: '/api/ai' });
 await app.register(chatRoutes, { prefix: '/api/chat' });
 await app.register(adminRoutes, { prefix: '/api/admin' });
+await app.register(offerRoutes, { prefix: '/api/offers' });
 
 // Health check
 app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));

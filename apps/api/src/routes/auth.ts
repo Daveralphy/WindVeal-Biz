@@ -142,11 +142,17 @@ export async function authRoutes(app: FastifyInstance) {
       user: {
         id: result.user.id,
         email: result.user.email,
+        username: result.user.username,
         firstName: result.user.firstName,
         lastName: result.user.lastName,
         role: result.user.role,
+        jobTitle: result.user.jobTitle,
+        phone: result.user.phone,
+        avatarUrl: result.user.avatarUrl,
+        timezone: result.user.timezone,
         organizationId: result.organization.id,
         organizationName: result.organization.name,
+        organizationLogo: result.organization.logoUrl,
       },
     });
   });
@@ -204,12 +210,18 @@ export async function authRoutes(app: FastifyInstance) {
       user: {
         id: user.id,
         email: user.email,
+        username: user.username,
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
         isSuperAdmin: user.isSuperAdmin,
+        jobTitle: user.jobTitle,
+        phone: user.phone,
+        avatarUrl: user.avatarUrl,
+        timezone: user.timezone,
         organizationId: user.organizationId,
         organizationName: user.organization.name,
+        organizationLogo: user.organization.logoUrl,
       },
     };
   });
@@ -320,11 +332,27 @@ export async function authRoutes(app: FastifyInstance) {
       lastName: user.lastName,
       role: user.role,
       isSuperAdmin: user.isSuperAdmin,
+      jobTitle: user.jobTitle,
+      phone: user.phone,
       avatarUrl: user.avatarUrl,
+      timezone: user.timezone,
       organizationId: user.organizationId,
       organizationName: user.organization.name,
       organizationLogo: user.organization.logoUrl,
     };
+  });
+
+  // Update timezone
+  app.patch('/timezone', { preHandler: [authenticate] }, async (request) => {
+    const schema = z.object({ timezone: z.string().min(1) });
+    const { timezone } = schema.parse(request.body);
+
+    await prisma.user.update({
+      where: { id: request.user!.userId },
+      data: { timezone },
+    });
+
+    return { timezone };
   });
 }
 

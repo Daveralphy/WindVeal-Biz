@@ -146,6 +146,7 @@ model User {
   jobTitle       String?
   phone          String?
   avatarUrl      String?
+  timezone       String?
   role           UserRole     @default(RECRUITER)
   isSuperAdmin   Boolean      @default(false)
   isActive       Boolean      @default(true)

@@ -4,6 +4,7 @@ import prisma from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
 import { composeInterviewEmail } from '../services/groqService.js';
 import { resolveSmtpConfig, sendEmail, verifySmtpConnection } from '../services/emailService.js';
+import { notifyOrgUsers } from '../services/notificationService.js';
 
 const scheduleInterviewSchema = z.object({
   applicantId: z.string().min(1),
@@ -36,6 +37,71 @@ export async function interviewRoutes(app: FastifyInstance) {
 
     const updated = await prisma.interview.update({ where: { id }, data: { status: status as any } });
     return updated;
+  });
+
+  // Edit an interview (reschedule)
+  app.patch('/:id', async (request) => {
+    const { userId, organizationId } = request.user!;
+    const { id } = request.params as { id: string };
+
+    const editSchema = z.object({
+      scheduledAt: z.string().min(1).optional(),
+      durationMinutes: z.number().int().min(15).max(480).optional(),
+      medium: z.enum(['teams', 'google_meet', 'zoom']).optional(),
+      meetingLink: z.string().url().optional().or(z.literal('')),
+      emailSubject: z.string().min(1).optional(),
+      emailBody: z.string().min(1).optional(),
+    });
+
+    const data = editSchema.parse(request.body);
+
+    const interview = await prisma.interview.findFirst({
+      where: { id, job: { organizationId } },
+      include: { applicant: { select: { id: true, email: true, firstName: true, lastName: true } } },
+    });
+    if (!interview) return app.httpErrors.notFound('Interview not found');
+
+    const updateData: Record<string, unknown> = {};
+    if (data.scheduledAt) updateData.scheduledAt = new Date(data.scheduledAt);
+    if (data.durationMinutes) updateData.durationMinutes = data.durationMinutes;
+    if (data.meetingLink !== undefined) updateData.meetingLink = data.meetingLink || null;
+    if (data.medium) updateData.notes = `Medium: ${data.medium}`;
+
+    const updated = await prisma.interview.update({ where: { id }, data: updateData });
+
+    // Send updated email if provided
+    let emailSent = false;
+    if (data.emailSubject && data.emailBody) {
+      const org = await prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { smtpSettings: true },
+      });
+
+      await prisma.emailLog.create({
+        data: {
+          applicantId: interview.applicantId,
+          subject: data.emailSubject,
+          body: data.emailBody,
+          sentById: userId,
+        },
+      });
+
+      const smtpConfig = resolveSmtpConfig(org?.smtpSettings as any);
+      if (smtpConfig && interview.applicant.email) {
+        try {
+          await sendEmail(smtpConfig, {
+            to: interview.applicant.email,
+            subject: data.emailSubject,
+            html: data.emailBody,
+          });
+          emailSent = true;
+        } catch (err) {
+          console.error('Failed to send interview update email:', err);
+        }
+      }
+    }
+
+    return { ...updated, emailSent };
   });
 
   // Delete an interview
@@ -261,6 +327,14 @@ export async function interviewRoutes(app: FastifyInstance) {
         console.error('Failed to send interview email:', err);
       }
     }
+
+    // Notify org users about the scheduled interview
+    const scheduledDate = new Date(data.scheduledAt);
+    notifyOrgUsers(organizationId, 'INTERVIEW_SCHEDULED', {
+      applicantName: `${applicant.firstName} ${applicant.lastName}`,
+      jobTitle: result.jobId,
+      time: scheduledDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }),
+    }, userId).catch(() => {});
 
     return { ...result, emailSent };
   });

@@ -241,6 +241,91 @@ function getFallbackInterviewEmail(ctx: ComposeEmailContext): { subject: string;
   return { subject, body };
 }
 
+// ─── AI Offer Email Composition ─────────────────────────────
+
+interface ComposeOfferEmailContext {
+  candidateFirstName: string;
+  candidateLastName: string;
+  jobTitle: string;
+  companyName: string;
+  salary?: number | null;
+  startDate?: string | null;       // e.g. "June 15, 2025"
+  conditions?: string | null;
+  senderName: string;
+}
+
+export async function composeOfferEmail(
+  context: ComposeOfferEmailContext,
+): Promise<{ subject: string; body: string }> {
+  const fallback = getFallbackOfferEmail(context);
+  if (!groq) return fallback;
+
+  try {
+    const salaryLine = context.salary ? `- Salary: $${context.salary.toLocaleString()}` : '';
+    const startLine = context.startDate ? `- Start Date: ${context.startDate}` : '';
+    const conditionsLine = context.conditions ? `- Special Conditions/Notes: ${context.conditions}` : '';
+
+    const prompt = `Write a professional offer letter email for:
+- Candidate: ${context.candidateFirstName} ${context.candidateLastName}
+- Position: ${context.jobTitle}
+- Company: ${context.companyName}
+${salaryLine}
+${startLine}
+${conditionsLine}
+- Sender: ${context.senderName}
+
+Write a warm, professional offer letter email. Include all the provided details clearly. Do NOT use placeholder brackets. Use actual values provided. If salary or start date is not provided, do not mention them.`;
+
+    const completion = await groq.chat.completions.create({
+      model: 'llama-3.1-8b-instant',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a professional HR email writer. Write offer letter emails that are warm, congratulatory, and informative. Respond with valid JSON only — no markdown, no explanation. The JSON must have: subject (string, concise email subject line), body (string, the full email body as clean HTML with <p>, <strong>, <ul>, <li> tags — do NOT use markdown). The email should include: congratulatory greeting by first name, position title, compensation details if provided, start date if provided, any special conditions, next steps, and a professional sign-off from the sender. Keep it concise but thorough.`,
+        },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.5,
+      max_tokens: 800,
+    });
+
+    const text = completion.choices[0]?.message?.content?.trim() || '';
+    const parsed = JSON.parse(text);
+
+    if (parsed.subject && parsed.body) {
+      return {
+        subject: String(parsed.subject).slice(0, 200),
+        body: String(parsed.body),
+      };
+    }
+
+    return fallback;
+  } catch (err) {
+    console.error('Groq offer email composition error:', err);
+    return fallback;
+  }
+}
+
+function getFallbackOfferEmail(ctx: ComposeOfferEmailContext): { subject: string; body: string } {
+  const subject = `Offer Letter: ${ctx.jobTitle} at ${ctx.companyName}`;
+  const details: string[] = [];
+  if (ctx.salary) details.push(`<li><strong>Salary:</strong> $${ctx.salary.toLocaleString()}</li>`);
+  if (ctx.startDate) details.push(`<li><strong>Start Date:</strong> ${ctx.startDate}</li>`);
+  if (ctx.conditions) details.push(`<li><strong>Conditions:</strong> ${ctx.conditions}</li>`);
+
+  const body = `<p>Dear ${ctx.candidateFirstName},</p>
+
+<p>We are thrilled to extend an offer for the <strong>${ctx.jobTitle}</strong> position at <strong>${ctx.companyName}</strong>.</p>
+
+${details.length > 0 ? `<p><strong>Offer Details:</strong></p>\n<ul>\n  ${details.join('\n  ')}\n</ul>` : ''}
+
+<p>Please review the details above and let us know if you have any questions. We look forward to having you on the team!</p>
+
+<p>Best regards,<br/>${ctx.senderName}<br/>${ctx.companyName}</p>`;
+
+  return { subject, body };
+}
+
 interface ScreeningContext {
   applicationData: string;
   coverLetter: string;

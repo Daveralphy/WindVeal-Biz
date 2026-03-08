@@ -11,7 +11,6 @@ import {
   Menu,
   Search,
   Bell,
-  MessageSquare,
   LogOut,
   Settings,
   Check,
@@ -213,11 +212,6 @@ export default function AppLayout() {
               />
             </div>
 
-            {/* VealAI Chat */}
-            <button className="p-2 text-vb-text-secondary hover:text-vb-text hover:bg-vb-card rounded-lg transition-colors">
-              <MessageSquare className="w-[18px] h-[18px]" />
-            </button>
-
             {/* Notifications */}
             <button
               onClick={() => setNotificationsOpen(!notificationsOpen)}
@@ -225,12 +219,17 @@ export default function AppLayout() {
             >
               <Bell className="w-[18px] h-[18px]" />
               {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 w-2 h-2 bg-brand rounded-full" />
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
               )}
             </button>
 
             {/* User avatar */}
-            <div className="w-8 h-8 rounded-full bg-brand/20 flex items-center justify-center text-brand text-xs font-semibold cursor-pointer">
+            <div
+              onClick={() => navigate('/settings?view=profile')}
+              className="w-8 h-8 rounded-full bg-brand/20 flex items-center justify-center text-brand text-xs font-semibold cursor-pointer hover:ring-2 hover:ring-brand/30 transition-all"
+            >
               {user?.firstName?.[0]}
               {user?.lastName?.[0]}
             </div>

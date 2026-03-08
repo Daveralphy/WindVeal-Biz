@@ -23,8 +23,8 @@ import {
   ChevronRight,
   CalendarPlus,
   AlertTriangle,
-  ThumbsUp,
-  ThumbsDown,
+  DollarSign,
+  Briefcase,
 } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -185,9 +185,25 @@ export default function JobApplicantDetail() {
   const [noteMenuId, setNoteMenuId] = useState<string | null>(null);
   const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
   const [deletingInterviewId, setDeletingInterviewId] = useState<string | null>(null);
+  const [editingInterviewId, setEditingInterviewId] = useState<string | null>(null);
+  const [editInterviewData, setEditInterviewData] = useState<{ scheduledAt: string; durationMinutes: number; medium: string; meetingLink: string }>({ scheduledAt: '', durationMinutes: 30, medium: '', meetingLink: '' });
+  const [savingInterview, setSavingInterview] = useState(false);
+  const [resendOnEdit, setResendOnEdit] = useState(true);
   const [qualifyConfirm, setQualifyConfirm] = useState<boolean | null>(null);
   const noteMenuRef = useRef<HTMLDivElement>(null);
   const [showNotes, setShowNotes] = useState(false);
+
+  // Offer state
+  const [offer, setOffer] = useState<{ id?: string; salary?: number | null; startDate?: string | null; conditions?: string | null; status?: string; sentAt?: string | null } | null>(null);
+  const [offerSalary, setOfferSalary] = useState('');
+  const [offerStartDate, setOfferStartDate] = useState('');
+  const [offerConditions, setOfferConditions] = useState('');
+  const [savingOffer, setSavingOffer] = useState(false);
+  const [offerEmailSubject, setOfferEmailSubject] = useState('');
+  const [offerEmailBody, setOfferEmailBody] = useState('');
+  const [composingOfferEmail, setComposingOfferEmail] = useState(false);
+  const [sendingOffer, setSendingOffer] = useState(false);
+  const [showOfferEmail, setShowOfferEmail] = useState(false);
 
   // Draggable notes button
   const [notesBtnPos, setNotesBtnPos] = useState({ x: 0, y: 0 });
@@ -240,6 +256,28 @@ export default function JobApplicantDetail() {
       })
       .catch(() => setInterviews([]))
       .finally(() => setLoadingInterviews(false));
+  }, [detail, viewingStageId]);
+
+  // Fetch offer when viewing an offer-type stage
+  useEffect(() => {
+    if (!detail) return;
+    const effectiveId = viewingStageId || detail.currentStage.id;
+    const stage = detail.job.pipelineStages.find((s) => s.id === effectiveId);
+    if (!stage) return;
+    const st = detectStageType(stage.name);
+    if (st !== 'offer' && st !== 'hired') return;
+
+    api.get(`/offers/${detail.id}`)
+      .then((res) => {
+        const o = res.data;
+        setOffer(o);
+        if (o) {
+          setOfferSalary(o.salary ? String(o.salary) : '');
+          setOfferStartDate(o.startDate ? o.startDate.split('T')[0] : '');
+          setOfferConditions(o.conditions || '');
+        }
+      })
+      .catch(() => setOffer(null));
   }, [detail, viewingStageId]);
 
   function getFieldValue(fieldId: string): string {
@@ -318,6 +356,110 @@ export default function JobApplicantDetail() {
   }
 
 
+  // ── Edit Interview ──
+  function openEditInterview(interviewId: string) {
+    const iv = interviews.find((i) => i.id === interviewId);
+    if (!iv) return;
+    setEditInterviewData({
+      scheduledAt: new Date(new Date(iv.scheduledAt).getTime() - new Date(iv.scheduledAt).getTimezoneOffset() * 60000).toISOString().slice(0, 16),
+      durationMinutes: iv.durationMinutes,
+      medium: iv.meetingLink?.includes('meet.google') ? 'google_meet' : iv.meetingLink?.includes('teams') ? 'teams' : iv.meetingLink?.includes('zoom') ? 'zoom' : 'google_meet',
+      meetingLink: iv.meetingLink || '',
+    });
+    setEditingInterviewId(interviewId);
+  }
+
+  async function handleSaveEditInterview() {
+    if (!editingInterviewId || savingInterview || !detail) return;
+    setSavingInterview(true);
+    try {
+      let emailSubject: string | undefined;
+      let emailBody: string | undefined;
+
+      // If resend is checked, compose an updated email first
+      if (resendOnEdit) {
+        const composed = await api.post('/interviews/compose-email', {
+          applicantId: detail.id,
+          jobId: detail.job.id,
+          scheduledAt: new Date(editInterviewData.scheduledAt).toISOString(),
+          durationMinutes: editInterviewData.durationMinutes,
+          platform: editInterviewData.medium,
+          meetingLink: editInterviewData.meetingLink || undefined,
+          stageName: viewingStage?.name,
+        });
+        emailSubject = composed.data.subject;
+        emailBody = composed.data.body;
+      }
+
+      await api.patch(`/interviews/${editingInterviewId}`, {
+        scheduledAt: new Date(editInterviewData.scheduledAt).toISOString(),
+        durationMinutes: editInterviewData.durationMinutes,
+        medium: editInterviewData.medium,
+        meetingLink: editInterviewData.meetingLink || undefined,
+        ...(emailSubject && emailBody ? { emailSubject, emailBody } : {}),
+      });
+      // Refresh interviews
+      const res = await api.get('/interviews');
+      const all: InterviewItem[] = res.data;
+      setInterviews(all.filter((i) => i.applicantId === detail?.id));
+      setEditingInterviewId(null);
+    } catch { /* ignore */ }
+    finally { setSavingInterview(false); }
+  }
+
+
+  // ── Offer ──
+  async function handleSaveOffer() {
+    if (!detail || savingOffer) return;
+    setSavingOffer(true);
+    try {
+      const res = await api.put(`/offers/${detail.id}`, {
+        salary: offerSalary ? parseInt(offerSalary, 10) : undefined,
+        startDate: offerStartDate || undefined,
+        conditions: offerConditions || undefined,
+      });
+      setOffer(res.data);
+    } catch { /* ignore */ }
+    finally { setSavingOffer(false); }
+  }
+
+  async function handleComposeOfferEmail() {
+    if (!detail || composingOfferEmail) return;
+    setComposingOfferEmail(true);
+    try {
+      // Save offer first
+      await handleSaveOffer();
+      const res = await api.post('/offers/compose-email', {
+        applicantId: detail.id,
+        jobId: detail.job.id,
+        salary: offerSalary ? parseInt(offerSalary, 10) : undefined,
+        startDate: offerStartDate || undefined,
+        conditions: offerConditions || undefined,
+      });
+      setOfferEmailSubject(res.data.subject);
+      setOfferEmailBody(res.data.body);
+      setShowOfferEmail(true);
+    } catch { /* ignore */ }
+    finally { setComposingOfferEmail(false); }
+  }
+
+  async function handleSendOfferEmail() {
+    if (!detail || sendingOffer || !offerEmailSubject || !offerEmailBody) return;
+    setSendingOffer(true);
+    try {
+      await api.post(`/offers/${detail.id}/send`, {
+        emailSubject: offerEmailSubject,
+        emailBody: offerEmailBody,
+      });
+      // Refresh offer status
+      const res = await api.get(`/offers/${detail.id}`);
+      setOffer(res.data);
+      setShowOfferEmail(false);
+    } catch { /* ignore */ }
+    finally { setSendingOffer(false); }
+  }
+
+
 
   if (loading) {
     return (
@@ -353,6 +495,10 @@ export default function JobApplicantDetail() {
     ? interviews.filter((i) => i.applicantId === detail.id && i.stageId === effectiveStageId)
     : [];
   const interviewGateMet = stageType !== 'interview' || (currentStageInterviews.length > 0 && detail.qualified === true);
+
+  // If viewing a stage that the applicant has already passed, treat as qualified
+  const viewingStageIdx = viewingStage ? pipelineStages.findIndex((s) => s.id === viewingStage.id) : currentStageIdx;
+  const isViewingPastStage = viewingStageIdx >= 0 && viewingStageIdx < currentStageIdx;
 
   // Build date map for stage timeline
   const stageDateMap: Record<string, string> = {};
@@ -622,27 +768,14 @@ export default function JobApplicantDetail() {
                         <MoreVertical className="w-4 h-4" />
                       </button>
                       {interviewMenuId === interview.id && (
-                        <div className="absolute right-0 top-full mt-1 w-44 bg-vb-card border border-vb-border rounded-lg shadow-xl z-20 py-1">
-                          {/* Qualified / Not Qualified */}
+                        <div className="absolute right-0 top-full mt-1 w-40 bg-vb-card border border-vb-border rounded-lg shadow-xl z-20 py-1">
                           <button
-                            onClick={() => { setQualifyConfirm(true); setInterviewMenuId(null); }}
-                            className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors ${
-                              detail.qualified === true ? 'text-green-400 bg-green-500/10' : 'text-vb-text-secondary hover:bg-vb-muted'
-                            }`}
+                            onClick={() => { openEditInterview(interview.id); setInterviewMenuId(null); }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-vb-text-secondary hover:bg-vb-muted transition-colors"
                           >
-                            <ThumbsUp className="w-3.5 h-3.5" />
-                            Qualified
+                            <Pencil className="w-3.5 h-3.5" />
+                            Edit Interview
                           </button>
-                          <button
-                            onClick={() => { setQualifyConfirm(false); setInterviewMenuId(null); }}
-                            className={`w-full flex items-center gap-2 px-3 py-2 text-xs transition-colors ${
-                              detail.qualified === false ? 'text-red-400 bg-red-500/10' : 'text-vb-text-secondary hover:bg-vb-muted'
-                            }`}
-                          >
-                            <ThumbsDown className="w-3.5 h-3.5" />
-                            Not Qualified
-                          </button>
-                          {/* Delete interview */}
                           <div className="border-t border-vb-border my-1" />
                           <button
                             onClick={() => { setDeletingInterviewId(interview.id); setInterviewMenuId(null); }}
@@ -695,45 +828,210 @@ export default function JobApplicantDetail() {
     );
   }
 
-  function renderQualifySection() {
+  function renderOfferSection() {
+    if (!detail) return null;
+    const isSent = offer?.status === 'SENT' || offer?.status === 'VIEWED' || offer?.status === 'SIGNED';
+    return (
+      <>
+        {/* Offer Details Form */}
+        <section className="bg-vb-card border border-vb-border rounded-xl p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium text-vb-text flex items-center gap-2">
+              <Briefcase className="w-4 h-4 text-vb-text-muted" />
+              Offer Details
+            </h3>
+            {offer?.status && (
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                offer.status === 'DRAFT' ? 'bg-gray-500/10 text-vb-text-muted' :
+                offer.status === 'SENT' ? 'bg-blue-500/10 text-blue-400' :
+                offer.status === 'SIGNED' ? 'bg-green-500/10 text-green-400' :
+                offer.status === 'DECLINED' ? 'bg-red-500/10 text-red-400' :
+                'bg-gray-500/10 text-vb-text-muted'
+              }`}>
+                {offer.status}
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-vb-text-muted mb-1">Salary</label>
+              <div className="relative">
+                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-vb-text-muted" />
+                <input
+                  type="number"
+                  value={offerSalary}
+                  onChange={(e) => setOfferSalary(e.target.value)}
+                  placeholder="e.g. 85000"
+                  className="w-full bg-vb-bg border border-vb-border rounded-lg pl-8 pr-3 py-2 text-sm text-vb-text outline-none focus:border-brand placeholder:text-vb-text-faint"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs text-vb-text-muted mb-1">Start Date</label>
+              <input
+                type="date"
+                value={offerStartDate}
+                onChange={(e) => setOfferStartDate(e.target.value)}
+                className="w-full bg-vb-bg border border-vb-border rounded-lg px-3 py-2 text-sm text-vb-text outline-none focus:border-brand"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-vb-text-muted mb-1">Conditions / Notes</label>
+            <textarea
+              value={offerConditions}
+              onChange={(e) => setOfferConditions(e.target.value)}
+              placeholder="Commission structure, contract type, employment type, etc."
+              rows={3}
+              className="w-full bg-vb-bg border border-vb-border rounded-lg px-3 py-2 text-sm text-vb-text outline-none focus:border-brand placeholder:text-vb-text-faint resize-none"
+            />
+          </div>
+
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              onClick={handleSaveOffer}
+              disabled={savingOffer}
+              className="px-4 py-2 text-xs font-medium bg-vb-surface border border-vb-border text-vb-text-secondary rounded-lg hover:bg-vb-muted transition-colors disabled:opacity-50"
+            >
+              {savingOffer ? 'Saving...' : 'Save Draft'}
+            </button>
+            <button
+              onClick={handleComposeOfferEmail}
+              disabled={composingOfferEmail}
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded-lg hover:bg-purple-500/15 transition-colors disabled:opacity-50"
+            >
+              {composingOfferEmail ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              {composingOfferEmail ? 'Composing...' : 'Compose with AI'}
+            </button>
+          </div>
+        </section>
+
+        {/* Offer Email Preview */}
+        {showOfferEmail && (
+          <section className="bg-vb-card border border-vb-border rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-vb-text flex items-center gap-2">
+                <Mail className="w-4 h-4 text-vb-text-muted" />
+                Offer Email
+              </h3>
+              <button
+                onClick={() => setShowOfferEmail(false)}
+                className="p-1 text-vb-text-muted hover:text-vb-text hover:bg-vb-muted rounded transition-colors"
+              >
+                <XCircle className="w-4 h-4" />
+              </button>
+            </div>
+            <div>
+              <label className="block text-xs text-vb-text-muted mb-1">Subject</label>
+              <input
+                type="text"
+                value={offerEmailSubject}
+                onChange={(e) => setOfferEmailSubject(e.target.value)}
+                className="w-full bg-vb-bg border border-vb-border rounded-lg px-3 py-2 text-sm text-vb-text outline-none focus:border-brand"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-vb-text-muted mb-1">Body</label>
+              <textarea
+                value={offerEmailBody}
+                onChange={(e) => setOfferEmailBody(e.target.value)}
+                rows={10}
+                className="w-full bg-vb-bg border border-vb-border rounded-lg px-3 py-2 text-sm text-vb-text outline-none focus:border-brand font-mono text-xs resize-none"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowOfferEmail(false)}
+                className="px-4 py-2 text-xs text-vb-text-muted hover:text-vb-text rounded-lg hover:bg-vb-card transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendOfferEmail}
+                disabled={sendingOffer || !offerEmailSubject || !offerEmailBody}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium bg-brand text-white rounded-lg hover:bg-brand/90 transition-colors disabled:opacity-50"
+              >
+                {sendingOffer ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                {sendingOffer ? 'Sending...' : 'Send Offer Email'}
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* Sent indicator */}
+        {isSent && !showOfferEmail && (
+          <section className="bg-vb-card border border-green-500/20 rounded-xl p-5">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-green-500/10 flex items-center justify-center">
+                <Check className="w-4 h-4 text-green-400" />
+              </div>
+              <div>
+                <p className="text-sm text-vb-text font-medium">Offer Sent</p>
+                {offer?.sentAt && (
+                  <p className="text-xs text-vb-text-muted">
+                    Sent on {new Date(offer.sentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  </p>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {renderContactInfo()}
+      </>
+    );
+  }
+
+  function renderHiredSection() {
     if (!detail) return null;
     return (
-      <section className="bg-vb-card border border-vb-border rounded-xl p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-medium text-vb-text">Qualification</h3>
-            <p className="text-xs text-vb-text-muted mt-0.5">
-              {detail.qualified === true
-                ? 'Applicant has been qualified to advance.'
-                : detail.qualified === false
-                  ? 'Applicant has been marked as not qualified.'
-                  : 'Mark this applicant as qualified before advancing.'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setQualifyConfirm(true)}
-              className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
-                detail.qualified === true
-                  ? 'bg-green-500/15 text-green-400 border-green-500/30'
-                  : 'border-vb-border text-vb-text-secondary hover:border-green-500/30 hover:text-green-400'
-              }`}
-            >
-              Qualified
-            </button>
-            <button
-              onClick={() => setQualifyConfirm(false)}
-              className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
-                detail.qualified === false
-                  ? 'bg-red-500/15 text-red-400 border-red-500/30'
-                  : 'border-vb-border text-vb-text-secondary hover:border-red-500/30 hover:text-red-400'
-              }`}
-            >
-              Not Qualified
-            </button>
-          </div>
-        </div>
-      </section>
+      <>
+        {/* Employment Summary */}
+        {offer && (
+          <section className="bg-vb-card border border-green-500/20 rounded-xl p-5 space-y-4">
+            <h3 className="text-sm font-medium text-vb-text flex items-center gap-2">
+              <Briefcase className="w-4 h-4 text-green-400" />
+              Employment Details
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              {offer.salary && (
+                <div>
+                  <p className="text-xs text-vb-text-muted">Salary</p>
+                  <p className="text-sm text-vb-text font-medium">${offer.salary.toLocaleString()}</p>
+                </div>
+              )}
+              {offer.startDate && (
+                <div>
+                  <p className="text-xs text-vb-text-muted">Start Date</p>
+                  <p className="text-sm text-vb-text font-medium">
+                    {new Date(offer.startDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                  </p>
+                </div>
+              )}
+            </div>
+            {offer.conditions && (
+              <div>
+                <p className="text-xs text-vb-text-muted">Conditions</p>
+                <p className="text-sm text-vb-text whitespace-pre-wrap">{offer.conditions}</p>
+              </div>
+            )}
+            {offer.status && (
+              <div className="flex items-center gap-2 pt-1">
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                  offer.status === 'SIGNED' ? 'bg-green-500/10 text-green-400' :
+                  offer.status === 'SENT' ? 'bg-blue-500/10 text-blue-400' :
+                  'bg-gray-500/10 text-vb-text-muted'
+                }`}>
+                  Offer {offer.status}
+                </span>
+              </div>
+            )}
+          </section>
+        )}
+        {renderContactInfo()}
+      </>
     );
   }
 
@@ -745,7 +1043,6 @@ export default function JobApplicantDetail() {
           <>
             {renderContactInfo()}
             {renderApplicationResponses()}
-            {renderQualifySection()}
           </>
         );
 
@@ -754,7 +1051,6 @@ export default function JobApplicantDetail() {
           <>
             {renderApplicationResponses()}
             {renderAIEvaluation()}
-            {renderQualifySection()}
           </>
         );
 
@@ -770,7 +1066,6 @@ export default function JobApplicantDetail() {
         return (
           <>
             {renderApplicationResponses()}
-            {renderQualifySection()}
           </>
         );
 
@@ -778,22 +1073,20 @@ export default function JobApplicantDetail() {
         return (
           <>
             {renderApplicationResponses()}
-            {renderQualifySection()}
           </>
         );
 
       case 'offer':
         return (
           <>
-            {renderContactInfo()}
-            {renderQualifySection()}
+            {renderOfferSection()}
           </>
         );
 
       case 'hired':
         return (
           <>
-            {renderContactInfo()}
+            {renderHiredSection()}
           </>
         );
 
@@ -805,7 +1098,6 @@ export default function JobApplicantDetail() {
           <>
             {renderContactInfo()}
             {renderApplicationResponses()}
-            {renderQualifySection()}
           </>
         );
     }
@@ -846,14 +1138,46 @@ export default function JobApplicantDetail() {
             </div>
           </div>
         </div>
-        {viewingStage && viewingStage.id !== detail.currentStage.id && (
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/5 border border-amber-500/20 flex-shrink-0">
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-            <span className="text-[11px] text-amber-400">
-              Currently in <strong>{detail.currentStage.name}</strong> — viewing from <strong>{viewingStage.name}</strong>
-            </span>
-          </div>
-        )}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          {viewingStage && viewingStage.id !== detail.currentStage.id && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/5 border border-amber-500/20">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+              <span className="text-[11px] text-amber-400">
+                Viewing <strong>{viewingStage.name}</strong>
+              </span>
+            </div>
+          )}
+          {stageType !== 'hired' && stageType !== 'rejected' && stageType !== 'offer' && (
+            detail.qualified === true || isViewingPastStage ? (
+              <span className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg bg-green-500/15 text-green-400 border border-green-500/30">
+                <Check className="w-3.5 h-3.5" />
+                Qualified
+              </span>
+            ) : (
+              <button
+                onClick={() => setQualifyConfirm(true)}
+                className="px-4 py-2 text-xs font-medium rounded-lg border border-brand/30 text-brand bg-brand/10 hover:bg-brand/20 transition-colors"
+              >
+                Qualify
+              </button>
+            )
+          )}
+          {stageType === 'offer' && (
+            detail.qualified === true || isViewingPastStage ? (
+              <span className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg bg-green-500/15 text-green-400 border border-green-500/30">
+                <Check className="w-3.5 h-3.5" />
+                Offer Accepted
+              </span>
+            ) : (
+              <button
+                onClick={() => setQualifyConfirm(true)}
+                className="px-4 py-2 text-xs font-medium rounded-lg border border-green-500/30 text-green-400 bg-green-500/10 hover:bg-green-500/20 transition-colors"
+              >
+                Offer Accepted
+              </button>
+            )
+          )}
+        </div>
       </div>
 
       {/* Pipeline progress with advance/back buttons inline */}
@@ -966,104 +1290,107 @@ export default function JobApplicantDetail() {
         )}
       </button>
 
-      {/* Notes Slide-out Panel */}
+      {/* Notes Chat Modal */}
       {showNotes && (
-        <>
-          <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setShowNotes(false)} />
-          <div className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-vb-bg border-l border-vb-border z-50 flex flex-col shadow-2xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-vb-border">
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowNotes(false)} />
+          <div className="relative bg-vb-bg border border-vb-border rounded-xl w-full max-w-sm shadow-2xl flex flex-col" style={{ height: '480px' }}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-vb-border">
               <h3 className="text-sm font-medium text-vb-text flex items-center gap-2">
                 <MessageSquare className="w-4 h-4 text-vb-text-muted" />
                 Notes
               </h3>
-              <button onClick={() => setShowNotes(false)} className="p-1.5 text-vb-text-muted hover:text-vb-text hover:bg-vb-muted rounded-lg transition-colors">
+              <button onClick={() => setShowNotes(false)} className="p-1 text-vb-text-muted hover:text-vb-text hover:bg-vb-muted rounded transition-colors">
                 <XCircle className="w-4 h-4" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-5 space-y-3">
+            {/* Messages area */}
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
               {detail.notes.length > 0 ? (
-                detail.notes.map((note) => (
-                  <div key={note.id} className="bg-vb-card border border-vb-border rounded-lg p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      {editingNoteId === note.id ? (
-                        <div className="flex-1 flex gap-2">
-                          <input
-                            type="text"
-                            value={editNoteText}
-                            onChange={(e) => setEditNoteText(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter') handleEditNote(note.id); if (e.key === 'Escape') { setEditingNoteId(null); setEditNoteText(''); } }}
-                            autoFocus
-                            className="flex-1 bg-vb-bg border border-vb-border rounded-lg px-3 py-1.5 text-sm text-vb-text outline-none focus:border-brand"
-                          />
-                          <button onClick={() => handleEditNote(note.id)} className="p-1.5 text-green-400 hover:bg-green-500/10 rounded-lg transition-colors">
-                            <Check className="w-4 h-4" />
-                          </button>
-                          <button onClick={() => { setEditingNoteId(null); setEditNoteText(''); }} className="p-1.5 text-vb-text-muted hover:bg-vb-muted rounded-lg transition-colors">
-                            <XCircle className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ) : (
-                        <p className="text-sm text-vb-text flex-1">{note.content}</p>
-                      )}
+                [...detail.notes].reverse().map((note) => (
+                  <div key={note.id} className="group flex flex-col">
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 bg-vb-card border border-vb-border rounded-lg px-3 py-2">
+                        {editingNoteId === note.id ? (
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={editNoteText}
+                              onChange={(e) => setEditNoteText(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') handleEditNote(note.id); if (e.key === 'Escape') { setEditingNoteId(null); setEditNoteText(''); } }}
+                              autoFocus
+                              className="flex-1 bg-vb-bg border border-vb-border rounded px-2 py-1 text-xs text-vb-text outline-none focus:border-brand"
+                            />
+                            <button onClick={() => handleEditNote(note.id)} className="p-1 text-green-400 hover:bg-green-500/10 rounded transition-colors">
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => { setEditingNoteId(null); setEditNoteText(''); }} className="p-1 text-vb-text-muted hover:bg-vb-muted rounded transition-colors">
+                              <XCircle className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-vb-text">{note.content}</p>
+                        )}
+                      </div>
                       {editingNoteId !== note.id && (
-                        <div className="relative" ref={noteMenuId === note.id ? noteMenuRef : undefined}>
+                        <div className="relative opacity-0 group-hover:opacity-100 transition-opacity" ref={noteMenuId === note.id ? noteMenuRef : undefined}>
                           <button
                             onClick={() => setNoteMenuId(noteMenuId === note.id ? null : note.id)}
                             className="p-1 text-vb-text-muted hover:text-vb-text hover:bg-vb-muted rounded transition-colors"
                           >
-                            <MoreVertical className="w-4 h-4" />
+                            <MoreVertical className="w-3.5 h-3.5" />
                           </button>
                           {noteMenuId === note.id && (
-                            <div className="absolute right-0 top-7 z-20 bg-vb-card border border-vb-border rounded-lg shadow-xl py-1 min-w-[120px]">
+                            <div className="absolute right-0 top-7 z-20 bg-vb-card border border-vb-border rounded-lg shadow-xl py-1 min-w-[100px]">
                               <button
                                 onClick={() => { setEditingNoteId(note.id); setEditNoteText(note.content); setNoteMenuId(null); }}
-                                className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-vb-text hover:bg-vb-surface transition-colors"
+                                className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-vb-text hover:bg-vb-surface transition-colors"
                               >
-                                <Pencil className="w-3.5 h-3.5" /> Edit
+                                <Pencil className="w-3 h-3" /> Edit
                               </button>
                               <button
                                 onClick={() => { setDeletingNoteId(note.id); setNoteMenuId(null); }}
-                                className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
+                                className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
                               >
-                                <Trash2 className="w-3.5 h-3.5" /> Delete
+                                <Trash2 className="w-3 h-3" /> Delete
                               </button>
                             </div>
                           )}
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 mt-2 text-xs text-vb-text-muted">
-                      <span>{note.author.firstName} {note.author.lastName}</span>
-                      <span>·</span>
-                      <span>{new Date(note.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
-                    </div>
+                    <p className="text-[10px] text-vb-text-muted mt-0.5 ml-1">
+                      {note.author.firstName} · {new Date(note.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    </p>
                   </div>
                 ))
               ) : (
-                <p className="text-xs text-vb-text-muted text-center py-8">No notes yet.</p>
+                <p className="text-xs text-vb-text-muted text-center py-10">No notes yet</p>
               )}
             </div>
-            <div className="px-5 py-4 border-t border-vb-border">
+            {/* Input area */}
+            <div className="px-4 py-3 border-t border-vb-border">
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="Add a note..."
+                  placeholder="Type a note..."
                   value={noteText}
                   onChange={(e) => setNoteText(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleAddNote(); }}
-                  className="flex-1 bg-vb-card border border-vb-border rounded-lg px-3 py-2 text-sm text-vb-text outline-none focus:border-brand placeholder:text-vb-text-muted"
+                  className="flex-1 bg-vb-card border border-vb-border rounded-lg px-3 py-2 text-xs text-vb-text outline-none focus:border-brand placeholder:text-vb-text-muted"
                 />
                 <button
                   onClick={handleAddNote}
                   disabled={!noteText.trim() || addingNote}
-                  className="px-3 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand/90 disabled:opacity-50 transition-colors"
+                  className="p-2 bg-brand text-white rounded-lg hover:bg-brand/90 disabled:opacity-50 transition-colors"
                 >
                   {addingNote ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 </button>
               </div>
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {/* Stage Change Confirmation Modal */}
@@ -1071,21 +1398,9 @@ export default function JobApplicantDetail() {
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => setStageConfirm(null)} />
           <div className="relative bg-vb-bg border border-vb-border rounded-xl w-full max-w-sm shadow-xl p-6">
-            <div className="mb-4">
-              <h3 className="text-sm font-semibold text-vb-text">
-                {stageConfirm.direction === 'advance' ? 'Advance Applicant' : 'Move Applicant Back'}
-              </h3>
-              <p className="text-xs text-vb-text-muted mt-1">
-                {stageConfirm.direction === 'advance'
-                  ? 'This will move the applicant to the next stage.'
-                  : 'This will move the applicant back to the previous stage.'}
-              </p>
-            </div>
-            <p className="text-sm text-vb-text-secondary mb-5">
-              {stageConfirm.direction === 'advance' ? 'Advance' : 'Move'}{' '}
-              <strong>{detail.firstName} {detail.lastName}</strong> from{' '}
-              <strong>{detail.currentStage.name}</strong> to{' '}
-              <strong>{stageConfirm.targetStage.name}</strong>?
+            <p className="text-sm text-vb-text mb-5">
+              Are you sure you want to {stageConfirm.direction === 'advance' ? 'advance' : 'revert'}{' '}
+              <strong>{detail.firstName}</strong> to <strong>{stageConfirm.targetStage.name}</strong>?
             </p>
             <div className="flex items-center justify-end gap-3">
               <button
@@ -1103,7 +1418,7 @@ export default function JobApplicantDetail() {
                     : 'bg-amber-500 hover:bg-amber-600'
                 }`}
               >
-                {advancing ? 'Moving...' : stageConfirm.direction === 'advance' ? 'Advance' : 'Move Back'}
+                {advancing ? 'Moving...' : 'Confirm'}
               </button>
             </div>
           </div>
@@ -1115,17 +1430,9 @@ export default function JobApplicantDetail() {
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => setQualifyConfirm(null)} />
           <div className="relative bg-vb-bg border border-vb-border rounded-xl w-full max-w-sm shadow-xl p-6">
-            <div className="mb-4">
-              <h3 className="text-sm font-semibold text-vb-text">
-                {qualifyConfirm ? 'Mark as Qualified' : 'Mark as Not Qualified'}
-              </h3>
-              <p className="text-xs text-vb-text-muted mt-1">
-                {qualifyConfirm ? 'This will enable advancing the applicant to the next stage.' : 'This will prevent the applicant from being advanced.'}
-              </p>
-            </div>
-            <p className="text-sm text-vb-text-secondary mb-5">
-              Are you sure you want to mark <strong>{detail.firstName} {detail.lastName}</strong> as{' '}
-              <strong>{qualifyConfirm ? 'Qualified' : 'Not Qualified'}</strong>?
+            <p className="text-sm text-vb-text mb-5">
+              Are you sure you want to {stageType === 'offer' ? 'mark offer as accepted' : 'qualify'}{' '}
+              <strong>{detail.firstName}</strong> for the next stage?
             </p>
             <div className="flex items-center justify-end gap-3">
               <button
@@ -1136,16 +1443,14 @@ export default function JobApplicantDetail() {
               </button>
               <button
                 onClick={async () => {
-                  await api.patch(`/applicants/${detail.id}/qualify`, { qualified: qualifyConfirm });
+                  await api.patch(`/applicants/${detail.id}/qualify`, { qualified: true });
                   const fresh = await api.get(`/applicants/${detail.id}`);
                   setDetail(fresh.data);
                   setQualifyConfirm(null);
                 }}
-                className={`px-4 py-2 text-sm text-white rounded-lg transition-colors ${
-                  qualifyConfirm ? 'bg-green-600 hover:bg-green-700' : 'bg-red-500 hover:bg-red-600'
-                }`}
+                className="px-4 py-2 text-sm text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors"
               >
-                {qualifyConfirm ? 'Mark Qualified' : 'Mark Not Qualified'}
+                Confirm
               </button>
             </div>
           </div>
@@ -1157,11 +1462,9 @@ export default function JobApplicantDetail() {
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => setDeletingInterviewId(null)} />
           <div className="relative bg-vb-bg border border-vb-border rounded-xl w-full max-w-sm shadow-xl p-6">
-            <div className="mb-4">
-              <h3 className="text-sm font-semibold text-vb-text">Delete Interview</h3>
-              <p className="text-xs text-vb-text-muted mt-1">This action cannot be undone.</p>
-            </div>
-            <p className="text-sm text-vb-text-secondary mb-5">Are you sure you want to delete this interview? The applicant's qualified status will be reset.</p>
+            <p className="text-sm text-vb-text mb-5">
+              Are you sure you want to delete this interview?
+            </p>
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setDeletingInterviewId(null)}
@@ -1174,7 +1477,6 @@ export default function JobApplicantDetail() {
                   try {
                     await api.delete(`/interviews/${deletingInterviewId}`);
                     setInterviews(interviews.filter((iv) => iv.id !== deletingInterviewId));
-                    // Reset qualified status
                     await api.patch(`/applicants/${detail.id}/qualify`, { qualified: null });
                     const fresh = await api.get(`/applicants/${detail.id}`);
                     setDetail(fresh.data);
@@ -1195,11 +1497,9 @@ export default function JobApplicantDetail() {
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => setDeletingNoteId(null)} />
           <div className="relative bg-vb-bg border border-vb-border rounded-xl w-full max-w-sm shadow-xl p-6">
-            <div className="mb-4">
-              <h3 className="text-sm font-semibold text-vb-text">Delete Note</h3>
-              <p className="text-xs text-vb-text-muted mt-1">This action cannot be undone.</p>
-            </div>
-            <p className="text-sm text-vb-text-secondary mb-5">Are you sure you want to delete this note?</p>
+            <p className="text-sm text-vb-text mb-5">
+              Are you sure you want to delete this note?
+            </p>
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setDeletingNoteId(null)}
@@ -1212,6 +1512,86 @@ export default function JobApplicantDetail() {
                 className="px-4 py-2 text-sm text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors"
               >
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Interview Modal */}
+      {editingInterviewId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setEditingInterviewId(null)} />
+          <div className="relative bg-vb-bg border border-vb-border rounded-xl w-full max-w-md shadow-xl p-6 space-y-4">
+            <h3 className="text-sm font-medium text-vb-text flex items-center gap-2">
+              <Pencil className="w-4 h-4 text-vb-text-muted" />
+              Edit Interview
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-vb-text-muted mb-1">Date & Time</label>
+                <input
+                  type="datetime-local"
+                  value={editInterviewData.scheduledAt}
+                  onChange={(e) => setEditInterviewData({ ...editInterviewData, scheduledAt: e.target.value })}
+                  className="w-full bg-vb-card border border-vb-border rounded-lg px-3 py-2 text-sm text-vb-text outline-none focus:border-brand"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-vb-text-muted mb-1">Duration (min)</label>
+                <input
+                  type="number"
+                  value={editInterviewData.durationMinutes}
+                  onChange={(e) => setEditInterviewData({ ...editInterviewData, durationMinutes: parseInt(e.target.value, 10) || 30 })}
+                  min={15}
+                  className="w-full bg-vb-card border border-vb-border rounded-lg px-3 py-2 text-sm text-vb-text outline-none focus:border-brand"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs text-vb-text-muted mb-1">Platform</label>
+              <select
+                value={editInterviewData.medium}
+                onChange={(e) => setEditInterviewData({ ...editInterviewData, medium: e.target.value })}
+                className="w-full bg-vb-card border border-vb-border rounded-lg px-3 py-2 text-sm text-vb-text outline-none focus:border-brand"
+              >
+                <option value="google_meet">Google Meet</option>
+                <option value="teams">Microsoft Teams</option>
+                <option value="zoom">Zoom</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-vb-text-muted mb-1">Meeting Link</label>
+              <input
+                type="url"
+                value={editInterviewData.meetingLink}
+                onChange={(e) => setEditInterviewData({ ...editInterviewData, meetingLink: e.target.value })}
+                placeholder="https://meet.google.com/..."
+                className="w-full bg-vb-card border border-vb-border rounded-lg px-3 py-2 text-sm text-vb-text outline-none focus:border-brand placeholder:text-vb-text-faint"
+              />
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={resendOnEdit}
+                onChange={(e) => setResendOnEdit(e.target.checked)}
+                className="w-4 h-4 rounded border-vb-border text-brand focus:ring-brand accent-[var(--color-brand)]"
+              />
+              <span className="text-xs text-vb-text-secondary">Resend updated details to applicant</span>
+            </label>
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setEditingInterviewId(null)}
+                className="px-4 py-2 text-sm text-vb-text-secondary hover:text-vb-text rounded-lg hover:bg-vb-card transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEditInterview}
+                disabled={savingInterview || !editInterviewData.scheduledAt}
+                className="px-4 py-2 text-sm text-white bg-brand rounded-lg hover:bg-brand/90 transition-colors disabled:opacity-50"
+              >
+                {savingInterview ? 'Saving...' : resendOnEdit ? 'Save & Resend' : 'Save Changes'}
               </button>
             </div>
           </div>

@@ -7,6 +7,10 @@ import {
   ArrowUpRight,
   Sparkles,
   ChevronDown,
+  Clock,
+  Video,
+  Phone,
+  MapPin,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '@/lib/api';
@@ -39,6 +43,15 @@ const ACTIVITY_LINKS: Record<string, string> = {
   interview: '/interviews',
 };
 
+interface TodayInterview {
+  id: string;
+  applicantName: string;
+  jobTitle: string;
+  scheduledAt: string;
+  type: string;
+  status: string;
+}
+
 interface AIInsight {
   title: string;
   description: string;
@@ -67,6 +80,7 @@ const DATE_FILTERS = [
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [activity, setActivity] = useState<Activity[]>([]);
+  const [todayInterviews, setTodayInterviews] = useState<TodayInterview[]>([]);
   const [insights, setInsights] = useState<AIInsight[]>([]);
   const [insightsLoading, setInsightsLoading] = useState(false);
   const [insightsFetched, setInsightsFetched] = useState(false);
@@ -77,12 +91,14 @@ export default function Dashboard() {
     setLoading(true);
     async function load() {
       try {
-        const [statsRes, activityRes] = await Promise.all([
+        const [statsRes, activityRes, todayRes] = await Promise.all([
           api.get(`/dashboard/stats?range=${dateFilter}`),
           api.get(`/dashboard/activity?range=${dateFilter}`),
+          api.get('/dashboard/today-interviews'),
         ]);
         setStats(statsRes.data);
         setActivity(activityRes.data);
+        setTodayInterviews(todayRes.data);
       } catch (err) {
         console.error('Failed to load dashboard:', err);
       } finally {
@@ -159,6 +175,47 @@ export default function Dashboard() {
             <p className="text-xs text-vb-text-muted mt-1">{label}</p>
           </Link>
         ))}
+      </div>
+
+      {/* Today's Interviews */}
+      <div className="bg-vb-card rounded-xl border border-vb-border">
+        <div className="px-5 py-4 border-b border-vb-border flex items-center justify-between">
+          <h2 className="text-vb-text font-semibold text-sm flex items-center gap-2">
+            <Clock className="w-4 h-4 text-brand" />
+            Today's Interviews
+            {todayInterviews.length > 0 && (
+              <span className="text-xs text-vb-text-muted font-normal">({todayInterviews.length})</span>
+            )}
+          </h2>
+          <Link to="/interviews" className="text-brand text-xs hover:text-brand-light transition-colors">View all →</Link>
+        </div>
+        {todayInterviews.length > 0 ? (
+          <div className="divide-y divide-vb-border">
+            {todayInterviews.map((interview) => {
+              const time = new Date(interview.scheduledAt);
+              const TypeIcon = interview.type === 'VIDEO' ? Video : interview.type === 'PHONE' ? Phone : MapPin;
+              return (
+                <div key={interview.id} className="flex items-center gap-4 px-5 py-3.5">
+                  <div className="flex-shrink-0 w-14 text-center">
+                    <p className="text-vb-text font-bold text-sm">{time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-vb-text text-sm font-medium truncate">{interview.applicantName}</p>
+                    <p className="text-vb-text-secondary text-xs truncate">{interview.jobTitle}</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <TypeIcon className="w-3.5 h-3.5 text-vb-text-muted" />
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      interview.status === 'CONFIRMED' ? 'bg-green-500/10 text-green-400' : 'bg-amber-500/10 text-amber-400'
+                    }`}>{interview.status === 'CONFIRMED' ? 'Confirmed' : 'Scheduled'}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="px-5 py-8 text-vb-text-muted text-sm text-center">No interviews scheduled for today</p>
+        )}
       </div>
 
       {/* Activity Feed + AI Insights */}

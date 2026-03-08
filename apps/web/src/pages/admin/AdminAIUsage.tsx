@@ -52,11 +52,7 @@ export default function AdminAIUsage() {
     fetchData();
   }, []);
 
-  const handlePeriodChange = (newPeriod: 'daily' | 'weekly' | 'monthly' | 'all' | 'range') => {
-    setPeriod(newPeriod);
-    setStartDate('');
-    setEndDate('');
-  };
+  // Removed unused handlePeriodChange
 
   const handleApplyDateRange = () => {
     if (startDate && endDate) {

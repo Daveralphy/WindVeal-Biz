@@ -22,6 +22,14 @@ export default function Login() {
     try {
       const { data } = await api.post('/auth/login', { email, password });
       setAuth(data.user, data.accessToken);
+
+      // Auto-detect and save browser timezone if user has none set
+      if (!data.user.timezone) {
+        const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        api.patch('/auth/timezone', { timezone: browserTz }).catch(() => {});
+        useAuthStore.getState().updateUser({ timezone: browserTz });
+      }
+
       if (data.user.isSuperAdmin) {
         navigate('/admin');
       } else {

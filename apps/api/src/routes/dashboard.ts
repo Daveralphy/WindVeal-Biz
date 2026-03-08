@@ -107,4 +107,45 @@ export async function dashboardRoutes(app: FastifyInstance) {
 
     return activities;
   });
+
+  // Today's scheduled interviews
+  app.get('/today-interviews', async (request) => {
+    const { organizationId, userId } = request.user!;
+
+    // Use the user's stored timezone, fall back to UTC
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } });
+    const tz = user?.timezone || 'UTC';
+
+    // Compute start/end of today in the user's timezone
+    const nowInTz = new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
+    const startOfDay = new Date(nowInTz.getFullYear(), nowInTz.getMonth(), nowInTz.getDate());
+    const endOfDay = new Date(nowInTz.getFullYear(), nowInTz.getMonth(), nowInTz.getDate() + 1);
+
+    // Convert back to UTC for the database query
+    const offsetMs = startOfDay.getTime() - new Date(startOfDay.toLocaleString('en-US', { timeZone: 'UTC' })).getTime();
+    const utcStart = new Date(startOfDay.getTime() - offsetMs);
+    const utcEnd = new Date(endOfDay.getTime() - offsetMs);
+
+    const interviews = await prisma.interview.findMany({
+      where: {
+        job: { organizationId },
+        scheduledAt: { gte: utcStart, lt: utcEnd },
+        status: { in: ['SCHEDULED', 'CONFIRMED'] },
+      },
+      include: {
+        applicant: { select: { firstName: true, lastName: true } },
+        job: { select: { title: true } },
+      },
+      orderBy: { scheduledAt: 'asc' },
+    });
+
+    return interviews.map((i) => ({
+      id: i.id,
+      applicantName: `${i.applicant.firstName} ${i.applicant.lastName}`,
+      jobTitle: i.job.title,
+      scheduledAt: i.scheduledAt,
+      type: i.type,
+      status: i.status,
+    }));
+  });
 }

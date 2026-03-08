@@ -1,13 +1,21 @@
+import { User, Building2, Bell, Shield, Palette, Key, ArrowLeft, Check, Eye, EyeOff, AlertCircle, Mail, Loader2, Globe, ChevronDown, Trash2, Upload } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { User, Building2, Bell, Shield, Palette, Key, ArrowLeft, Sun, Moon, Monitor, Check, Eye, EyeOff, AlertCircle, Mail, Loader2 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { ExternalLink } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useTheme } from '@/contexts/ThemeContext';
 import api from '@/lib/api';
 
+type CareerDesignData = {
+  heroTitle: string;
+  heroDescription: string;
+  heroImageUrl: string | null;
+  theme: string;
+};
+
 type SettingsView = 'main' | 'appearance' | 'profile' | 'email';
 
 const SECTIONS = [
-  { icon: User, label: 'Profile', desc: 'Manage your personal information', view: 'profile' as SettingsView },
   { icon: Mail, label: 'Email Settings', desc: 'Configure SMTP for sending emails', view: 'email' as SettingsView },
   { icon: Building2, label: 'Organization', desc: 'Company settings and branding', view: null },
   { icon: Bell, label: 'Notifications', desc: 'Email and push notification preferences', view: null },
@@ -16,74 +24,41 @@ const SECTIONS = [
   { icon: Key, label: 'API Keys', desc: 'Manage API integrations', view: null },
 ];
 
-const THEMES = [
-  {
-    id: 'light' as const,
-    label: 'Light',
-    desc: 'Clean and bright — easy on the eyes during the day',
-    icon: Sun,
-    preview: { bg: '#F5F5F7', sidebar: '#F9FAFB', card: '#FFFFFF', border: '#E5E7EB', text: '#111827' },
-  },
-  {
-    id: 'dark' as const,
-    label: 'Dark',
-    desc: 'Sleek and modern — reduces eye strain in low light',
-    icon: Moon,
-    preview: { bg: '#0F0F0F', sidebar: '#111111', card: '#1A1A1A', border: '#2A2A2A', text: '#FFFFFF' },
-  },
-  {
-    id: 'system' as const,
-    label: 'System',
-    desc: 'Automatically matches your operating system preference',
-    icon: Monitor,
-    preview: null,
-  },
-];
+import { THEMES as CAREER_THEMES } from './CareerDesign';
+type ThemeType = typeof CAREER_THEMES[number];
+const THEMES: ThemeType[] = CAREER_THEMES;
 
 export default function Settings() {
-  const user = useAuthStore((s) => s.user);
-  const [view, setView] = useState<SettingsView>('main');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const viewParam = searchParams.get('view');
+  const view: SettingsView = (viewParam === 'profile' || viewParam === 'appearance' || viewParam === 'email') ? viewParam : 'main';
+
+  const handleSetView = (v: SettingsView) => {
+    setSearchParams(v === 'main' ? {} : { view: v });
+  };
 
   if (view === 'profile') {
-    return <ProfileSettings onBack={() => setView('main')} />;
+    return <ProfileSettings />;
   }
 
   if (view === 'appearance') {
-    return <AppearanceSettings onBack={() => setView('main')} />;
+    return <AppearanceSettings onBack={() => handleSetView('main')} />;
   }
 
   if (view === 'email') {
-    return <EmailSettings onBack={() => setView('main')} />;
+    return <EmailSettings onBack={() => handleSetView('main')} />;
   }
 
   return (
     <div className="space-y-6 max-w-3xl">
       <h1 className="text-xl font-bold text-vb-text">Settings</h1>
 
-      {/* Profile Card */}
-      <div className="bg-vb-card border border-vb-border rounded-xl p-5">
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-vb-muted flex items-center justify-center">
-            <User className="w-6 h-6 text-vb-text-secondary" />
-          </div>
-          <div>
-            <h2 className="text-vb-text font-medium">
-              {user?.firstName} {user?.lastName}
-            </h2>
-            <p className="text-vb-text-muted text-sm">{user?.email}</p>
-            <p className="text-vb-text-faint text-xs mt-0.5 capitalize">
-              {user?.role} · {user?.organizationName}
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* Settings Grid */}
       <div className="grid gap-3">
         {SECTIONS.map(({ icon: Icon, label, desc, view: targetView }) => (
           <div
             key={label}
-            onClick={() => targetView && setView(targetView)}
+            onClick={() => targetView && handleSetView(targetView)}
             className="bg-vb-card border border-vb-border rounded-xl p-4 flex items-center justify-between hover:border-vb-muted transition-colors cursor-pointer"
           >
             <div className="flex items-center gap-3">
@@ -99,326 +74,595 @@ export default function Settings() {
           </div>
         ))}
       </div>
+
+      {/* Timezone Setting */}
+      <TimezoneSettings />
+    </div>
+  );
+}
+
+const BROWSER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+const COMMON_TIMEZONES = [
+  'Pacific/Midway', 'Pacific/Honolulu', 'America/Anchorage', 'America/Los_Angeles',
+  'America/Denver', 'America/Chicago', 'America/New_York', 'America/Caracas',
+  'America/Halifax', 'America/St_Johns', 'America/Sao_Paulo', 'America/Argentina/Buenos_Aires',
+  'Atlantic/Azores', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Europe/Helsinki',
+  'Europe/Istanbul', 'Africa/Cairo', 'Africa/Lagos', 'Africa/Nairobi', 'Asia/Dubai',
+  'Asia/Karachi', 'Asia/Kolkata', 'Asia/Dhaka', 'Asia/Bangkok', 'Asia/Shanghai',
+  'Asia/Tokyo', 'Asia/Seoul', 'Australia/Sydney', 'Pacific/Auckland',
+];
+
+function getTimezoneLabel(tz: string) {
+  try {
+    const now = new Date();
+    const offset = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' })
+      .formatToParts(now).find(p => p.type === 'timeZoneName')?.value || '';
+    return `${tz.replace(/_/g, ' ')} (${offset})`;
+  } catch {
+    return tz;
+  }
+}
+
+function TimezoneSettings() {
+  const user = useAuthStore((s) => s.user);
+  const updateUser = useAuthStore((s) => s.updateUser);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const currentTz = user?.timezone || BROWSER_TZ;
+
+  const handleChange = async (tz: string) => {
+    setSaving(true);
+    setSaved(false);
+    try {
+      await api.patch('/auth/timezone', { timezone: tz });
+      updateUser({ timezone: tz });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      console.error('Failed to save timezone:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Build the list: ensure browser tz and current tz are included
+  const tzSet = new Set([BROWSER_TZ, ...COMMON_TIMEZONES]);
+  if (currentTz) tzSet.add(currentTz);
+  const timezones = Array.from(tzSet).sort();
+
+  return (
+    <div className="bg-vb-card border border-vb-border rounded-xl p-5">
+      <button
+        className="flex items-center gap-3 w-full text-left focus:outline-none"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+      >
+        <div className="p-2 rounded-lg bg-vb-surface">
+          <Globe className="w-4 h-4 text-vb-text-secondary" />
+        </div>
+        <div>
+          <h3 className="text-vb-text text-sm font-medium">Timezone</h3>
+          <p className="text-vb-text-muted text-xs">Used for scheduling and dashboard calculations</p>
+        </div>
+        <ChevronDown className={`w-4 h-4 text-vb-text-muted ml-auto transition-transform ${expanded ? 'rotate-180' : ''}`} />
+      </button>
+      {expanded && (
+        <div className="mt-4">
+          <label className="block text-xs font-medium text-vb-text-secondary mb-1.5">Select Timezone</label>
+          <div className="relative">
+            <select
+              value={currentTz}
+              onChange={(e) => handleChange(e.target.value)}
+              disabled={saving}
+              className="w-full appearance-none bg-vb-surface text-sm text-vb-text rounded-lg pl-3 pr-8 py-2.5 border border-vb-border outline-none hover:bg-vb-muted transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {timezones.map((tz) => (
+                <option key={tz} value={tz}>{getTimezoneLabel(tz)}</option>
+              ))}
+            </select>
+            <ChevronDown className="w-4 h-4 text-vb-text-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
+          {saved && (
+            <span className="flex items-center gap-1 text-green-400 text-xs mt-2">
+              <Check className="w-3.5 h-3.5" /> Saved
+            </span>
+          )}
+          {saving && <Loader2 className="w-4 h-4 text-vb-text-muted animate-spin mt-2" />}
+          {currentTz === BROWSER_TZ && (
+            <p className="text-vb-text-faint text-xs mt-2">Detected from your browser</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 function AppearanceSettings({ onBack }: { onBack: () => void }) {
-  const { theme, setTheme, resolvedTheme } = useTheme();
+    // Career site design settings integration
+    const [careerDesign, setCareerDesign] = useState<CareerDesignData>({
+      heroTitle: 'Build the future with us',
+      heroDescription: "Join our team and help shape what's next. We're looking for passionate people ready to make an impact.",
+      heroImageUrl: null,
+      theme: 'midnight',
+    });
+    const [savedCareerDesign, setSavedCareerDesign] = useState<CareerDesignData>({
+      heroTitle: 'Build the future with us',
+      heroDescription: "Join our team and help shape what's next. We're looking for passionate people ready to make an impact.",
+      heroImageUrl: null,
+      theme: 'midnight',
+    });
+    const [careerSlug, setCareerSlug] = useState('');
+    const [careerLoading, setCareerLoading] = useState(true);
+    const [careerSaving, setCareerSaving] = useState(false);
+    const [careerUploading, setCareerUploading] = useState(false);
+    const [careerToast, setCareerToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    const [useDifferentCareerTheme, setUseDifferentCareerTheme] = useState(false);
+    const [appTheme, setAppTheme] = useState('midnight');
+    const [careerTheme, setCareerTheme] = useState('midnight');
+    const careerDirty = JSON.stringify(careerDesign) !== JSON.stringify(savedCareerDesign || {}) || (useDifferentCareerTheme ? careerTheme !== savedCareerDesign.theme : appTheme !== savedCareerDesign.theme);
 
-  return (
-    <div className="space-y-6 max-w-3xl">
-      <div className="flex items-center gap-3">
-        <button
-          onClick={onBack}
-          className="p-2 rounded-lg hover:bg-vb-card text-vb-text-secondary hover:text-vb-text transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <div>
-          <h1 className="text-xl font-bold text-vb-text">Appearance</h1>
-          <p className="text-vb-text-muted text-sm">Customize the look and feel of VealBiz</p>
+    function showCareerToast(message: string, type: 'success' | 'error') {
+      setCareerToast({ message, type });
+      setTimeout(() => setCareerToast(null), 2500);
+    }
+
+    useEffect(() => {
+      api
+        .get('/careers/design')
+        .then((res) => {
+          setCareerSlug(res.data.slug);
+          if (res.data.design) {
+            const d = res.data.design;
+            const loaded: CareerDesignData = {
+              heroTitle: d.heroTitle || careerDesign.heroTitle,
+              heroDescription: d.heroDescription || careerDesign.heroDescription,
+              heroImageUrl: d.heroImageUrl || null,
+              theme: d.theme || 'midnight',
+            };
+            setCareerDesign(loaded);
+            setSavedCareerDesign(loaded);
+            setAppTheme(loaded.theme);
+            setCareerTheme(loaded.theme);
+          }
+        })
+        .catch(console.error)
+        .finally(() => setCareerLoading(false));
+    }, []);
+
+    async function handleSaveAll() {
+      setCareerSaving(true);
+      try {
+        // Save app theme
+        setTheme(appTheme);
+        // Save career site design
+        const themeToSave = useDifferentCareerTheme ? careerTheme : appTheme;
+        const res = await api.put('/careers/design', { ...careerDesign, theme: themeToSave });
+        const d = res.data.design;
+        const saved: CareerDesignData = {
+          heroTitle: d.heroTitle || careerDesign.heroTitle,
+          heroDescription: d.heroDescription || careerDesign.heroDescription,
+          heroImageUrl: d.heroImageUrl || null,
+          theme: themeToSave,
+        };
+        setSavedCareerDesign(saved);
+        setCareerDesign(saved);
+        setAppTheme(themeToSave);
+        setCareerTheme(themeToSave);
+        showCareerToast('Appearance saved successfully', 'success');
+      } catch {
+        showCareerToast('Failed to save appearance', 'error');
+      } finally {
+        setCareerSaving(false);
+      }
+    }
+
+    async function handleCareerImageUpload(file: File) {
+      if (file.size > 5 * 1024 * 1024) {
+        showCareerToast('Image must be under 5MB', 'error');
+        return;
+      }
+      setCareerUploading(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await api.post('/careers/design/hero-image', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        const imageUrl = res.data.imageUrl;
+        const d = res.data.design;
+        const updated: CareerDesignData = {
+          heroTitle: d.heroTitle || careerDesign.heroTitle,
+          heroDescription: d.heroDescription || careerDesign.heroDescription,
+          heroImageUrl: imageUrl,
+          theme: useDifferentCareerTheme ? careerTheme : appTheme,
+        };
+        setCareerDesign(updated);
+        setSavedCareerDesign(updated);
+        showCareerToast('Hero image uploaded', 'success');
+      } catch {
+        showCareerToast('Failed to upload image', 'error');
+      } finally {
+        setCareerUploading(false);
+      }
+    }
+
+    function handleCareerRemoveImage() {
+      setCareerDesign({ ...careerDesign, heroImageUrl: null });
+    }
+
+    function resolveCareerImageUrl(url: string | null) {
+      if (!url) return null;
+      if (url.startsWith('http')) return url;
+      const base = window.location.origin;
+      return `${base}${url}`;
+    }
+
+    const heroImgResolved = resolveCareerImageUrl(careerDesign.heroImageUrl);
+    const { setTheme } = useTheme();
+
+    return (
+      <div className="space-y-6 max-w-3xl">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="p-2 rounded-lg hover:bg-vb-card text-vb-text-secondary hover:text-vb-text transition-colors"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div>
+            <h1 className="text-xl font-bold text-vb-text">Appearance</h1>
+            <p className="text-vb-text-muted text-sm">Customize the look and feel of VealBiz</p>
+          </div>
         </div>
-      </div>
 
-      {/* Theme Selection */}
-      <div className="bg-vb-card border border-vb-border rounded-xl p-5">
-        <h2 className="text-vb-text font-medium text-sm mb-4">Theme</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {THEMES.map((t) => {
-            const isSelected = theme === t.id;
-            const Icon = t.icon;
-            return (
-              <button
-                key={t.id}
-                onClick={() => setTheme(t.id)}
-                className={`relative rounded-xl border-2 p-4 text-left transition-all ${
-                  isSelected
-                    ? 'border-brand bg-brand/5'
-                    : 'border-vb-border hover:border-vb-muted'
-                }`}
-              >
-                {isSelected && (
-                  <div className="absolute top-3 right-3 w-5 h-5 bg-brand rounded-full flex items-center justify-center">
-                    <Check className="w-3 h-3 text-white" />
-                  </div>
-                )}
-
-                {/* Preview */}
-                {t.preview ? (
-                  <div
-                    className="rounded-lg overflow-hidden mb-3 border"
-                    style={{ borderColor: t.preview.border }}
-                  >
-                    <div className="flex h-24">
-                      <div
-                        className="w-10 flex-shrink-0"
-                        style={{ backgroundColor: t.preview.sidebar }}
-                      >
-                        <div className="space-y-1 p-1.5 mt-2">
-                          {[1, 2, 3].map((i) => (
-                            <div
-                              key={i}
-                              className="h-1.5 rounded"
-                              style={{ backgroundColor: t.preview.border }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                      <div className="flex-1" style={{ backgroundColor: t.preview.bg }}>
-                        <div
-                          className="h-5 border-b flex items-center px-2"
-                          style={{ borderColor: t.preview.border, backgroundColor: t.preview.card }}
-                        >
-                          <div
-                            className="h-1.5 w-12 rounded"
-                            style={{ backgroundColor: t.preview.text, opacity: 0.3 }}
-                          />
-                        </div>
-                        <div className="p-2 grid grid-cols-2 gap-1">
-                          {[1, 2, 3, 4].map((i) => (
-                            <div
-                              key={i}
-                              className="h-6 rounded"
-                              style={{
-                                backgroundColor: t.preview.card,
-                                border: `1px solid ${t.preview.border}`,
-                              }}
-                            />
-                          ))}
-                        </div>
-                      </div>
+        {/* Theme Selection */}
+        <div className="bg-vb-card border border-vb-border rounded-xl p-5">
+          <h2 className="text-vb-text font-medium text-sm mb-4">Theme</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {THEMES.map((t: ThemeType) => {
+              const isSelected = appTheme === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setAppTheme(t.id)}
+                  className={`relative rounded-xl border-2 p-4 text-left transition-all ${
+                    isSelected
+                      ? 'border-brand bg-brand/5'
+                      : 'border-vb-border hover:border-vb-muted'
+                  }`}
+                >
+                  {isSelected && (
+                    <div className="absolute top-3 right-3 w-5 h-5 bg-brand rounded-full flex items-center justify-center">
+                      <Check className="w-3 h-3 text-white" />
                     </div>
+                  )}
+                  {/* Gradient preview */}
+                  <div className="w-full h-5 rounded mb-3" style={{ background: `linear-gradient(90deg, ${t.preview.join(', ')})` }} />
+                  <div className="flex items-center gap-2">
+                    <span className="text-vb-text text-sm font-medium">{t.name}</span>
+                  </div>
+                  <p className="text-vb-text-muted text-xs mt-1">{t.desc}</p>
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-4 flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="use-different-career-theme"
+              checked={useDifferentCareerTheme}
+              onChange={() => setUseDifferentCareerTheme(v => !v)}
+              className="accent-brand"
+            />
+            <label htmlFor="use-different-career-theme" className="text-sm text-vb-text-secondary cursor-pointer">
+              Use different theme for career site
+            </label>
+          </div>
+          {useDifferentCareerTheme && (
+            <div className="mt-4">
+              <h2 className="text-vb-text font-medium text-sm mb-2">Career Site Theme</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {THEMES.map((t: ThemeType) => {
+                  const isSelected = careerTheme === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => setCareerTheme(t.id)}
+                      className={`relative rounded-xl border-2 p-4 text-left transition-all ${
+                        isSelected
+                          ? 'border-brand bg-brand/5'
+                          : 'border-vb-border hover:border-vb-muted'
+                      }`}
+                    >
+                      {isSelected && (
+                        <div className="absolute top-3 right-3 w-5 h-5 bg-brand rounded-full flex items-center justify-center">
+                          <Check className="w-3 h-3 text-white" />
+                        </div>
+                      )}
+                      {/* Gradient preview */}
+                      <div className="w-full h-5 rounded mb-3" style={{ background: `linear-gradient(90deg, ${t.preview.join(', ')})` }} />
+                      <div className="flex items-center gap-2">
+                        <span className="text-vb-text text-sm font-medium">{t.name}</span>
+                      </div>
+                      <p className="text-vb-text-muted text-xs mt-1">{t.desc}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Career Site Design Settings */}
+        <div className="bg-vb-card border border-vb-border rounded-xl p-5 mt-8">
+          <h2 className="text-vb-text font-medium text-sm mb-4">Career Site Design</h2>
+          {careerLoading ? (
+            <div className="space-y-3">
+              <div className="h-8 bg-vb-muted rounded-lg animate-pulse w-32" />
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="h-12 bg-vb-muted rounded-lg animate-pulse" />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Hero Texts */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-vb-text">Hero Texts</h3>
+                <div>
+                  <label className="block text-xs font-medium text-vb-text-secondary mb-1.5">Headline</label>
+                  <input
+                    type="text"
+                    value={careerDesign.heroTitle}
+                    onChange={(e) => setCareerDesign({ ...careerDesign, heroTitle: e.target.value })}
+                    maxLength={200}
+                    className="w-full bg-vb-bg border border-vb-border text-vb-text rounded-lg px-3 py-2 text-sm outline-none focus:border-brand"
+                    placeholder="e.g. Build the future with us"
+                  />
+                  <p className="text-[10px] text-vb-text-muted mt-1">
+                    Use <code className="bg-vb-bg px-1 rounded">{'{{company}}'}</code> to insert your company name dynamically
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-vb-text-secondary mb-1.5">Subtitle</label>
+                  <textarea
+                    value={careerDesign.heroDescription}
+                    onChange={(e) => setCareerDesign({ ...careerDesign, heroDescription: e.target.value })}
+                    maxLength={500}
+                    rows={3}
+                    className="w-full bg-vb-bg border border-vb-border text-vb-text rounded-lg px-3 py-2 text-sm outline-none focus:border-brand resize-none"
+                    placeholder="Tell candidates why they should join"
+                  />
+                </div>
+              </div>
+              {/* Hero Image */}
+              <div className="space-y-4 mt-6">
+                <h3 className="text-sm font-semibold text-vb-text">Hero Image</h3>
+                <p className="text-xs text-vb-text-muted">Optional background image for the hero section</p>
+                {heroImgResolved ? (
+                  <div className="space-y-3">
+                    <img src={heroImgResolved} alt="Hero" className="w-full h-32 object-cover rounded-lg border border-vb-border" />
+                    <button
+                      onClick={handleCareerRemoveImage}
+                      className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Remove Image
+                    </button>
                   </div>
                 ) : (
-                  <div className="rounded-lg overflow-hidden mb-3 border border-vb-border">
-                    <div className="flex h-24">
-                      <div className="w-5 flex-shrink-0 bg-gradient-to-b from-[#F9FAFB] to-[#111111]" />
-                      <div className="flex-1 bg-gradient-to-b from-[#F5F5F7] to-[#0F0F0F]">
-                        <div className="p-2 pt-6 grid grid-cols-2 gap-1">
-                          {[1, 2, 3, 4].map((i) => (
-                            <div
-                              key={i}
-                              className="h-5 rounded bg-gradient-to-b from-white/80 to-[#1A1A1A]/80 border border-white/20"
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <label
+                    htmlFor="career-hero-upload"
+                    className="flex flex-col items-center gap-2 border-2 border-dashed border-vb-border rounded-lg p-6 cursor-pointer hover:border-brand/40 transition-colors"
+                  >
+                    {careerUploading ? (
+                      <Loader2 className="w-6 h-6 text-vb-text-muted animate-spin" />
+                    ) : (
+                      <Upload className="w-6 h-6 text-vb-text-muted" />
+                    )}
+                    <span className="text-xs text-vb-text-muted">
+                      {careerUploading ? 'Uploading...' : 'Click to upload (max 5MB)'}
+                    </span>
+                    <input
+                      id="career-hero-upload"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={careerUploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleCareerImageUpload(file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </label>
                 )}
-
-                <div className="flex items-center gap-2">
-                  <Icon className="w-4 h-4 text-vb-text-secondary" />
-                  <span className="text-vb-text text-sm font-medium">{t.label}</span>
-                </div>
-                <p className="text-vb-text-muted text-xs mt-1">{t.desc}</p>
-              </button>
-            );
-          })}
+              </div>
+              <div className="mt-6 flex gap-2">
+                <button
+                  onClick={handleSaveAll}
+                  disabled={!careerDirty || careerSaving}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-brand text-white hover:bg-brand-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {careerSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  Save Changes
+                </button>
+                <a
+                  href={careerSlug ? `/${careerSlug}/careers` : '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium bg-vb-card text-vb-text-secondary hover:text-vb-text hover:bg-vb-muted border border-vb-border transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Visit Site
+                </a>
+              </div>
+            </>
+          )}
+          {careerToast && (
+            <div
+              className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg border ${
+                careerToast.type === 'success'
+                  ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                  : 'bg-red-500/10 border-red-500/20 text-red-400'
+              }`}
+            >
+              <span className="text-sm">{careerToast.message}</span>
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Current Theme Info */}
-      <div className="bg-vb-card border border-vb-border rounded-xl p-5">
-        <h2 className="text-vb-text font-medium text-sm mb-2">Active Theme</h2>
-        <p className="text-vb-text-muted text-sm">
-          Currently using <span className="text-brand font-medium capitalize">{resolvedTheme}</span> mode
-          {theme === 'system' && ' (matched from system preferences)'}
-        </p>
-      </div>
-    </div>
-  );
+    );
 }
 
-function ProfileSettings({ onBack }: { onBack: () => void }) {
-  const user = useAuthStore((s) => s.user);
-  const [showPasswordForm, setShowPasswordForm] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showCurrent, setShowCurrent] = useState(false);
-  const [showNew, setShowNew] = useState(false);
-  const [loading, setLoading] = useState(false);
+function ProfileSettings() {
+    const user = useAuthStore((s) => s.user);
+  const [editMode, setEditMode] = useState(false);
+  const [form, setForm] = useState({
+    firstName: user?.firstName || '',
+    lastName: user?.lastName || '',
+    username: user?.username || '',
+    email: user?.email || '',
+    jobTitle: user?.jobTitle || '',
+    phone: user?.phone || '',
+  });
+  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [verifyEmail, setVerifyEmail] = useState(false);
+  const [emailCode, setEmailCode] = useState('');
 
-  const passwordsMatch = newPassword === confirmPassword;
-  const passwordValid = /^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*]).{8,}$/.test(newPassword);
-
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!passwordsMatch || !passwordValid) return;
-
-    setLoading(true);
+  const handleEdit = () => setEditMode(true);
+  const handleCancel = () => {
+    setEditMode(false);
+    setForm({
+      firstName: user?.firstName || '',
+      lastName: user?.lastName || '',
+      username: user?.username || '',
+      email: user?.email || '',
+      jobTitle: user?.jobTitle || '',
+      phone: user?.phone || '',
+    });
+    setVerifyEmail(false);
+    setEmailCode('');
     setMessage(null);
+  };
 
+  const handleSave = async () => {
+    setSaving(true);
+    setMessage(null);
     try {
-      const res = await api.patch('/auth/change-password', { currentPassword, newPassword });
-      setMessage({ type: 'success', text: res.data.message });
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      setShowPasswordForm(false);
-    } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Failed to change password.';
-      setMessage({ type: 'error', text: msg });
+      // If email changed, require verification
+      if (form.email !== user?.email) {
+        setVerifyEmail(true);
+        // Send verification code
+        await api.post('/auth/send-email-verification', { email: form.email });
+        setMessage({ type: 'success', text: 'Verification code sent to new email.' });
+        setSaving(false);
+        return;
+      }
+      // Save other fields
+      await api.patch('/auth/profile', form);
+      setEditMode(false);
+      setMessage({ type: 'success', text: 'Profile updated.' });
+    } catch (err) {
+      setMessage({ type: 'error', text: 'Failed to update profile.' });
     } finally {
-      setLoading(false);
+      setSaving(false);
+    }
+  };
+
+  const handleVerifyEmail = async () => {
+    setSaving(true);
+    setMessage(null);
+    try {
+      await api.post('/auth/verify-email', { email: form.email, code: emailCode });
+      await api.patch('/auth/profile', form);
+      setEditMode(false);
+      setVerifyEmail(false);
+      setMessage({ type: 'success', text: 'Email updated and verified.' });
+    } catch (err) {
+      setMessage({ type: 'error', text: 'Verification failed.' });
+    } finally {
+      setSaving(false);
     }
   };
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div className="flex items-center gap-3">
-        <button
-          onClick={onBack}
-          className="p-2 rounded-lg hover:bg-vb-card text-vb-text-secondary hover:text-vb-text transition-colors"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
+    <div className="space-y-6 w-full">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-vb-text">Profile</h1>
-          <p className="text-vb-text-muted text-sm">Manage your personal information and password</p>
+          <h1 className="text-2xl font-bold text-vb-text">Profile</h1>
+          <p className="text-vb-text-muted text-sm">Your account details</p>
         </div>
+        {!editMode && (
+          <button onClick={handleEdit} className="px-4 py-2 bg-brand text-white rounded-lg text-sm font-medium hover:bg-brand-dark transition-colors">Edit</button>
+        )}
+        {editMode && (
+          <div className="flex gap-2">
+            <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-brand text-white rounded-lg text-sm font-medium hover:bg-brand-dark transition-colors disabled:opacity-50">Save</button>
+            <button onClick={handleCancel} disabled={saving} className="px-4 py-2 bg-vb-muted text-vb-text rounded-lg text-sm font-medium hover:bg-vb-card transition-colors disabled:opacity-50">Cancel</button>
+          </div>
+        )}
       </div>
-
       {message && (
-        <div
-          className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm ${
-            message.type === 'success'
-              ? 'bg-green-500/10 text-green-400 border border-green-500/20'
-              : 'bg-red-500/10 text-red-400 border border-red-500/20'
-          }`}
-        >
+        <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm ${message.type === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
           {message.type === 'success' ? <Check className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
           {message.text}
         </div>
       )}
-
-      {/* Profile info */}
-      <div className="bg-vb-card rounded-xl border border-vb-border p-6">
-        <h2 className="text-vb-text font-medium text-sm mb-4">Profile Information</h2>
-        <div className="flex items-center gap-4 mb-4">
-          <div className="w-16 h-16 rounded-full bg-vb-muted flex items-center justify-center">
-            <User className="w-6 h-6 text-vb-text-secondary" />
-          </div>
-          <div>
-            <h3 className="text-vb-text font-medium">{user?.firstName} {user?.lastName}</h3>
-            <p className="text-vb-text-muted text-sm">{user?.email}</p>
-            <p className="text-vb-text-faint text-xs mt-0.5 capitalize">{user?.role} · {user?.organizationName}</p>
-          </div>
+      <div className="flex items-center gap-6 mt-6">
+        <div className="w-20 h-20 rounded-full bg-vb-muted flex items-center justify-center">
+          <User className="w-8 h-8 text-vb-text-secondary" />
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-vb-text-secondary mb-1.5">First Name</label>
-            <input
-              type="text"
-              value={user?.firstName || ''}
-              disabled
-              className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm opacity-60 cursor-not-allowed"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-vb-text-secondary mb-1.5">Last Name</label>
-            <input
-              type="text"
-              value={user?.lastName || ''}
-              disabled
-              className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm opacity-60 cursor-not-allowed"
-            />
-          </div>
-          <div className="col-span-2">
-            <label className="block text-sm font-medium text-vb-text-secondary mb-1.5">Email</label>
-            <input
-              type="email"
-              value={user?.email || ''}
-              disabled
-              className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm opacity-60 cursor-not-allowed"
-            />
-          </div>
+        <div className="space-y-1">
+          <div className="text-xl font-semibold text-vb-text">{form.firstName} {form.lastName}</div>
+          <div className="text-vb-text-muted text-sm">{form.jobTitle || user?.role}</div>
+          <div className="text-vb-text-faint text-xs">{user?.organizationName}</div>
         </div>
       </div>
-
-      {/* Password section */}
-      <div className="bg-vb-card rounded-xl border border-vb-border p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-vb-text font-medium text-sm">Password</h2>
-          <button
-            onClick={() => setShowPasswordForm(!showPasswordForm)}
-            className="text-sm text-brand hover:text-brand-light transition-colors"
-          >
-            {showPasswordForm ? 'Cancel' : 'Change Password'}
-          </button>
+      <div className="grid grid-cols-2 gap-6 mt-8">
+        <div>
+          <div className="text-vb-text-secondary text-xs mb-1">Username</div>
+          {!editMode ? (
+            <div className="text-vb-text text-sm font-medium">{user?.username || <span className="text-vb-text-faint">—</span>}</div>
+          ) : (
+            <input type="text" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm" />
+          )}
         </div>
-
-        {!showPasswordForm ? (
-          <p className="text-vb-text-muted text-sm">Click "Change Password" to update your password.</p>
-        ) : (
-          <form onSubmit={handleChangePassword} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-vb-text-secondary mb-1.5">Current Password</label>
-              <div className="relative">
-                <input
-                  type={showCurrent ? 'text' : 'password'}
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm focus:outline-none focus:ring-2 focus:ring-brand/50 pr-10"
-                  placeholder="Enter current password"
-                  required
-                />
-                <button type="button" onClick={() => setShowCurrent(!showCurrent)} className="absolute right-3 top-1/2 -translate-y-1/2 text-vb-text-muted hover:text-vb-text-secondary">
-                  {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-vb-text-secondary mb-1.5">New Password</label>
-              <div className="relative">
-                <input
-                  type={showNew ? 'text' : 'password'}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm focus:outline-none focus:ring-2 focus:ring-brand/50 pr-10"
-                  placeholder="Enter new password"
-                  required
-                />
-                <button type="button" onClick={() => setShowNew(!showNew)} className="absolute right-3 top-1/2 -translate-y-1/2 text-vb-text-muted hover:text-vb-text-secondary">
-                  {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              {newPassword && !passwordValid && (
-                <p className="text-red-400 text-xs mt-1">Must be 8+ chars with uppercase, number, and special character (!@#$%^&*)</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-vb-text-secondary mb-1.5">Confirm New Password</label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm focus:outline-none focus:ring-2 focus:ring-brand/50"
-                placeholder="Confirm new password"
-                required
-              />
-              {confirmPassword && !passwordsMatch && (
-                <p className="text-red-400 text-xs mt-1">Passwords do not match</p>
-              )}
-            </div>
-
-            <button
-              type="submit"
-              disabled={!currentPassword || !newPassword || !passwordsMatch || !passwordValid || loading}
-              className="px-6 py-2.5 bg-brand text-white rounded-lg text-sm font-medium hover:bg-brand-light disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {loading ? 'Updating...' : 'Update Password'}
-            </button>
-          </form>
-        )}
+        <div>
+          <div className="text-vb-text-secondary text-xs mb-1">Email</div>
+          {!editMode ? (
+            <div className="text-vb-text text-sm font-medium">{user?.email}</div>
+          ) : (
+            <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm" />
+          )}
+        </div>
+        <div>
+          <div className="text-vb-text-secondary text-xs mb-1">Phone</div>
+          {!editMode ? (
+            <div className="text-vb-text text-sm font-medium">{user?.phone || <span className="text-vb-text-faint">—</span>}</div>
+          ) : (
+            <input type="text" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm" />
+          )}
+        </div>
+        <div>
+          <div className="text-vb-text-secondary text-xs mb-1">Job Title</div>
+          {!editMode ? (
+            <div className="text-vb-text text-sm font-medium">{user?.jobTitle || <span className="text-vb-text-faint">—</span>}</div>
+          ) : (
+            <input type="text" value={form.jobTitle} onChange={e => setForm(f => ({ ...f, jobTitle: e.target.value }))} className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm" />
+          )}
+        </div>
       </div>
+      {verifyEmail && (
+        <div className="mt-6">
+          <div className="text-vb-text-secondary text-xs mb-1">Enter verification code sent to {form.email}</div>
+          <input type="text" value={emailCode} onChange={e => setEmailCode(e.target.value)} className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm mb-2" placeholder="Verification code" />
+          <button onClick={handleVerifyEmail} disabled={saving || !emailCode} className="px-4 py-2 bg-brand text-white rounded-lg text-sm font-medium hover:bg-brand-dark transition-colors disabled:opacity-50">Verify & Save</button>
+        </div>
+      )}
     </div>
   );
 }

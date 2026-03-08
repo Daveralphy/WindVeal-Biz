@@ -62,7 +62,7 @@ interface UploadedFileItem {
 interface StageHistoryItem {
   id: string;
   fromStage?: { name: string; color: string } | null;
-  toStage: { name: string; color: string };
+  toStage: { id: string; name: string; color: string };
   movedBy?: { firstName: string; lastName: string } | null;
   movedAt: string;
   note?: string;
@@ -93,8 +93,8 @@ interface ApplicationFormField {
 }
 
 interface ApplicantDetail extends Applicant {
-  phone: string | null;
-  linkedinUrl: string | null;
+  phone?: string;
+  linkedinUrl?: string;
   job: {
     id: string;
     title: string;
@@ -173,7 +173,7 @@ export default function Applicants() {
 
   // Stage timeline modal state (stage click)
   const [timelineApplicant, setTimelineApplicant] = useState<ApplicantDetail | null>(null);
-  const [timelineLoading, setTimelineLoading] = useState(false);
+  // Removed unused setTimelineLoading
   const [showTimeline, setShowTimeline] = useState(false);
 
   // AI analysis modal state (score click)
@@ -242,18 +242,7 @@ export default function Applicants() {
   });
 
   // Open stage timeline modal
-  const handleStageClick = async (applicantId: string) => {
-    setShowTimeline(true);
-    setTimelineLoading(true);
-    try {
-      const res = await api.get(`/applicants/${applicantId}`);
-      setTimelineApplicant(res.data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setTimelineLoading(false);
-    }
-  };
+  // Removed unused handleStageClick
 
   // Open AI analysis modal
   const handleScoreClick = async (applicantId: string) => {
@@ -633,13 +622,7 @@ export default function Applicants() {
             </div>
 
             <div className="px-6 py-5">
-              {timelineLoading ? (
-                <div className="space-y-4">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="h-10 bg-vb-muted rounded animate-pulse" />
-                  ))}
-                </div>
-              ) : timelineApplicant ? (() => {
+              {timelineApplicant ? (() => {
                 const pStages = timelineApplicant.job.pipelineStages;
                 const currentIdx = pStages.findIndex((s) => s.id === timelineApplicant.currentStage.id);
 
@@ -650,8 +633,8 @@ export default function Applicants() {
                 if (firstStage) stageDateMap[firstStage.id] = timelineApplicant.createdAt;
                 // Walk history to find when each stage was reached
                 [...timelineApplicant.stageHistory].reverse().forEach((entry) => {
-                  if (!stageDateMap[entry.toStage.id || '']) {
-                    stageDateMap[entry.toStage.id || ''] = entry.movedAt;
+                  if (!stageDateMap[entry.toStage.id]) {
+                    stageDateMap[entry.toStage.id] = entry.movedAt;
                   }
                 });
 
