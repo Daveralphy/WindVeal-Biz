@@ -410,13 +410,20 @@ export default function JobDetail() {
             <p className="text-xs text-vb-text-muted">
               {stageApplicants.length} applicant{stageApplicants.length !== 1 ? 's' : ''}
             </p>
-            <button
-              onClick={() => navigate(`/jobs/${job.id}/schedule-interview?type=group`)}
-              className="flex items-center gap-1.5 px-3 py-2 text-xs bg-brand/10 text-brand rounded-lg hover:bg-brand/20 transition-colors"
-            >
-              <Phone className="w-3.5 h-3.5" />
-              Group Call
-            </button>
+            {(() => {
+              const stageName = sortedStages.find((s) => s.id === activeTab.stageId)?.name || '';
+              const isGroupStage = /group|panel/i.test(stageName);
+              if (!isGroupStage) return null;
+              return (
+                <button
+                  onClick={() => navigate(`/jobs/${job.id}/schedule-interview?type=group`)}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs bg-purple-500/10 text-purple-400 rounded-lg hover:bg-purple-500/20 transition-colors"
+                >
+                  <Phone className="w-3.5 h-3.5" />
+                  Schedule Group Call
+                </button>
+              );
+            })()}
           </div>
 
           {stageApplicants.length === 0 ? (

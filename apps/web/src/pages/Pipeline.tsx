@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   User,
   MoreHorizontal,
@@ -16,6 +16,15 @@ import {
   AlertCircle,
   ArrowRight,
   Undo2,
+  ClipboardList,
+  Users,
+  CalendarClock,
+  ClipboardCheck,
+  Send,
+  Trophy,
+  XCircle,
+  ShieldCheck,
+  UserCheck,
 } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -112,6 +121,120 @@ const DIMENSION_LABELS: Record<string, string> = {
   communicationQuality: 'Communication',
   cultureFit: 'Culture Fit',
   completeness: 'Completeness',
+};
+
+const STAGE_CONTEXT: Record<string, {
+  icon: React.ElementType;
+  color: string;
+  nextStage: string;
+  checklist: string[];
+}> = {
+  'Applied': {
+    icon: ClipboardList,
+    color: 'text-gray-400',
+    nextStage: 'Screening',
+    checklist: ['Review application responses', 'Run AI screening for a match score', 'Verify contact details are complete'],
+  },
+  'Screening': {
+    icon: CheckCircle2,
+    color: 'text-blue-400',
+    nextStage: 'Initial Interview',
+    checklist: ['Check AI score and recommendation', 'Confirm phone & email are reachable', 'Verify candidate availability'],
+  },
+  'Phone Screen': {
+    icon: Phone,
+    color: 'text-sky-400',
+    nextStage: 'Initial Interview',
+    checklist: ['Call candidate to verify basic fit', 'Confirm availability and notice period', 'Note any red flags before progressing'],
+  },
+  // Legacy alias
+  'Interview': {
+    icon: CalendarClock,
+    color: 'text-amber-400',
+    nextStage: 'Technical Assessment',
+    checklist: ['Schedule and send interview invite', 'Confirm candidate has accepted', 'Prepare interview questions kit'],
+  },
+  'Initial Interview': {
+    icon: CalendarClock,
+    color: 'text-amber-400',
+    nextStage: 'Group Call',
+    checklist: ['Schedule and send interview invite', 'Confirm candidate has accepted', 'Prepare interview questions kit'],
+  },
+  'Group Call': {
+    icon: Users,
+    color: 'text-purple-400',
+    nextStage: 'Technical Assessment',
+    checklist: ['Confirm panel interviewers are available', 'Send group session invite to all parties', 'Brief candidate on format and attendees'],
+  },
+  // Legacy aliases
+  'Group Interview': {
+    icon: Users,
+    color: 'text-purple-400',
+    nextStage: 'Technical Assessment',
+    checklist: ['Confirm panel interviewers are available', 'Send group session invite to all parties', 'Brief candidate on format and attendees'],
+  },
+  'Panel Interview': {
+    icon: Users,
+    color: 'text-purple-400',
+    nextStage: 'Technical Assessment',
+    checklist: ['Confirm panel interviewers are available', 'Send group session invite to all parties', 'Brief candidate on format and attendees'],
+  },
+  'Technical Assessment': {
+    icon: ClipboardCheck,
+    color: 'text-pink-400',
+    nextStage: 'Final Interview',
+    checklist: ['Send assessment link with deadline', 'Confirm candidate has received it', 'Review submitted results before advancing'],
+  },
+  'Final Interview': {
+    icon: Trophy,
+    color: 'text-orange-400',
+    nextStage: 'Offer Sent',
+    checklist: ['Confirm decision-makers are scheduled', 'Collect structured feedback post-interview', 'Align internally on offer or rejection'],
+  },
+  // Legacy alias
+  'Final Review': {
+    icon: Trophy,
+    color: 'text-orange-400',
+    nextStage: 'Offer Sent',
+    checklist: ['Confirm decision-makers are scheduled', 'Collect structured feedback post-interview', 'Align internally on offer or rejection'],
+  },
+  'Background Check': {
+    icon: ShieldCheck,
+    color: 'text-teal-400',
+    nextStage: 'Reference Check',
+    checklist: ['Initiate background check with candidate's consent', 'Set expected completion date', 'Review results before progressing'],
+  },
+  'Reference Check': {
+    icon: UserCheck,
+    color: 'text-cyan-400',
+    nextStage: 'Offer Sent',
+    checklist: ['Contact references provided by candidate', 'Document responses for the hiring manager', 'Confirm overall fit based on feedback'],
+  },
+  'Offer Sent': {
+    icon: Send,
+    color: 'text-green-400',
+    nextStage: 'Hired',
+    checklist: ['Send formal offer letter', 'Confirm start date with candidate', 'Track acceptance deadline'],
+  },
+  // Legacy alias
+  'Offer': {
+    icon: Send,
+    color: 'text-green-400',
+    nextStage: 'Hired',
+    checklist: ['Send formal offer letter', 'Confirm start date with candidate', 'Track acceptance deadline'],
+  },
+  'Hired': {
+    icon: CheckCircle2,
+    color: 'text-emerald-400',
+    nextStage: '—',
+    checklist: ['Schedule onboarding session', 'Collect signed contracts', 'Notify relevant team members'],
+  },
+  'Rejected': {
+    icon: XCircle,
+    color: 'text-red-400',
+    nextStage: '—',
+    checklist: ['Send personalised rejection email', 'Record reason for future reference'],
+  },
 };
 
 export default function Pipeline() {
@@ -498,6 +621,42 @@ export default function Pipeline() {
                     <span className="text-xs text-vb-text-muted">
                       Applied {new Date(detail.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </span>
+                  </div>
+
+                  {/* Stage Checklist */}
+                  {(() => {
+                    const ctx = STAGE_CONTEXT[detail.currentStage.name];
+                    if (!ctx) return null;
+                    const Icon = ctx.icon;
+                    return (
+                      <div className="bg-vb-surface border border-vb-border rounded-lg p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Icon className={`w-4 h-4 ${ctx.color}`} />
+                            <h4 className="text-sm font-medium text-vb-text">
+                              Stage Checklist
+                            </h4>
+                          </div>
+                          {ctx.nextStage !== '—' && (
+                            <span className="text-[10px] text-vb-text-muted flex items-center gap-1">
+                              Next: <span className="text-vb-text-secondary font-medium">{ctx.nextStage}</span>
+                              <ArrowRight className="w-3 h-3" />
+                            </span>
+                          )}
+                        </div>
+                        <ul className="space-y-1.5">
+                          {ctx.checklist.map((item, i) => (
+                            <li key={i} className="flex items-start gap-2 text-xs text-vb-text-secondary">
+                              <span className={`w-4 h-4 flex-shrink-0 mt-0.5 rounded-full border ${ctx.color.replace('text-', 'border-')} flex items-center justify-center`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${ctx.color.replace('text-', 'bg-')}`} />
+                              </span>
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })()}
                   </div>
 
                   {/* AI Screening Button */}

@@ -5,8 +5,6 @@ import {
   LayoutDashboard,
   Briefcase,
   Users,
-  Globe,
-  BarChart3,
   UserPlus,
   Menu,
   Search,
@@ -67,9 +65,8 @@ const NAV_ITEMS = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/jobs', icon: Briefcase, label: 'Jobs' },
   { to: '/applicants', icon: Users, label: 'Applicants' },
-  { to: '/careers', icon: Globe, label: 'Careers Page' },
-  { to: '/analytics', icon: BarChart3, label: 'Analytics' },
   { to: '/team', icon: UserPlus, label: 'Team' },
+  { to: '/settings', icon: Settings, label: 'Settings' },
 ];
 
 export default function AppLayout() {
@@ -83,9 +80,8 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Main pages are top-level routes without dynamic segments
-  const MAIN_PATHS = ['/dashboard', '/jobs', '/applicants', '/careers', '/analytics', '/team', '/settings', '/communications', '/interviews', '/pipeline'];
-  const isMainPage = MAIN_PATHS.includes(location.pathname);
+  // VealAI only on dashboard
+  const isMainPage = location.pathname === '/dashboard';
 
   const loadNotifications = useCallback(async () => {
     setNotifLoading(true);
@@ -178,10 +174,6 @@ export default function AppLayout() {
         <UserProfileMenu
           user={user}
           sidebarOpen={sidebarOpen}
-          userMenuOpen={userMenuOpen}
-          setUserMenuOpen={setUserMenuOpen}
-          onNavigateSettings={() => { navigate('/settings'); setUserMenuOpen(false); }}
-          onLogout={handleLogout}
         />
       </aside>
 
@@ -225,14 +217,8 @@ export default function AppLayout() {
               )}
             </button>
 
-            {/* User avatar */}
-            <div
-              onClick={() => navigate('/settings?view=profile')}
-              className="w-8 h-8 rounded-full bg-brand/20 flex items-center justify-center text-brand text-xs font-semibold cursor-pointer hover:ring-2 hover:ring-brand/30 transition-all"
-            >
-              {user?.firstName?.[0]}
-              {user?.lastName?.[0]}
-            </div>
+            {/* User avatar — logout dropdown */}
+            <TopAvatarMenu user={user} onLogout={handleLogout} />
           </div>
         </header>
 
@@ -334,36 +320,17 @@ export default function AppLayout() {
 function UserProfileMenu({
   user,
   sidebarOpen,
-  userMenuOpen,
-  setUserMenuOpen,
-  onNavigateSettings,
-  onLogout,
 }: {
   user: { firstName?: string; lastName?: string } | null;
   sidebarOpen: boolean;
-  userMenuOpen: boolean;
-  setUserMenuOpen: (open: boolean) => void;
-  onNavigateSettings: () => void;
-  onLogout: () => void;
 }) {
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!userMenuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setUserMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [userMenuOpen, setUserMenuOpen]);
+  const navigate = useNavigate();
 
   return (
-    <div className="relative border-t border-vb-border p-3" ref={menuRef}>
+    <div className="border-t border-vb-border p-3">
       <div
         className="flex items-center gap-3 cursor-pointer hover:bg-vb-surface rounded-lg p-2 transition-colors"
-        onClick={() => setUserMenuOpen(!userMenuOpen)}
+        onClick={() => navigate('/settings?view=profile')}
       >
         <div className="w-8 h-8 rounded-full bg-brand/20 flex items-center justify-center text-brand text-xs font-semibold flex-shrink-0">
           {user?.firstName?.[0]}
@@ -378,15 +345,40 @@ function UserProfileMenu({
           </div>
         )}
       </div>
+    </div>
+  );
+}
 
-      {userMenuOpen && sidebarOpen && (
-        <div className="absolute bottom-full left-3 right-3 mb-2 bg-vb-card rounded-lg border border-vb-border shadow-lg py-1 z-50">
-          <button
-            onClick={onNavigateSettings}
-            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-vb-text-secondary hover:text-vb-text hover:bg-vb-surface transition-colors"
-          >
-            <Settings className="w-4 h-4" /> Settings
-          </button>
+function TopAvatarMenu({
+  user,
+  onLogout,
+}: {
+  user: { firstName?: string; lastName?: string } | null;
+  onLogout: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <div
+        onClick={() => setOpen(!open)}
+        className="w-8 h-8 rounded-full bg-brand/20 flex items-center justify-center text-brand text-xs font-semibold cursor-pointer hover:ring-2 hover:ring-brand/30 transition-all"
+      >
+        {user?.firstName?.[0]}
+        {user?.lastName?.[0]}
+      </div>
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-36 bg-vb-card border border-vb-border rounded-lg shadow-lg py-1 z-50">
           <button
             onClick={onLogout}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-vb-surface transition-colors"

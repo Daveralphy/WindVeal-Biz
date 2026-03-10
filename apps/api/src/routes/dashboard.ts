@@ -87,13 +87,16 @@ export async function dashboardRoutes(app: FastifyInstance) {
         time: a.createdAt,
         color: 'bg-blue-500',
       })),
-      ...recentHistory.map((h) => ({
-        type: 'stage_change' as const,
-        action: 'Stage changed',
-        detail: `${h.applicant.firstName} ${h.applicant.lastName} moved to ${h.toStage.name}`,
-        time: h.movedAt,
-        color: 'bg-amber-500',
-      })),
+      ...recentHistory.map((h) => {
+        const isRevert = h.fromStage != null && h.toStage.order < h.fromStage.order;
+        return {
+          type: 'stage_change' as const,
+          action: isRevert ? 'Stage reverted' : 'Stage changed',
+          detail: `${h.applicant.firstName} ${h.applicant.lastName} ${isRevert ? 'reverted to' : 'moved to'} ${h.toStage.name}`,
+          time: h.movedAt,
+          color: isRevert ? 'bg-orange-500' : 'bg-amber-500',
+        };
+      }),
       ...recentInterviews.map((i) => ({
         type: 'interview' as const,
         action: i.status === 'SCHEDULED' ? 'Interview scheduled' : 'Interview ' + i.status.toLowerCase(),
@@ -147,5 +150,61 @@ export async function dashboardRoutes(app: FastifyInstance) {
       type: i.type,
       status: i.status,
     }));
+  });
+
+  // Trend data for the last 8 weeks
+  app.get('/trends', async (request) => {
+    const { organizationId } = request.user!;
+
+    const since = new Date();
+    since.setDate(since.getDate() - 56);
+    since.setHours(0, 0, 0, 0);
+
+    const [applicants, jobs, hiredEntries] = await Promise.all([
+      prisma.applicant.findMany({
+        where: { organizationId, createdAt: { gte: since } },
+        select: { createdAt: true },
+      }),
+      prisma.job.findMany({
+        where: { organizationId, createdAt: { gte: since } },
+        select: { createdAt: true },
+      }),
+      prisma.stageHistory.findMany({
+        where: {
+          applicant: { organizationId },
+          movedAt: { gte: since },
+          toStage: { name: { contains: 'hired', mode: 'insensitive' } },
+        },
+        select: { movedAt: true },
+      }),
+    ]);
+
+    const labels: string[] = [];
+    const appCounts: number[] = [];
+    const jobCounts: number[] = [];
+    const hiredCounts: number[] = [];
+
+    for (let i = 7; i >= 0; i--) {
+      const bucketEnd = new Date();
+      bucketEnd.setDate(bucketEnd.getDate() - i * 7);
+      bucketEnd.setHours(23, 59, 59, 999);
+      const bucketStart = new Date(bucketEnd);
+      bucketStart.setDate(bucketStart.getDate() - 6);
+      bucketStart.setHours(0, 0, 0, 0);
+
+      labels.push(bucketStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+      appCounts.push(applicants.filter((a) => { const d = new Date(a.createdAt); return d >= bucketStart && d <= bucketEnd; }).length);
+      jobCounts.push(jobs.filter((j) => { const d = new Date(j.createdAt); return d >= bucketStart && d <= bucketEnd; }).length);
+      hiredCounts.push(hiredEntries.filter((h) => { const d = new Date(h.movedAt); return d >= bucketStart && d <= bucketEnd; }).length);
+    }
+
+    return {
+      labels,
+      series: [
+        { name: 'Applications', color: '#3B82F6', data: appCounts },
+        { name: 'Jobs Created', color: '#10B981', data: jobCounts },
+        { name: 'Hired', color: '#8B5CF6', data: hiredCounts },
+      ],
+    };
   });
 }

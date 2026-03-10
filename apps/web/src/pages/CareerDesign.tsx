@@ -454,11 +454,6 @@ export default function CareerDesign() {
                   <p className="mt-3 text-gray-400 text-xs max-w-md mx-auto leading-relaxed">
                     {design.heroDescription}
                   </p>
-
-                  <button className={`mt-5 inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg shadow-lg shadow-black/20 ${selectedTheme.btnBg}`}>
-                    View All Openings
-                    <Briefcase className="w-3 h-3" />
-                  </button>
                 </div>
               </div>
 

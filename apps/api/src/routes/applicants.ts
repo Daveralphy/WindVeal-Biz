@@ -11,6 +11,7 @@ import { authenticate } from '../middleware/auth.js';
 import { notifyOrgUsers } from '../services/notificationService.js';
 import { env } from '../config/env.js';
 import { screenApplicant } from '../services/groqService.js';
+import { triggerAiScreenBackground } from '../services/aiScreenService.js';
 
 const addApplicantSchema = z.object({
   firstName: z.string().min(1),
@@ -211,6 +212,7 @@ export async function applicantRoutes(app: FastifyInstance) {
       jobTitle: applicant.job.title,
     }, request.user!.userId).catch(() => {});
 
+    setImmediate(() => triggerAiScreenBackground(applicant.id).catch(console.error));
     return reply.status(201).send(applicant);
   });
 

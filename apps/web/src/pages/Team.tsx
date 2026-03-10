@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { UserPlus, User, MoreHorizontal, Mail } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { UserPlus, User, MoreHorizontal } from 'lucide-react';
 import api from '@/lib/api';
 
 interface TeamMember {
@@ -31,10 +31,32 @@ const ROLE_LABELS: Record<string, string> = {
 export default function Team() {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [openActionMenu, setOpenActionMenu] = useState<string | null>(null);
+  const actionMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     api.get('/team').then((res) => setMembers(res.data.members)).catch(console.error).finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!openActionMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (actionMenuRef.current && !actionMenuRef.current.contains(e.target as Node)) {
+        setOpenActionMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [openActionMenu]);
+
+  const handleVerify = async (memberId: string) => {
+    try {
+      await api.patch(`/team/${memberId}/verify`);
+      setMembers((prev) => prev.map((m) => (m.id === memberId ? { ...m, status: 'active' } : m)));
+    } catch (err) {
+      console.error('Failed to verify member:', err);
+    }
+  };
 
   if (loading) {
     return (
@@ -54,7 +76,7 @@ export default function Team() {
         </button>
       </div>
 
-      <div className="bg-vb-surface border border-vb-border rounded-xl overflow-hidden">
+      <div className="bg-vb-surface border border-vb-border rounded-xl">
         <table className="w-full">
           <thead>
             <tr className="border-b border-vb-border">
@@ -79,9 +101,15 @@ export default function Team() {
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${ROLE_STYLES[member.role] || ''}`}>
-                    {ROLE_LABELS[member.role] || member.role}
-                  </span>
+                  {member.role === 'ADMIN' ? (
+                    <span className="text-xs px-2 py-1 rounded-full font-medium bg-purple-500/10 text-purple-400">
+                      Admin
+                    </span>
+                  ) : (
+                    <span className="text-vb-text-secondary text-sm">
+                      {member.jobTitle || ROLE_LABELS[member.role] || member.role}
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <span className={`text-xs capitalize ${member.status === 'active' ? 'text-green-400' : 'text-amber-400'}`}>
@@ -89,13 +117,23 @@ export default function Team() {
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <button className="text-vb-text-muted hover:text-vb-text p-1">
-                      <Mail className="w-4 h-4" />
-                    </button>
-                    <button className="text-vb-text-muted hover:text-vb-text p-1">
+                  <div className="relative" ref={openActionMenu === member.id ? actionMenuRef : undefined}>
+                    <button
+                      onClick={() => setOpenActionMenu(openActionMenu === member.id ? null : member.id)}
+                      className="text-vb-text-muted hover:text-vb-text p-1"
+                    >
                       <MoreHorizontal className="w-4 h-4" />
                     </button>
+                    {openActionMenu === member.id && (
+                      <div className="absolute right-0 top-full mt-1 w-36 bg-vb-card border border-vb-border rounded-lg shadow-xl z-50 py-1">
+                        <button
+                          onClick={() => { handleVerify(member.id); setOpenActionMenu(null); }}
+                          className="w-full flex items-center px-3 py-2 text-sm text-vb-text hover:bg-vb-surface transition-colors"
+                        >
+                          Verify
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </td>
               </tr>

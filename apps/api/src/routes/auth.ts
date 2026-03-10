@@ -354,6 +354,38 @@ export async function authRoutes(app: FastifyInstance) {
 
     return { timezone };
   });
+
+  // Get organization details
+  app.get('/organization', { preHandler: [authenticate] }, async (request, reply) => {
+    const org = await prisma.organization.findUnique({
+      where: { id: request.user!.organizationId },
+      select: { id: true, name: true, slug: true, logoUrl: true, industry: true, companySize: true, website: true, country: true },
+    });
+    if (!org) return reply.status(404).send({ error: 'Organization not found' });
+    return org;
+  });
+
+  // Update organization details
+  app.patch('/organization', { preHandler: [authenticate] }, async (request, reply) => {
+    const schema = z.object({
+      name: z.string().min(1).optional(),
+      industry: z.string().optional(),
+      companySize: z.string().optional(),
+      website: z.string().optional(),
+      country: z.string().optional(),
+    });
+
+    const parsed = schema.safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Validation failed', details: parsed.error.flatten() });
+
+    const org = await prisma.organization.update({
+      where: { id: request.user!.organizationId },
+      data: parsed.data,
+      select: { id: true, name: true, slug: true, logoUrl: true, industry: true, companySize: true, website: true, country: true },
+    });
+
+    return org;
+  });
 }
 
 // Import here to avoid circular — used in the route

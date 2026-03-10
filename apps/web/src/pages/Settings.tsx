@@ -1,4 +1,4 @@
-import { User, Building2, Bell, Shield, Palette, Key, ArrowLeft, Check, Eye, EyeOff, AlertCircle, Mail, Loader2, Globe, ChevronDown, Trash2, Upload } from 'lucide-react';
+import { User, Building2, Bell, Shield, Palette, Key, ArrowLeft, Check, Eye, EyeOff, AlertCircle, Mail, Loader2, Globe, ChevronDown, Trash2, Upload, Lock, BellOff, BellRing, Link, MapPin, Briefcase, Users, ToggleLeft, ToggleRight } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ExternalLink } from 'lucide-react';
@@ -13,15 +13,15 @@ type CareerDesignData = {
   theme: string;
 };
 
-type SettingsView = 'main' | 'appearance' | 'profile' | 'email';
+type SettingsView = 'main' | 'appearance' | 'profile' | 'email' | 'organization' | 'notifications' | 'security' | 'api-keys';
 
 const SECTIONS = [
+  { icon: User, label: 'Profile', desc: 'Personal information and avatar', view: 'profile' as SettingsView },
   { icon: Mail, label: 'Email Settings', desc: 'Configure SMTP for sending emails', view: 'email' as SettingsView },
-  { icon: Building2, label: 'Organization', desc: 'Company settings and branding', view: null },
-  { icon: Bell, label: 'Notifications', desc: 'Email and push notification preferences', view: null },
-  { icon: Shield, label: 'Security', desc: 'Password and two-factor authentication', view: null },
+  { icon: Building2, label: 'Organization', desc: 'Company settings and branding', view: 'organization' as SettingsView },
+  { icon: Bell, label: 'Notifications', desc: 'Email and push notification preferences', view: 'notifications' as SettingsView },
+  { icon: Shield, label: 'Security', desc: 'Password and two-factor authentication', view: 'security' as SettingsView },
   { icon: Palette, label: 'Appearance', desc: 'Theme and display settings', view: 'appearance' as SettingsView },
-  { icon: Key, label: 'API Keys', desc: 'Manage API integrations', view: null },
 ];
 
 import { THEMES as CAREER_THEMES } from './CareerDesign';
@@ -31,7 +31,8 @@ const THEMES: ThemeType[] = CAREER_THEMES;
 export default function Settings() {
   const [searchParams, setSearchParams] = useSearchParams();
   const viewParam = searchParams.get('view');
-  const view: SettingsView = (viewParam === 'profile' || viewParam === 'appearance' || viewParam === 'email') ? viewParam : 'main';
+  const validViews: SettingsView[] = ['profile', 'appearance', 'email', 'organization', 'notifications', 'security', 'api-keys'];
+  const view: SettingsView = validViews.includes(viewParam as SettingsView) ? (viewParam as SettingsView) : 'main';
 
   const handleSetView = (v: SettingsView) => {
     setSearchParams(v === 'main' ? {} : { view: v });
@@ -40,21 +41,31 @@ export default function Settings() {
   if (view === 'profile') {
     return <ProfileSettings />;
   }
-
   if (view === 'appearance') {
     return <AppearanceSettings onBack={() => handleSetView('main')} />;
   }
-
   if (view === 'email') {
     return <EmailSettings onBack={() => handleSetView('main')} />;
   }
+  if (view === 'organization') {
+    return <OrganizationSettings onBack={() => handleSetView('main')} />;
+  }
+  if (view === 'notifications') {
+    return <NotificationsSettings onBack={() => handleSetView('main')} />;
+  }
+  if (view === 'security') {
+    return <SecuritySettings onBack={() => handleSetView('main')} />;
+  }
+  if (view === 'api-keys') {
+    return <ApiKeysSettings onBack={() => handleSetView('main')} />;
+  }
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6">
       <h1 className="text-xl font-bold text-vb-text">Settings</h1>
 
       {/* Settings Grid */}
-      <div className="grid gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         {SECTIONS.map(({ icon: Icon, label, desc, view: targetView }) => (
           <div
             key={label}
@@ -663,6 +674,414 @@ function ProfileSettings() {
           <button onClick={handleVerifyEmail} disabled={saving || !emailCode} className="px-4 py-2 bg-brand text-white rounded-lg text-sm font-medium hover:bg-brand-dark transition-colors disabled:opacity-50">Verify & Save</button>
         </div>
       )}
+    </div>
+  );
+}
+
+function OrganizationSettings({ onBack }: { onBack: () => void }) {
+  const updateUser = useAuthStore((s) => s.updateUser);
+  const [form, setForm] = useState({
+    name: '',
+    industry: '',
+    companySize: '',
+    website: '',
+    country: '',
+  });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    api.get('/auth/organization')
+      .then((res) => {
+        setForm({
+          name: res.data.name || '',
+          industry: res.data.industry || '',
+          companySize: res.data.companySize || '',
+          website: res.data.website || '',
+          country: res.data.country || '',
+        });
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setMessage(null);
+    try {
+      await api.patch('/auth/organization', form);
+      updateUser({ organizationName: form.name });
+      setMessage({ type: 'success', text: 'Organization settings saved.' });
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err?.response?.data?.error || 'Failed to save.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const INDUSTRIES = ['Technology', 'Healthcare', 'Finance', 'Education', 'Retail', 'Manufacturing', 'Media', 'Non-profit', 'Government', 'Consulting', 'Other'];
+  const COMPANY_SIZES = ['1–10', '11–50', '51–200', '201–500', '501–1,000', '1,000+'];
+
+  return (
+    <div className="space-y-6 max-w-3xl">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-2 rounded-lg hover:bg-vb-card text-vb-text-secondary hover:text-vb-text transition-colors">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div>
+          <h1 className="text-xl font-bold text-vb-text">Organization</h1>
+          <p className="text-vb-text-muted text-sm">Company settings and profile</p>
+        </div>
+      </div>
+      {message && (
+        <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm ${
+          message.type === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
+        }`}>
+          {message.type === 'success' ? <Check className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          {message.text}
+        </div>
+      )}
+      {loading ? (
+        <div className="bg-vb-card border border-vb-border rounded-xl p-8 flex items-center justify-center">
+          <Loader2 className="w-5 h-5 text-vb-text-muted animate-spin" />
+        </div>
+      ) : (
+        <form onSubmit={handleSave} className="bg-vb-card border border-vb-border rounded-xl p-6 space-y-5">
+          <div>
+            <label className="block text-sm font-medium text-vb-text-secondary mb-1.5">
+              <Building2 className="w-3.5 h-3.5 inline mr-1" />Company Name
+            </label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              required
+              className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm outline-none focus:border-brand"
+              placeholder="Your company name"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-vb-text-secondary mb-1.5">
+                <Briefcase className="w-3.5 h-3.5 inline mr-1" />Industry
+              </label>
+              <div className="relative">
+                <select
+                  value={form.industry}
+                  onChange={(e) => setForm({ ...form, industry: e.target.value })}
+                  className="w-full appearance-none px-3 py-2.5 pr-8 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm outline-none focus:border-brand cursor-pointer"
+                >
+                  <option value="">Select industry</option>
+                  {INDUSTRIES.map((i) => <option key={i} value={i}>{i}</option>)}
+                </select>
+                <ChevronDown className="w-4 h-4 text-vb-text-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-vb-text-secondary mb-1.5">
+                <Users className="w-3.5 h-3.5 inline mr-1" />Company Size
+              </label>
+              <div className="relative">
+                <select
+                  value={form.companySize}
+                  onChange={(e) => setForm({ ...form, companySize: e.target.value })}
+                  className="w-full appearance-none px-3 py-2.5 pr-8 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm outline-none focus:border-brand cursor-pointer"
+                >
+                  <option value="">Select size</option>
+                  {COMPANY_SIZES.map((s) => <option key={s} value={s}>{s} employees</option>)}
+                </select>
+                <ChevronDown className="w-4 h-4 text-vb-text-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-vb-text-secondary mb-1.5">
+                <Link className="w-3.5 h-3.5 inline mr-1" />Website
+              </label>
+              <input
+                type="url"
+                value={form.website}
+                onChange={(e) => setForm({ ...form, website: e.target.value })}
+                className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm outline-none focus:border-brand"
+                placeholder="https://yourcompany.com"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-vb-text-secondary mb-1.5">
+                <MapPin className="w-3.5 h-3.5 inline mr-1" />Country
+              </label>
+              <input
+                type="text"
+                value={form.country}
+                onChange={(e) => setForm({ ...form, country: e.target.value })}
+                className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm outline-none focus:border-brand"
+                placeholder="e.g. Nigeria"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end pt-2">
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex items-center gap-1.5 px-6 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
+const NOTIFICATION_PREFERENCES = [
+  { key: 'newApplicant', label: 'New Applicant', desc: 'When someone applies to one of your jobs' },
+  { key: 'interviewScheduled', label: 'Interview Scheduled', desc: 'When an interview is booked' },
+  { key: 'interviewReminder', label: 'Interview Reminder', desc: '24 hours before an upcoming interview' },
+  { key: 'offerUpdated', label: 'Offer Status Changed', desc: 'When a candidate accepts or declines an offer' },
+  { key: 'teamInvite', label: 'Team Invitations', desc: 'When someone is invited to your organization' },
+  { key: 'jobStatusChange', label: 'Job Status Changes', desc: 'When a job is paused, closed, or activated' },
+];
+
+function NotificationsSettings({ onBack }: { onBack: () => void }) {
+  const STORAGE_KEY = 'vealbiz-notification-prefs';
+  const [prefs, setPrefs] = useState<Record<string, boolean>>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return Object.fromEntries(NOTIFICATION_PREFERENCES.map((p) => [p.key, true]));
+  });
+  const [saved, setSaved] = useState(false);
+
+  const toggle = (key: string) => setPrefs((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  const handleSave = () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div className="space-y-6 max-w-3xl">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-2 rounded-lg hover:bg-vb-card text-vb-text-secondary hover:text-vb-text transition-colors">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div>
+          <h1 className="text-xl font-bold text-vb-text">Notifications</h1>
+          <p className="text-vb-text-muted text-sm">Choose which notifications you receive</p>
+        </div>
+      </div>
+      <div className="bg-vb-card border border-vb-border rounded-xl divide-y divide-vb-border">
+        {NOTIFICATION_PREFERENCES.map(({ key, label, desc }) => (
+          <div key={key} className="flex items-center justify-between p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-vb-surface">
+                {prefs[key] ? <BellRing className="w-4 h-4 text-brand" /> : <BellOff className="w-4 h-4 text-vb-text-muted" />}
+              </div>
+              <div>
+                <p className="text-vb-text text-sm font-medium">{label}</p>
+                <p className="text-vb-text-muted text-xs">{desc}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => toggle(key)}
+              className="focus:outline-none"
+              aria-label={prefs[key] ? 'Disable' : 'Enable'}
+            >
+              {prefs[key]
+                ? <ToggleRight className="w-8 h-8 text-brand" />
+                : <ToggleLeft className="w-8 h-8 text-vb-text-muted" />
+              }
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handleSave}
+          className="flex items-center gap-1.5 px-6 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand-dark transition-colors"
+        >
+          <Check className="w-3.5 h-3.5" /> Save Preferences
+        </button>
+        {saved && <span className="text-green-400 text-sm">Saved!</span>}
+      </div>
+    </div>
+  );
+}
+
+function SecuritySettings({ onBack }: { onBack: () => void }) {
+  const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (form.newPassword !== form.confirmPassword) {
+      setMessage({ type: 'error', text: 'New passwords do not match.' });
+      return;
+    }
+    setSaving(true);
+    setMessage(null);
+    try {
+      await api.patch('/auth/change-password', {
+        currentPassword: form.currentPassword,
+        newPassword: form.newPassword,
+      });
+      setMessage({ type: 'success', text: 'Password updated successfully.' });
+      setForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err?.response?.data?.error || 'Failed to update password.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const passwordRequirements = [
+    { label: 'At least 8 characters', met: form.newPassword.length >= 8 },
+    { label: 'One uppercase letter', met: /[A-Z]/.test(form.newPassword) },
+    { label: 'One number', met: /\d/.test(form.newPassword) },
+    { label: 'One special character (!@#$%^&*)', met: /[!@#$%^&*]/.test(form.newPassword) },
+  ];
+
+  return (
+    <div className="space-y-6 max-w-3xl">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-2 rounded-lg hover:bg-vb-card text-vb-text-secondary hover:text-vb-text transition-colors">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div>
+          <h1 className="text-xl font-bold text-vb-text">Security</h1>
+          <p className="text-vb-text-muted text-sm">Manage your password and account security</p>
+        </div>
+      </div>
+      {message && (
+        <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm ${
+          message.type === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
+        }`}>
+          {message.type === 'success' ? <Check className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          {message.text}
+        </div>
+      )}
+      <form onSubmit={handleSave} className="bg-vb-card border border-vb-border rounded-xl p-6 space-y-5">
+        <div className="flex items-center gap-2 mb-1">
+          <Lock className="w-4 h-4 text-vb-text-secondary" />
+          <h2 className="text-vb-text font-medium text-sm">Change Password</h2>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-vb-text-secondary mb-1.5">Current Password</label>
+          <div className="relative">
+            <input
+              type={showCurrent ? 'text' : 'password'}
+              value={form.currentPassword}
+              onChange={(e) => setForm({ ...form, currentPassword: e.target.value })}
+              required
+              className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm outline-none focus:border-brand pr-10"
+              placeholder="Enter current password"
+            />
+            <button type="button" onClick={() => setShowCurrent(!showCurrent)} className="absolute right-3 top-1/2 -translate-y-1/2 text-vb-text-muted hover:text-vb-text-secondary">
+              {showCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-vb-text-secondary mb-1.5">New Password</label>
+            <div className="relative">
+              <input
+                type={showNew ? 'text' : 'password'}
+                value={form.newPassword}
+                onChange={(e) => setForm({ ...form, newPassword: e.target.value })}
+                required
+                className="w-full px-3 py-2.5 bg-vb-surface border border-vb-border rounded-lg text-vb-text text-sm outline-none focus:border-brand pr-10"
+                placeholder="New password"
+              />
+              <button type="button" onClick={() => setShowNew(!showNew)} className="absolute right-3 top-1/2 -translate-y-1/2 text-vb-text-muted hover:text-vb-text-secondary">
+                {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-vb-text-secondary mb-1.5">Confirm New Password</label>
+            <input
+              type="password"
+              value={form.confirmPassword}
+              onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
+              required
+              className={`w-full px-3 py-2.5 bg-vb-surface border rounded-lg text-vb-text text-sm outline-none focus:border-brand ${
+                form.confirmPassword && form.newPassword !== form.confirmPassword ? 'border-red-500/50' : 'border-vb-border'
+              }`}
+              placeholder="Confirm password"
+            />
+          </div>
+        </div>
+        {form.newPassword && (
+          <div className="grid grid-cols-2 gap-1.5">
+            {passwordRequirements.map((req) => (
+              <div key={req.label} className={`flex items-center gap-1.5 text-xs ${ req.met ? 'text-green-400' : 'text-vb-text-muted' }`}>
+                <div className={`w-1.5 h-1.5 rounded-full ${ req.met ? 'bg-green-400' : 'bg-vb-muted' }`} />
+                {req.label}
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex justify-end pt-2">
+          <button
+            type="submit"
+            disabled={saving || !form.currentPassword || !form.newPassword || form.newPassword !== form.confirmPassword}
+            className="flex items-center gap-1.5 px-6 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand-dark transition-colors disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Lock className="w-3.5 h-3.5" />}
+            {saving ? 'Updating...' : 'Update Password'}
+          </button>
+        </div>
+      </form>
+      <div className="bg-vb-card border border-vb-border rounded-xl p-5">
+        <h2 className="text-vb-text font-medium text-sm mb-1">Two-Factor Authentication</h2>
+        <p className="text-vb-text-muted text-xs mb-3">Add an extra layer of security to your account</p>
+        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-vb-surface border border-vb-border text-xs text-vb-text-muted">
+          <div className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+          Coming soon
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ApiKeysSettings({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="space-y-6 max-w-3xl">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-2 rounded-lg hover:bg-vb-card text-vb-text-secondary hover:text-vb-text transition-colors">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div>
+          <h1 className="text-xl font-bold text-vb-text">API Keys</h1>
+          <p className="text-vb-text-muted text-sm">Manage API access for integrations</p>
+        </div>
+      </div>
+      <div className="bg-vb-card border border-vb-border rounded-xl p-8 flex flex-col items-center text-center gap-4">
+        <div className="p-4 rounded-2xl bg-vb-surface">
+          <Key className="w-8 h-8 text-vb-text-muted" />
+        </div>
+        <div>
+          <h2 className="text-vb-text font-semibold text-sm mb-1">API Access</h2>
+          <p className="text-vb-text-muted text-sm max-w-sm">
+            Generate and manage API keys to integrate VealBiz with your own tools and workflows.
+          </p>
+        </div>
+        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-vb-surface border border-vb-border text-xs text-vb-text-muted">
+          <div className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+          Coming soon
+        </div>
+      </div>
     </div>
   );
 }

@@ -443,51 +443,9 @@ export default function Applicants() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-vb-text">All Applicants</h1>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-2 px-4 py-2 bg-vb-card text-sm text-vb-text-secondary rounded-lg hover:bg-vb-muted border border-vb-border transition-colors"
-          >
-            <Download className="w-4 h-4" />
-            Export
-          </button>
+      <h1 className="text-xl font-bold text-vb-text">All Applicants</h1>
 
-          {/* Add Contact Dropdown */}
-          <div className="relative" ref={addDropdownRef}>
-            <button
-              onClick={() => setAddDropdownOpen(!addDropdownOpen)}
-              className="flex items-center gap-2 px-4 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand/90 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Add Contact
-              <ChevronDown className="w-3 h-3" />
-            </button>
-
-            {addDropdownOpen && (
-              <div className="absolute right-0 mt-1 w-52 bg-vb-surface border border-vb-border rounded-lg shadow-xl z-20 py-1">
-                <button
-                  onClick={() => { setAddDropdownOpen(false); setShowManualModal(true); }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-vb-text hover:bg-vb-card transition-colors"
-                >
-                  <UserPlus className="w-4 h-4 text-vb-text-muted" />
-                  Enter Manually
-                </button>
-                <button
-                  onClick={() => { setAddDropdownOpen(false); setShowImportModal(true); }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-vb-text hover:bg-vb-card transition-colors"
-                >
-                  <Upload className="w-4 h-4 text-vb-text-muted" />
-                  Import File
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Filters */}
+      {/* Filters + Actions */}
       <div className="flex gap-3 items-center">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-vb-text-muted" />
@@ -500,6 +458,40 @@ export default function Applicants() {
           />
         </div>
 
+        <button
+          onClick={handleExport}
+          className="flex items-center px-4 py-2 bg-vb-card text-sm text-vb-text-secondary rounded-lg hover:bg-vb-muted border border-vb-border transition-colors ml-auto"
+        >
+          Export
+        </button>
+
+        {/* Add Contact Dropdown */}
+        <div className="relative" ref={addDropdownRef}>
+          <button
+            onClick={() => setAddDropdownOpen(!addDropdownOpen)}
+            className="flex items-center gap-2 px-4 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand/90 transition-colors"
+          >
+            Add Contact
+            <ChevronDown className="w-3 h-3" />
+          </button>
+
+          {addDropdownOpen && (
+            <div className="absolute right-0 mt-1 w-44 bg-vb-surface border border-vb-border rounded-lg shadow-xl z-20 py-1">
+              <button
+                onClick={() => { setAddDropdownOpen(false); setShowManualModal(true); }}
+                className="w-full flex items-center px-4 py-2.5 text-sm text-vb-text hover:bg-vb-card transition-colors"
+              >
+                Enter Manually
+              </button>
+              <button
+                onClick={() => { setAddDropdownOpen(false); setShowImportModal(true); }}
+                className="w-full flex items-center px-4 py-2.5 text-sm text-vb-text hover:bg-vb-card transition-colors"
+              >
+                Import File
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Table */}

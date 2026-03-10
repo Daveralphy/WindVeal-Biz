@@ -5,12 +5,13 @@ import {
   Calendar,
   UserPlus,
   ArrowUpRight,
-  Sparkles,
   ChevronDown,
   Clock,
   Video,
   Phone,
   MapPin,
+  BarChart3,
+  TrendingUp,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '@/lib/api';
@@ -29,19 +30,14 @@ interface Stats {
   teamMembers: number;
 }
 
-interface Activity {
-  type: string;
-  action: string;
-  detail: string;
-  time: string;
-  color: string;
+interface AnalyticsSummary {
+  stats: { hired: number; offerAcceptRate: number };
 }
 
-const ACTIVITY_LINKS: Record<string, string> = {
-  application: '/applicants',
-  stage_change: '/applicants',
-  interview: '/interviews',
-};
+interface TrendData {
+  labels: string[];
+  series: { name: string; color: string; data: number[] }[];
+}
 
 interface TodayInterview {
   id: string;
@@ -52,22 +48,45 @@ interface TodayInterview {
   status: string;
 }
 
-interface AIInsight {
-  title: string;
-  description: string;
-  action: string;
-  priority: 'high' | 'medium' | 'low';
-}
-
-function timeAgo(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins} min ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs} hour${hrs > 1 ? 's' : ''} ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days} day${days > 1 ? 's' : ''} ago`;
+function TrendChart({ data }: { data: TrendData }) {
+  const W = 560, H = 160;
+  const pad = { t: 16, r: 12, b: 28, l: 32 };
+  const innerW = W - pad.l - pad.r;
+  const innerH = H - pad.t - pad.b;
+  const maxVal = Math.max(...data.series.flatMap((s) => s.data), 1);
+  const n = data.labels.length;
+  const px = (i: number) => pad.l + (n > 1 ? (i * innerW) / (n - 1) : innerW / 2);
+  const py = (v: number) => pad.t + innerH - (v / maxVal) * innerH;
+  const linePath = (values: number[]) =>
+    values.map((v, i) => `${i === 0 ? 'M' : 'L'} ${px(i).toFixed(1)} ${py(v).toFixed(1)}`).join(' ');
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: '160px' }}>
+      {[0, 0.5, 1].map((t) => {
+        const y = pad.t + innerH * (1 - t);
+        return (
+          <g key={t}>
+            <line x1={pad.l} y1={y} x2={W - pad.r} y2={y} stroke="currentColor" strokeOpacity="0.08" />
+            <text x={pad.l - 4} y={y + 3} textAnchor="end" fontSize="9" fill="currentColor" fillOpacity="0.4">
+              {Math.round(maxVal * t)}
+            </text>
+          </g>
+        );
+      })}
+      {data.series.map((s) => (
+        <path key={s.name} d={linePath(s.data)} fill="none" stroke={s.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      ))}
+      {data.series.map((s) =>
+        s.data.map((v, i) => (
+          <circle key={`${s.name}-${i}`} cx={px(i)} cy={py(v)} r="3" fill={s.color} />
+        ))
+      )}
+      {data.labels.map((label, i) => (
+        <text key={i} x={px(i)} y={H - 2} textAnchor="middle" fontSize="9" fill="currentColor" fillOpacity="0.4">
+          {label}
+        </text>
+      ))}
+    </svg>
+  );
 }
 
 const DATE_FILTERS = [
@@ -79,11 +98,9 @@ const DATE_FILTERS = [
 
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
-  const [activity, setActivity] = useState<Activity[]>([]);
+  const [analyticsSummary, setAnalyticsSummary] = useState<AnalyticsSummary | null>(null);
+  const [trends, setTrends] = useState<TrendData | null>(null);
   const [todayInterviews, setTodayInterviews] = useState<TodayInterview[]>([]);
-  const [insights, setInsights] = useState<AIInsight[]>([]);
-  const [insightsLoading, setInsightsLoading] = useState(false);
-  const [insightsFetched, setInsightsFetched] = useState(false);
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState('30d');
 
@@ -91,14 +108,16 @@ export default function Dashboard() {
     setLoading(true);
     async function load() {
       try {
-        const [statsRes, activityRes, todayRes] = await Promise.all([
+        const [statsRes, todayRes, analyticsRes, trendsRes] = await Promise.all([
           api.get(`/dashboard/stats?range=${dateFilter}`),
-          api.get(`/dashboard/activity?range=${dateFilter}`),
           api.get('/dashboard/today-interviews'),
+          api.get('/analytics'),
+          api.get('/dashboard/trends'),
         ]);
         setStats(statsRes.data);
-        setActivity(activityRes.data);
         setTodayInterviews(todayRes.data);
+        setAnalyticsSummary(analyticsRes.data);
+        setTrends(trendsRes.data);
       } catch (err) {
         console.error('Failed to load dashboard:', err);
       } finally {
@@ -108,31 +127,12 @@ export default function Dashboard() {
     load();
   }, [dateFilter]);
 
-  const fetchInsights = async () => {
-    if (!stats) return;
-    const hasData = stats.activeJobs > 0 || stats.totalApplicants > 0;
-    if (!hasData) {
-      setInsights([]);
-      return;
-    }
-    setInsightsLoading(true);
-    try {
-      const res = await api.get('/ai/insights');
-      setInsights(res.data.insights);
-      setInsightsFetched(true);
-    } catch (err) {
-      console.error('Failed to load AI insights:', err);
-    } finally {
-      setInsightsLoading(false);
-    }
-  };
-
   if (loading) {
     return (
       <div className="space-y-6">
         <h1 className="text-xl font-bold text-vb-text">Dashboard</h1>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {Array.from({ length: 8 }).map((_, i) => (
+        <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="bg-vb-card rounded-xl p-4 border border-vb-border h-28 animate-pulse" />
           ))}
         </div>
@@ -157,8 +157,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Metric Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* 6 Metric Cards — one row */}
+      <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
         {stats && METRIC_CONFIG.map(({ key, label, icon: Icon, color, bg, to }) => (
           <Link
             key={key}
@@ -175,157 +175,98 @@ export default function Dashboard() {
             <p className="text-xs text-vb-text-muted mt-1">{label}</p>
           </Link>
         ))}
-      </div>
-
-      {/* Today's Interviews */}
-      <div className="bg-vb-card rounded-xl border border-vb-border">
-        <div className="px-5 py-4 border-b border-vb-border flex items-center justify-between">
-          <h2 className="text-vb-text font-semibold text-sm flex items-center gap-2">
-            <Clock className="w-4 h-4 text-brand" />
-            Today's Interviews
-            {todayInterviews.length > 0 && (
-              <span className="text-xs text-vb-text-muted font-normal">({todayInterviews.length})</span>
-            )}
-          </h2>
-          <Link to="/interviews" className="text-brand text-xs hover:text-brand-light transition-colors">View all →</Link>
-        </div>
-        {todayInterviews.length > 0 ? (
-          <div className="divide-y divide-vb-border">
-            {todayInterviews.map((interview) => {
-              const time = new Date(interview.scheduledAt);
-              const TypeIcon = interview.type === 'VIDEO' ? Video : interview.type === 'PHONE' ? Phone : MapPin;
-              return (
-                <div key={interview.id} className="flex items-center gap-4 px-5 py-3.5">
-                  <div className="flex-shrink-0 w-14 text-center">
-                    <p className="text-vb-text font-bold text-sm">{time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-vb-text text-sm font-medium truncate">{interview.applicantName}</p>
-                    <p className="text-vb-text-secondary text-xs truncate">{interview.jobTitle}</p>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <TypeIcon className="w-3.5 h-3.5 text-vb-text-muted" />
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      interview.status === 'CONFIRMED' ? 'bg-green-500/10 text-green-400' : 'bg-amber-500/10 text-amber-400'
-                    }`}>{interview.status === 'CONFIRMED' ? 'Confirmed' : 'Scheduled'}</span>
-                  </div>
-                </div>
-              );
-            })}
+        <div className="bg-vb-card rounded-xl p-4 border border-vb-border">
+          <div className="flex items-center justify-between mb-3">
+            <div className="p-2 rounded-lg bg-green-500/10">
+              <UserPlus className="w-4 h-4 text-green-400" />
+            </div>
+            <ArrowUpRight className="w-3.5 h-3.5 text-vb-text-muted" />
           </div>
-        ) : (
-          <p className="px-5 py-8 text-vb-text-muted text-sm text-center">No interviews scheduled for today</p>
-        )}
+          <p className="text-2xl font-bold text-vb-text">{analyticsSummary?.stats.hired.toLocaleString() ?? '—'}</p>
+          <p className="text-xs text-vb-text-muted mt-1">Hired</p>
+        </div>
+        <div className="bg-vb-card rounded-xl p-4 border border-vb-border">
+          <div className="flex items-center justify-between mb-3">
+            <div className="p-2 rounded-lg bg-amber-500/10">
+              <TrendingUp className="w-4 h-4 text-amber-400" />
+            </div>
+            <ArrowUpRight className="w-3.5 h-3.5 text-vb-text-muted" />
+          </div>
+          <p className="text-2xl font-bold text-vb-text">{analyticsSummary?.stats.offerAcceptRate.toLocaleString() ?? '—'}%</p>
+          <p className="text-xs text-vb-text-muted mt-1">Offer Accept Rate</p>
+        </div>
       </div>
 
-      {/* Activity Feed + AI Insights */}
+      {/* Trend Chart + Today's Interviews */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Activity Feed */}
+        {/* Activity Trends */}
         <div className="lg:col-span-2 bg-vb-card rounded-xl border border-vb-border">
           <div className="px-5 py-4 border-b border-vb-border">
-            <h2 className="text-vb-text font-semibold text-sm">Recent Activity</h2>
-          </div>
-          <div className="divide-y divide-vb-border">
-            {activity.map((item, i) => (
-              <Link
-                key={i}
-                to={ACTIVITY_LINKS[item.type] || '/dashboard'}
-                className="flex items-start gap-3 px-5 py-3.5 hover:bg-vb-surface transition-colors"
-              >
-                <div
-                  className={`w-2 h-2 rounded-full ${item.color} mt-2 flex-shrink-0`}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-vb-text text-sm font-medium">{item.action}</p>
-                  <p className="text-vb-text-secondary text-xs mt-0.5">{item.detail}</p>
-                </div>
-                <span className="text-vb-text-muted text-xs flex-shrink-0">
-                  {timeAgo(item.time)}
-                </span>
-              </Link>
-            ))}
-            {activity.length === 0 && (
-              <p className="px-5 py-8 text-vb-text-muted text-sm text-center">No recent activity</p>
-            )}
-          </div>
-        </div>
-
-        {/* VealAI Insights */}
-        <div className="bg-vb-card rounded-xl border border-vb-border">
-          <div className="px-5 py-4 border-b border-vb-border">
             <h2 className="text-vb-text font-semibold text-sm flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-brand animate-pulse" />
-              VealAI Insights
+              <BarChart3 className="w-4 h-4 text-brand" />
+              Activity Trends
             </h2>
           </div>
-          <div className="p-5 space-y-4">
-            {insightsLoading ? (
-              Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="bg-vb-surface rounded-lg p-3.5 border border-vb-border animate-pulse">
-                  <div className="h-3 bg-vb-card rounded w-2/3 mb-2" />
-                  <div className="h-2.5 bg-vb-card rounded w-full mb-1" />
-                  <div className="h-2.5 bg-vb-card rounded w-3/4" />
+          <div className="p-5">
+            {trends ? (
+              <>
+                <TrendChart data={trends} />
+                <div className="flex items-center gap-6 mt-3">
+                  {trends.series.map((s) => (
+                    <div key={s.name} className="flex items-center gap-1.5">
+                      <div className="w-3 h-0.5 rounded-full" style={{ backgroundColor: s.color }} />
+                      <span className="text-xs text-vb-text-muted">{s.name}</span>
+                    </div>
+                  ))}
                 </div>
-              ))
-            ) : insights.length > 0 ? (
-              insights.map((insight, i) => (
-                <InsightCard
-                  key={i}
-                  title={insight.title}
-                  desc={insight.description}
-                  action={insight.action}
-                  priority={insight.priority}
-                />
-              ))
-            ) : !insightsFetched ? (
-              <div className="flex flex-col items-center py-6">
-                <div className="w-12 h-12 rounded-xl bg-brand/10 flex items-center justify-center mb-3">
-                  <Sparkles className="w-6 h-6 text-brand" />
-                </div>
-                <p className="text-vb-text-muted text-sm text-center mb-4">
-                  Click below to get AI-powered insights about your recruitment data
-                </p>
-                <button
-                  onClick={fetchInsights}
-                  disabled={!stats || (stats.activeJobs === 0 && stats.totalApplicants === 0)}
-                  className="px-4 py-2 bg-brand text-white text-sm rounded-lg hover:bg-brand-dark transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  Generate Insights
-                </button>
-              </div>
+              </>
             ) : (
-              <p className="text-vb-text-muted text-sm text-center py-4">No insights available</p>
+              <div className="h-40 rounded-lg bg-vb-bg animate-pulse" />
             )}
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
 
-function InsightCard({
-  title,
-  desc,
-  action,
-  priority,
-}: {
-  title: string;
-  desc: string;
-  action: string;
-  priority?: string;
-}) {
-  const priorityColor = priority === 'high' ? 'bg-red-500' : priority === 'medium' ? 'bg-amber-500' : 'bg-blue-500';
-  return (
-    <div className="bg-vb-surface rounded-lg p-3.5 border border-vb-border">
-      <div className="flex items-center gap-2">
-        <span className={`w-1.5 h-1.5 rounded-full ${priorityColor}`} />
-        <p className="text-vb-text text-sm font-medium">{title}</p>
+        {/* Today's Interviews */}
+        <div className="bg-vb-card rounded-xl border border-vb-border">
+          <div className="px-5 py-4 border-b border-vb-border flex items-center justify-between">
+            <h2 className="text-vb-text font-semibold text-sm flex items-center gap-2">
+              <Clock className="w-4 h-4 text-brand" />
+              Today's Interviews
+              {todayInterviews.length > 0 && (
+                <span className="text-xs text-vb-text-muted font-normal">({todayInterviews.length})</span>
+              )}
+            </h2>
+            <Link to="/interviews" className="text-brand text-xs hover:text-brand-light transition-colors">View all →</Link>
+          </div>
+          {todayInterviews.length > 0 ? (
+            <div className="divide-y divide-vb-border">
+              {todayInterviews.map((interview) => {
+                const time = new Date(interview.scheduledAt);
+                const TypeIcon = interview.type === 'VIDEO' ? Video : interview.type === 'PHONE' ? Phone : MapPin;
+                return (
+                  <div key={interview.id} className="flex items-center gap-3 px-4 py-3">
+                    <div className="flex-shrink-0 w-12 text-center">
+                      <p className="text-vb-text font-bold text-xs">{time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-vb-text text-xs font-medium truncate">{interview.applicantName}</p>
+                      <p className="text-vb-text-secondary text-xs truncate">{interview.jobTitle}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <TypeIcon className="w-3 h-3 text-vb-text-muted" />
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                        interview.status === 'CONFIRMED' ? 'bg-green-500/10 text-green-400' : 'bg-amber-500/10 text-amber-400'
+                      }`}>{interview.status === 'CONFIRMED' ? 'Confirmed' : 'Scheduled'}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="px-5 py-8 text-vb-text-muted text-sm text-center">No interviews scheduled for today</p>
+          )}
+        </div>
       </div>
-      <p className="text-vb-text-secondary text-xs mt-1 leading-relaxed">{desc}</p>
-      <button className="text-brand text-xs font-medium mt-2 hover:text-brand-light transition-colors">
-        {action} →
-      </button>
     </div>
   );
 }

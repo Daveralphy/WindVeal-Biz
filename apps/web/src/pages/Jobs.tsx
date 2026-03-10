@@ -6,13 +6,13 @@ import {
   Users,
   MoreHorizontal,
   Search,
-  Plus,
   Clock,
   Edit3,
   Pause,
   Play,
   XCircle,
   Trash2,
+  ExternalLink,
 } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -59,10 +59,12 @@ export default function Jobs() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [careerSlug, setCareerSlug] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     api.get('/jobs').then((res) => setJobs(res.data)).catch(console.error).finally(() => setLoading(false));
+    api.get('/careers').then((res) => setCareerSlug(res.data.slug)).catch(() => {});
   }, []);
 
   // Close dropdown when clicking outside
@@ -120,16 +122,7 @@ export default function Jobs() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-vb-text">Jobs</h1>
-        <Link
-          to="/jobs/new"
-          className="flex items-center gap-2 px-4 py-2 bg-brand text-sm text-white rounded-lg hover:bg-brand-dark transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Create Job
-        </Link>
-      </div>
+      <h1 className="text-xl font-bold text-vb-text">Jobs</h1>
 
       {/* Filters */}
       <div className="flex gap-3 items-center">
@@ -158,6 +151,15 @@ export default function Jobs() {
             </button>
           ))}
         </div>
+        <a
+          href={careerSlug ? `/${careerSlug}/careers` : '#'}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-sm text-white rounded-lg hover:bg-green-700 transition-colors ml-auto"
+        >
+          <ExternalLink className="w-4 h-4" />
+          View Site
+        </a>
       </div>
 
       {/* Jobs List */}
@@ -284,6 +286,14 @@ export default function Jobs() {
           <p className="text-vb-text-secondary text-sm">No jobs found</p>
         </div>
       )}
+
+      {/* FAB: Add Job */}
+      <Link
+        to="/jobs/new"
+        className="fixed bottom-6 right-6 z-40 px-5 py-3 bg-brand text-white text-sm font-medium rounded-xl shadow-lg hover:bg-brand/90 hover:scale-105 transition-all"
+      >
+        Add Job
+      </Link>
     </div>
   );
 }

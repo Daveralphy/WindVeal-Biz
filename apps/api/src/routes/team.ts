@@ -44,4 +44,24 @@ export async function teamRoutes(app: FastifyInstance) {
       pendingInvitations: pending,
     };
   });
+
+  // Verify a team member's email
+  app.patch<{ Params: { id: string } }>('/:id/verify', async (request, reply) => {
+    const { organizationId } = request.user!;
+
+    const user = await prisma.user.findFirst({
+      where: { id: request.params.id, organizationId },
+    });
+
+    if (!user) {
+      return reply.status(404).send({ error: 'User not found' });
+    }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { emailVerified: true },
+    });
+
+    return { message: 'User verified' };
+  });
 }

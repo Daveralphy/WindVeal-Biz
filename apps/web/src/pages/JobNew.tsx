@@ -42,14 +42,14 @@ const VISIBILITY_OPTIONS = [
 ];
 
 const AVAILABLE_STAGES = [
-  'Applied', 'Screening', 'Phone Screen', 'Interview', 'Technical Assessment',
-  'Panel Interview', 'Final Review', 'Background Check', 'Reference Check',
-  'Offer', 'Hired', 'Rejected',
+  'Applied', 'Screening', 'Phone Screen', 'Initial Interview', 'Group Call',
+  'Technical Assessment', 'Final Interview', 'Background Check', 'Reference Check',
+  'Offer Sent', 'Hired', 'Rejected',
 ];
 
 const DEFAULT_STAGES = [
-  'Applied', 'Screening', 'Interview', 'Technical Assessment',
-  'Final Review', 'Offer', 'Hired', 'Rejected',
+  'Applied', 'Screening', 'Initial Interview', 'Group Call',
+  'Technical Assessment', 'Final Interview', 'Offer Sent', 'Hired', 'Rejected',
 ];
 
 type Step = 1 | 2 | 3 | 4;

@@ -7,6 +7,7 @@ import { env } from '../config/env.js';
 import prisma from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
 import { notifyOrgUsers } from '../services/notificationService.js';
+import { triggerAiScreenBackground } from '../services/aiScreenService.js';
 
 interface CareerDesignPayload {
   heroTitle?: string;
@@ -376,6 +377,8 @@ export async function publicCareersRoutes(app: FastifyInstance) {
       applicantName: `${firstName} ${lastName}`,
       jobTitle: job.title,
     }).catch(() => {});
+
+    setImmediate(() => triggerAiScreenBackground(applicant.id).catch(console.error));
 
     return reply.status(201).send({
       message: 'Application submitted successfully',
