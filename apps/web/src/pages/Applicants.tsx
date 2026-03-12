@@ -2,13 +2,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Search,
-  Download,
   User,
-  ArrowUpDown,
   X,
   FileText,
   Clock,
-  Star,
   Calendar,
   Plus,
   Upload,
@@ -30,12 +27,14 @@ interface Applicant {
   email: string;
   phone?: string;
   linkedinUrl?: string;
-  job: { id: string; title: string };
+  job: { id: string; title: string; applicationForm?: { fields: ApplicationFormField[] } | null };
   currentStage: { id: string; name: string; color: string };
   aiReport: { overallScore: number; recommendation: string } | null;
   source: string;
   qualified: boolean | null;
   createdAt: string;
+  applicationData?: { fieldId: string; value: unknown }[];
+  uploadedFiles?: { type: string; fileName: string; storageUrl: string }[];
 }
 
 interface PipelineStage {
@@ -75,6 +74,12 @@ interface NoteItem {
   author: { firstName: string; lastName: string; avatarUrl?: string | null };
 }
 
+interface SectionAnalysis {
+  resume?: string;
+  coverLetter?: string;
+  applicationResponses?: { label: string; analysis: string }[];
+}
+
 interface AIReportFull {
   overallScore: number;
   recommendation: string;
@@ -82,6 +87,7 @@ interface AIReportFull {
   concerns: string[];
   confidenceLevel: string;
   dimensionScores: Record<string, number>;
+  sectionAnalysis?: SectionAnalysis;
 }
 
 interface ApplicationFormField {
@@ -123,7 +129,12 @@ const RECOMMENDATION_LABELS: Record<string, { label: string; color: string }> = 
   REJECT: { label: 'Reject', color: 'text-red-400' },
 };
 
-const COLUMNS = ['Name', 'Job', 'Score', 'Source', 'Applied'];
+const FILE_COL_LABELS: Record<string, string> = {
+  resume: 'Resume',
+  video: 'Video Introduction',
+  cover_letter: 'Cover Letter',
+  document: 'Document',
+};
 
 interface JobOption {
   id: string;
@@ -178,7 +189,7 @@ export default function Applicants() {
 
   // AI analysis modal state (score click)
   const [aiApplicant, setAiApplicant] = useState<ApplicantDetail | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
+  const [aiLoading] = useState(false);
   const [showAiModal, setShowAiModal] = useState(false);
   const [aiScreening, setAiScreening] = useState(false);
 
@@ -241,22 +252,26 @@ export default function Applicants() {
     return matchesSearch;
   });
 
+  // Build dynamic columns for the table
+  const FIXED_FILE_TYPES = ['resume', 'video'];
+  const extraFileCols = [...new Set(
+    filtered.flatMap(a => (a.uploadedFiles || []).map(f => f.type).filter(t => !FIXED_FILE_TYPES.includes(t)))
+  )];
+  const allFileCols = [...FIXED_FILE_TYPES, ...extraFileCols];
+
+  const fieldInfoMap = new Map<string, { label: string; system: boolean }>();
+  filtered.forEach(a => {
+    ((a.job.applicationForm?.fields ?? []) as ApplicationFormField[]).forEach(f => {
+      if (!fieldInfoMap.has(f.id)) fieldInfoMap.set(f.id, { label: f.label, system: !!f.system });
+    });
+  });
+
+  const extraFieldIds = [...new Set(
+    filtered.flatMap(a => (a.applicationData || []).map(d => d.fieldId))
+  )].filter(fid => !fieldInfoMap.get(fid)?.system);
+
   // Open stage timeline modal
   // Removed unused handleStageClick
-
-  // Open AI analysis modal
-  const handleScoreClick = async (applicantId: string) => {
-    setShowAiModal(true);
-    setAiLoading(true);
-    try {
-      const res = await api.get(`/applicants/${applicantId}`);
-      setAiApplicant(res.data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setAiLoading(false);
-    }
-  };
 
   // Run AI screening from the AI modal
   const handleAiScreen = async () => {
@@ -496,90 +511,130 @@ export default function Applicants() {
 
       {/* Table */}
       <div className="bg-vb-surface border border-vb-border rounded-xl overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-vb-border">
-              {COLUMNS.map((col) => (
-                <th
-                  key={col}
-                  className="px-4 py-3 text-xs font-medium text-vb-text-muted text-left uppercase tracking-wider"
-                >
-                  <span className="flex items-center gap-1 cursor-pointer hover:text-vb-text-secondary">
+        <div className="overflow-x-auto no-scrollbar">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-vb-border">
+                {[
+                  'First Name', 'Last Name', 'Email', 'Phone', 'LinkedIn URL', 'Job Position',
+                  ...allFileCols.map(t => FILE_COL_LABELS[t] ?? (t.charAt(0).toUpperCase() + t.slice(1))),
+                  ...extraFieldIds.map(fid => fieldInfoMap.get(fid)?.label ?? fid),
+                  'Date Applied', 'Source',
+                ].map(col => (
+                  <th
+                    key={col}
+                    className="px-4 py-3 text-xs font-medium text-vb-text-muted text-left uppercase tracking-wider whitespace-nowrap"
+                  >
                     {col}
-                    <ArrowUpDown className="w-3 h-3" />
-                  </span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-vb-border">
-            {filtered.map((applicant) => (
-              <tr
-                key={applicant.id}
-                className="hover:bg-vb-surface transition-colors"
-              >
-                {/* Name — clickable, opens details drawer */}
-                <td className="px-4 py-3">
-                  <button
-                    onClick={() => navigate(`/applicants/${applicant.id}`)}
-                    className="flex items-center gap-3 text-left group"
-                  >
-                    <div className="w-8 h-8 rounded-full bg-vb-muted flex items-center justify-center">
-                      <User className="w-3.5 h-3.5 text-vb-text-secondary" />
-                    </div>
-                    <div>
-                      <p className="text-vb-text text-sm font-medium group-hover:text-brand transition-colors">
-                        {applicant.firstName} {applicant.lastName}
-                      </p>
-                      <p className="text-vb-text-muted text-xs">{applicant.email}</p>
-                    </div>
-                  </button>
-                </td>
-                {/* Job — clickable, navigates to job detail */}
-                <td className="px-4 py-3">
-                  <button
-                    onClick={() => navigate(`/jobs/${applicant.job.id}`)}
-                    className="text-vb-text-secondary text-sm hover:text-brand transition-colors"
-                  >
-                    {applicant.job.title}
-                  </button>
-                </td>
-
-                {/* Score — clickable, opens AI analysis popup */}
-                <td className="px-4 py-3">
-                  {applicant.aiReport ? (
-                    <button
-                      onClick={() => handleScoreClick(applicant.id)}
-                      className={`text-sm font-medium hover:underline ${
-                        applicant.aiReport.overallScore >= 80
-                          ? 'text-green-400'
-                          : applicant.aiReport.overallScore >= 50
-                          ? 'text-amber-400'
-                          : 'text-red-400'
-                      }`}
-                    >
-                      {applicant.aiReport.overallScore}%
-                    </button>
-                  ) : (
-                    <span className="text-vb-text-faint text-sm">—</span>
-                  )}
-                </td>
-                {/* Source — not clickable */}
-                <td className="px-4 py-3 text-vb-text-secondary text-sm">
-                  {SOURCE_LABELS[applicant.source] || applicant.source}
-                </td>
-                {/* Applied — not clickable */}
-                <td className="px-4 py-3 text-vb-text-secondary text-sm">
-                  {new Date(applicant.createdAt).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                  })}
-                </td>
-
+                  </th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-vb-border">
+              {filtered.map((applicant) => (
+                <tr key={applicant.id} className="hover:bg-vb-card/40 transition-colors">
+                  {/* First Name */}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <button
+                      onClick={() => navigate(`/applicants/${applicant.id}`)}
+                      className="text-vb-text text-sm font-medium hover:text-brand transition-colors"
+                    >
+                      {applicant.firstName}
+                    </button>
+                  </td>
+                  {/* Last Name */}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <button
+                      onClick={() => navigate(`/applicants/${applicant.id}`)}
+                      className="text-vb-text text-sm hover:text-brand transition-colors"
+                    >
+                      {applicant.lastName}
+                    </button>
+                  </td>
+                  {/* Email */}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span className="text-vb-text-secondary text-sm">{applicant.email}</span>
+                  </td>
+                  {/* Phone */}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span className="text-vb-text-secondary text-sm">{applicant.phone || '—'}</span>
+                  </td>
+                  {/* LinkedIn URL */}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {applicant.linkedinUrl ? (
+                      <a
+                        href={applicant.linkedinUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-brand text-sm hover:underline"
+                      >
+                        View
+                      </a>
+                    ) : (
+                      <span className="text-vb-text-faint text-sm">—</span>
+                    )}
+                  </td>
+                  {/* Job Position */}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <button
+                      onClick={() => navigate(`/jobs/${applicant.job.id}`)}
+                      className="text-vb-text-secondary text-sm hover:text-brand transition-colors"
+                    >
+                      {applicant.job.title}
+                    </button>
+                  </td>
+                  {/* File columns */}
+                  {allFileCols.map(fileType => {
+                    const file = (applicant.uploadedFiles || []).find(f => f.type === fileType);
+                    return (
+                      <td key={fileType} className="px-4 py-3 whitespace-nowrap">
+                        {file ? (
+                          <a
+                            href={file.storageUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-brand text-sm hover:underline"
+                          >
+                            View
+                          </a>
+                        ) : (
+                          <span className="text-vb-text-faint text-sm">—</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                  {/* Extra applicationData field columns */}
+                  {extraFieldIds.map(fid => {
+                    const dataItem = (applicant.applicationData || []).find(d => d.fieldId === fid);
+                    const val = dataItem?.value;
+                    const display = val == null ? '—' : Array.isArray(val) ? val.join(', ') : String(val);
+                    return (
+                      <td key={fid} className="px-4 py-3 whitespace-nowrap max-w-[200px]">
+                        <span className="text-vb-text-secondary text-sm truncate block">{display || '—'}</span>
+                      </td>
+                    );
+                  })}
+                  {/* Date Applied */}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span className="text-vb-text-secondary text-sm">
+                      {new Date(applicant.createdAt).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </span>
+                  </td>
+                  {/* Source */}
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span className="text-vb-text-secondary text-sm">
+                      {SOURCE_LABELS[applicant.source] || applicant.source}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
         {filtered.length === 0 && (
           <div className="text-center py-12">
@@ -729,107 +784,91 @@ export default function Applicants() {
 
                   {aiApplicant.aiReport ? (
                     <>
-                      {/* Overall Score */}
-                      <div className="flex items-center gap-4 bg-vb-surface border border-vb-border rounded-xl p-4">
-                        <div className={`w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold ${
-                          aiApplicant.aiReport.overallScore >= 80 ? 'bg-green-500/10 text-green-400' :
-                          aiApplicant.aiReport.overallScore >= 50 ? 'bg-amber-500/10 text-amber-400' :
-                          'bg-red-500/10 text-red-400'
+                      {/* Summary sentence */}
+                      <p className="text-sm text-vb-text leading-relaxed">
+                        According to {aiApplicant.firstName}'s submission, total screening score is{' '}
+                        <span className={`font-semibold ${
+                          aiApplicant.aiReport.overallScore >= 80 ? 'text-green-400' :
+                          aiApplicant.aiReport.overallScore >= 50 ? 'text-amber-400' : 'text-red-400'
                         }`}>
                           {aiApplicant.aiReport.overallScore}
-                        </div>
-                        <div>
-                          <span className={`text-sm font-medium ${
-                            RECOMMENDATION_LABELS[aiApplicant.aiReport.recommendation]?.color ?? 'text-vb-text'
-                          }`}>
-                            {RECOMMENDATION_LABELS[aiApplicant.aiReport.recommendation]?.label ?? aiApplicant.aiReport.recommendation}
-                          </span>
-                          <p className="text-xs text-vb-text-muted">Confidence: {aiApplicant.aiReport.confidenceLevel}</p>
-                        </div>
-                      </div>
+                        </span>.
+                      </p>
 
-                      {/* Analyzed Data Summary */}
-                      <section className="space-y-2">
-                        <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Data Analyzed</h4>
-                        <div className="bg-vb-surface border border-vb-border rounded-lg p-3 space-y-1.5">
-                          <div className="flex items-center gap-2 text-xs text-vb-text-secondary">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
-                            Application form responses
-                          </div>
-                          {aiApplicant.uploadedFiles.some((f) => f.type === 'resume') && (
-                            <div className="flex items-center gap-2 text-xs text-vb-text-secondary">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
-                              Resume uploaded
-                            </div>
-                          )}
-                          {aiApplicant.uploadedFiles.some((f) => f.type === 'video') && (
-                            <div className="flex items-center gap-2 text-xs text-vb-text-secondary">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
-                              Video introduction
-                            </div>
-                          )}
-                          {aiApplicant.linkedinUrl && (
-                            <div className="flex items-center gap-2 text-xs text-vb-text-secondary">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
-                              LinkedIn profile provided
-                            </div>
-                          )}
-                        </div>
-                      </section>
+                      {/* Breakdown */}
+                      <div className="space-y-2.5">
+                        <p className="text-xs font-medium text-vb-text-muted uppercase tracking-wide">Here is a breakdown:</p>
 
-                      {/* Dimension Scores */}
-                      {aiApplicant.aiReport.dimensionScores && typeof aiApplicant.aiReport.dimensionScores === 'object' && (
-                        <section className="space-y-2">
-                          <h4 className="text-xs font-medium text-vb-text-muted uppercase tracking-wider">Dimension Scores</h4>
-                          <div className="space-y-2.5">
-                            {Object.entries(aiApplicant.aiReport.dimensionScores).map(([key, score]) => (
-                              <div key={key}>
-                                <div className="flex justify-between text-xs mb-1">
-                                  <span className="text-vb-text-secondary capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                                  <span className="text-vb-text font-medium">{score}%</span>
+                        {(() => {
+                          const sa = aiApplicant.aiReport.sectionAnalysis;
+                          if (sa) return (
+                            <>
+                              {sa.resume && (
+                                <div className="space-y-1">
+                                  <p className="text-xs font-semibold text-vb-text-muted uppercase tracking-wide">Resume</p>
+                                  <p className="text-sm text-vb-text-secondary leading-relaxed">{sa.resume}</p>
                                 </div>
-                                <div className="h-1.5 bg-vb-muted rounded-full overflow-hidden">
-                                  <div className={`h-full rounded-full transition-all ${
-                                    score >= 80 ? 'bg-green-400' : score >= 50 ? 'bg-amber-400' : 'bg-red-400'
-                                  }`} style={{ width: `${score}%` }} />
+                              )}
+                              {sa.coverLetter && (
+                                <div className="space-y-1">
+                                  <p className="text-xs font-semibold text-vb-text-muted uppercase tracking-wide">Cover Letter</p>
+                                  <p className="text-sm text-vb-text-secondary leading-relaxed">{sa.coverLetter}</p>
                                 </div>
-                              </div>
-                            ))}
-                          </div>
-                        </section>
-                      )}
-
-                      {/* Strengths & Concerns */}
-                      <div className="grid grid-cols-2 gap-4">
-                        {Array.isArray(aiApplicant.aiReport.strengths) && aiApplicant.aiReport.strengths.length > 0 && (
-                          <div>
-                            <p className="text-xs font-medium text-green-400 mb-1.5">Strengths</p>
-                            <ul className="space-y-1">
-                              {aiApplicant.aiReport.strengths.map((s: string, i: number) => (
-                                <li key={i} className="text-xs text-vb-text-secondary flex gap-1.5">
-                                  <Star className="w-3 h-3 text-green-400 flex-shrink-0 mt-0.5" /> {s}
-                                </li>
+                              )}
+                              {Array.isArray(sa.applicationResponses) && sa.applicationResponses.map((r, i) => (
+                                <div key={i} className="space-y-1">
+                                  <p className="text-xs font-semibold text-vb-text-muted uppercase tracking-wide">{r.label}</p>
+                                  <p className="text-sm text-vb-text-secondary leading-relaxed">{r.analysis}</p>
+                                </div>
                               ))}
-                            </ul>
+                            </>
+                          );
+                          // Legacy fallback
+                          return (
+                            <>
+                              {aiApplicant.uploadedFiles.some((f) => f.type === 'resume') && (
+                                <p className="text-sm text-vb-text-secondary leading-relaxed">Resume: {aiApplicant.firstName} submitted a resume.</p>
+                              )}
+                              {((aiApplicant.job.applicationForm?.fields ?? []) as ApplicationFormField[])
+                                .filter((f) => !f.system)
+                                .map((f) => {
+                                  const item = aiApplicant.applicationData.find((d) => d.fieldId === f.id);
+                                  const val = item?.value;
+                                  if (!val || String(val).trim() === '') return null;
+                                  return (
+                                    <p key={f.id} className="text-sm text-vb-text-secondary leading-relaxed">
+                                      {f.label}: {aiApplicant.firstName} mentioned — {String(val)}
+                                    </p>
+                                  );
+                                })}
+                            </>
+                          );
+                        })()}
+
+                        {Array.isArray(aiApplicant.aiReport.strengths) && aiApplicant.aiReport.strengths.length > 0 && (
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-vb-text-muted uppercase tracking-wide">Strengths</p>
+                            {aiApplicant.aiReport.strengths.map((s: string, i: number) => (
+                              <p key={i} className="text-sm text-vb-text-secondary leading-relaxed">{s}</p>
+                            ))}
                           </div>
                         )}
                         {Array.isArray(aiApplicant.aiReport.concerns) && aiApplicant.aiReport.concerns.length > 0 && (
-                          <div>
-                            <p className="text-xs font-medium text-amber-400 mb-1.5">Concerns</p>
-                            <ul className="space-y-1">
-                              {aiApplicant.aiReport.concerns.map((c: string, i: number) => (
-                                <li key={i} className="text-xs text-vb-text-secondary flex gap-1.5">
-                                  <span className="text-amber-400 flex-shrink-0">•</span> {c}
-                                </li>
-                              ))}
-                            </ul>
+                          <div className="space-y-1">
+                            <p className="text-xs font-semibold text-vb-text-muted uppercase tracking-wide">Concerns</p>
+                            {aiApplicant.aiReport.concerns.map((c: string, i: number) => (
+                              <p key={`c-${i}`} className="text-sm text-amber-400/80 leading-relaxed">{c}</p>
+                            ))}
                           </div>
                         )}
                       </div>
 
-                      {/* AI Disclaimer */}
-                      <p className="text-[11px] text-vb-text-faint italic">
-                        AI analysis may not be 100% accurate. Review the details and decide whether to accept or reject this assessment.
+                      <p className="text-xs text-vb-text-muted">
+                        Recommendation:{' '}
+                        <span className={RECOMMENDATION_LABELS[aiApplicant.aiReport.recommendation]?.color ?? 'text-vb-text'}>
+                          {RECOMMENDATION_LABELS[aiApplicant.aiReport.recommendation]?.label ?? aiApplicant.aiReport.recommendation}
+                        </span>
+                        {' '}· {aiApplicant.aiReport.confidenceLevel} confidence
                       </p>
                     </>
                   ) : (

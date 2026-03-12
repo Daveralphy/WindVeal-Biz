@@ -202,7 +202,7 @@ export default function ApplicantDetailPage() {
       </div>
 
       {/* ── Horizontal Pipeline ── */}
-      <div className="bg-vb-card border border-vb-border rounded-xl p-5 overflow-x-auto">
+      <div className="bg-vb-card border border-vb-border rounded-xl p-5 overflow-x-auto no-scrollbar">
         <div className="flex items-start min-w-max">
           {pipelineStages.map((stage, i) => {
             const isReached = i <= currentStageIdx;

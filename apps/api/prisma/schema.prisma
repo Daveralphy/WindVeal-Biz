@@ -388,11 +388,27 @@ model AIReport {
   recommendation       String   // ADVANCE, REQUEST_INFO, CONSIDER_OTHER, REJECT
   crossRoleSuggestions Json?    // [{ jobId, matchPercent }]
   confidenceLevel      String   // HIGH, MEDIUM, LOW
+  sectionAnalysis      Json?    // { resume?: string, coverLetter?: string, applicationResponses?: {label: string, analysis: string}[] }
   generatedAt          DateTime @default(now())
 
   applicant            Applicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
 
   @@map("ai_reports")
+}
+
+// ─── Verification Codes ─────────────────────────────────
+
+model VerificationCode {
+  id        String   @id @default(cuid())
+  email     String
+  code      String
+  type      String   // EMAIL_VERIFY | EMAIL_CHANGE | PASSWORD_CHANGE | TEAM_VERIFY
+  used      Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email, type])
+  @@map("verification_codes")
 }
 
 // ─── Interviews ─────────────────────────────────────────
@@ -545,9 +561,15 @@ model Notification {
 
 model TeamInvitation {
   id             String       @id @default(cuid())
+  token          String       @unique @default(cuid())
   organizationId String
   email          String
   role           UserRole     @default(RECRUITER)
+  firstName      String?
+  lastName       String?
+  jobTitle       String?
+  message        String?
+  invitedByName  String
   expiresAt      DateTime
   acceptedAt     DateTime?
   createdAt      DateTime     @default(now())

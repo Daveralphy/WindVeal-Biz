@@ -136,14 +136,23 @@ export async function dashboardRoutes(app: FastifyInstance) {
         status: { in: ['SCHEDULED', 'CONFIRMED'] },
       },
       include: {
-        applicant: { select: { firstName: true, lastName: true } },
+        applicant: { select: { id: true, firstName: true, lastName: true } },
         job: { select: { title: true } },
       },
       orderBy: { scheduledAt: 'asc' },
     });
 
-    return interviews.map((i) => ({
+    // Deduplicate: one entry per applicant (keep their earliest interview of the day)
+    const seen = new Set<string>();
+    const deduped = interviews.filter((i) => {
+      if (seen.has(i.applicant.id)) return false;
+      seen.add(i.applicant.id);
+      return true;
+    });
+
+    return deduped.map((i) => ({
       id: i.id,
+      applicantId: i.applicant.id,
       applicantName: `${i.applicant.firstName} ${i.applicant.lastName}`,
       jobTitle: i.job.title,
       scheduledAt: i.scheduledAt,

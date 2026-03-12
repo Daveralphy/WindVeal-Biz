@@ -307,7 +307,7 @@ export default function JobDetail() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-vb-border flex-wrap">
+      <div className="flex gap-1 border-b border-vb-border overflow-x-auto no-scrollbar">
         {tabs.map((t) => {
           const count = t.stageId ? funnelCount(t.stageId) : undefined;
           return (

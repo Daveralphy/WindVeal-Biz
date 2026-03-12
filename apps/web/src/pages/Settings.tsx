@@ -13,12 +13,10 @@ type CareerDesignData = {
   theme: string;
 };
 
-type SettingsView = 'main' | 'appearance' | 'profile' | 'email' | 'organization' | 'notifications' | 'security' | 'api-keys';
+type SettingsView = 'main' | 'appearance' | 'email' | 'notifications' | 'security' | 'api-keys';
 
 const SECTIONS = [
-  { icon: User, label: 'Profile', desc: 'Personal information and avatar', view: 'profile' as SettingsView },
   { icon: Mail, label: 'Email Settings', desc: 'Configure SMTP for sending emails', view: 'email' as SettingsView },
-  { icon: Building2, label: 'Organization', desc: 'Company settings and branding', view: 'organization' as SettingsView },
   { icon: Bell, label: 'Notifications', desc: 'Email and push notification preferences', view: 'notifications' as SettingsView },
   { icon: Shield, label: 'Security', desc: 'Password and two-factor authentication', view: 'security' as SettingsView },
   { icon: Palette, label: 'Appearance', desc: 'Theme and display settings', view: 'appearance' as SettingsView },
@@ -31,24 +29,18 @@ const THEMES: ThemeType[] = CAREER_THEMES;
 export default function Settings() {
   const [searchParams, setSearchParams] = useSearchParams();
   const viewParam = searchParams.get('view');
-  const validViews: SettingsView[] = ['profile', 'appearance', 'email', 'organization', 'notifications', 'security', 'api-keys'];
+  const validViews: SettingsView[] = ['appearance', 'email', 'notifications', 'security', 'api-keys'];
   const view: SettingsView = validViews.includes(viewParam as SettingsView) ? (viewParam as SettingsView) : 'main';
 
   const handleSetView = (v: SettingsView) => {
     setSearchParams(v === 'main' ? {} : { view: v });
   };
 
-  if (view === 'profile') {
-    return <ProfileSettings />;
-  }
   if (view === 'appearance') {
     return <AppearanceSettings onBack={() => handleSetView('main')} />;
   }
   if (view === 'email') {
     return <EmailSettings onBack={() => handleSetView('main')} />;
-  }
-  if (view === 'organization') {
-    return <OrganizationSettings onBack={() => handleSetView('main')} />;
   }
   if (view === 'notifications') {
     return <NotificationsSettings onBack={() => handleSetView('main')} />;
@@ -65,7 +57,7 @@ export default function Settings() {
       <h1 className="text-xl font-bold text-vb-text">Settings</h1>
 
       {/* Settings Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         {SECTIONS.map(({ icon: Icon, label, desc, view: targetView }) => (
           <div
             key={label}
@@ -528,7 +520,7 @@ function AppearanceSettings({ onBack }: { onBack: () => void }) {
     );
 }
 
-function ProfileSettings() {
+export function ProfileSettings() {
     const user = useAuthStore((s) => s.user);
   const [editMode, setEditMode] = useState(false);
   const [form, setForm] = useState({
@@ -678,7 +670,7 @@ function ProfileSettings() {
   );
 }
 
-function OrganizationSettings({ onBack }: { onBack: () => void }) {
+export function OrganizationSettings({ onBack }: { onBack?: () => void }) {
   const updateUser = useAuthStore((s) => s.updateUser);
   const [form, setForm] = useState({
     name: '',
@@ -727,9 +719,11 @@ function OrganizationSettings({ onBack }: { onBack: () => void }) {
   return (
     <div className="space-y-6 max-w-3xl">
       <div className="flex items-center gap-3">
-        <button onClick={onBack} className="p-2 rounded-lg hover:bg-vb-card text-vb-text-secondary hover:text-vb-text transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-        </button>
+        {onBack && (
+          <button onClick={onBack} className="p-2 rounded-lg hover:bg-vb-card text-vb-text-secondary hover:text-vb-text transition-colors">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+        )}
         <div>
           <h1 className="text-xl font-bold text-vb-text">Organization</h1>
           <p className="text-vb-text-muted text-sm">Company settings and profile</p>

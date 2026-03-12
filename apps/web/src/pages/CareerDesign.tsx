@@ -6,7 +6,6 @@ import {
   Trash2,
   ExternalLink,
   Sparkles,
-  Briefcase,
   Check,
   Loader2,
 } from 'lucide-react';

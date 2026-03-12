@@ -71,7 +71,6 @@ const NAV_ITEMS = [
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
@@ -325,12 +324,23 @@ function UserProfileMenu({
   sidebarOpen: boolean;
 }) {
   const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [menuOpen]);
 
   return (
-    <div className="border-t border-vb-border p-3">
+    <div className="border-t border-vb-border p-3 relative" ref={menuRef}>
       <div
         className="flex items-center gap-3 cursor-pointer hover:bg-vb-surface rounded-lg p-2 transition-colors"
-        onClick={() => navigate('/settings?view=profile')}
+        onClick={() => setMenuOpen((v) => !v)}
       >
         <div className="w-8 h-8 rounded-full bg-brand/20 flex items-center justify-center text-brand text-xs font-semibold flex-shrink-0">
           {user?.firstName?.[0]}
@@ -345,6 +355,22 @@ function UserProfileMenu({
           </div>
         )}
       </div>
+      {menuOpen && (
+        <div className="absolute bottom-full left-2 right-2 mb-1 bg-vb-card border border-vb-border rounded-lg shadow-xl py-1 z-50">
+          <button
+            onClick={() => { setMenuOpen(false); navigate('/profile'); }}
+            className="w-full text-left px-4 py-2.5 text-sm text-vb-text hover:bg-vb-surface transition-colors"
+          >
+            Profile
+          </button>
+          <button
+            onClick={() => { setMenuOpen(false); navigate('/settings'); }}
+            className="w-full text-left px-4 py-2.5 text-sm text-vb-text hover:bg-vb-surface transition-colors"
+          >
+            Subscription
+          </button>
+        </div>
+      )}
     </div>
   );
 }

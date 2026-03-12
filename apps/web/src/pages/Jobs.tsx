@@ -155,7 +155,7 @@ export default function Jobs() {
           href={careerSlug ? `/${careerSlug}/careers` : '#'}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-sm text-white rounded-lg hover:bg-green-700 transition-colors ml-auto"
+          className="flex items-center gap-2 px-4 py-2 text-sm text-green-500 rounded-lg border border-green-500/30 hover:bg-green-500/10 transition-colors ml-auto"
         >
           <ExternalLink className="w-4 h-4" />
           View Site

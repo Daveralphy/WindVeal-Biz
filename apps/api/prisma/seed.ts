@@ -40,7 +40,11 @@ async function main() {
   console.log('✅ Subscription plans seeded');
 
   // ─── VealBiz Platform Super Admin (upsert) ──────────
-  const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD || 'SuperAdmin123!';
+  const superAdminEmail    = process.env.SUPER_ADMIN_EMAIL      || 'admin@vealbiz.com';
+  const superAdminUsername = process.env.SUPER_ADMIN_USERNAME   || 'vealbiz.admin';
+  const superAdminFirstName = process.env.SUPER_ADMIN_FIRST_NAME || 'VealBiz';
+  const superAdminLastName  = process.env.SUPER_ADMIN_LAST_NAME  || 'Admin';
+  const superAdminPassword  = process.env.SUPER_ADMIN_PASSWORD   || 'SuperAdmin123!';
   const superAdminHash = await bcrypt.hash(superAdminPassword, 12);
 
   let platformOrg = await prisma.organization.findUnique({ where: { slug: 'vealbiz-platform' } });
@@ -59,15 +63,15 @@ async function main() {
   }
 
   await prisma.user.upsert({
-    where: { email: 'admin@vealbiz.com' },
-    update: { passwordHash: superAdminHash, isSuperAdmin: true },
+    where: { email: superAdminEmail },
+    update: { passwordHash: superAdminHash, isSuperAdmin: true, username: superAdminUsername },
     create: {
       organizationId: platformOrg.id,
-      email: 'admin@vealbiz.com',
-      username: 'vealbiz.admin',
+      email: superAdminEmail,
+      username: superAdminUsername,
       passwordHash: superAdminHash,
-      firstName: 'VealBiz',
-      lastName: 'Admin',
+      firstName: superAdminFirstName,
+      lastName: superAdminLastName,
       jobTitle: 'Platform Administrator',
       role: 'ADMIN',
       isSuperAdmin: true,
@@ -75,16 +79,46 @@ async function main() {
       emailVerified: true,
     },
   });
+  console.log(`✅ Super admin seeded: ${superAdminEmail}`);
+
+  // ─── Optional test org-admin (only when SEED_ADMIN_EMAIL is set) ─
+  const seedEmail = process.env.SEED_ADMIN_EMAIL;
+  if (seedEmail) {
+    const seedPassword  = process.env.SEED_ADMIN_PASSWORD   || 'Admin123!';
+    const seedFirst     = process.env.SEED_ADMIN_FIRST_NAME || 'Admin';
+    const seedLast      = process.env.SEED_ADMIN_LAST_NAME  || 'User';
+    const seedUsername  = process.env.SEED_ADMIN_USERNAME   || seedEmail.split('@')[0];
+    const seedOrgName   = process.env.SEED_ADMIN_ORG_NAME   || `${seedFirst}'s Company`;
+    const seedOrgSlug   = (process.env.SEED_ADMIN_ORG_SLUG  || seedOrgName)
+      .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const seedHash = await bcrypt.hash(seedPassword, 12);
+
+    let seedOrg = await prisma.organization.findUnique({ where: { slug: seedOrgSlug } });
+    if (!seedOrg) {
+      seedOrg = await prisma.organization.create({
+        data: { name: seedOrgName, slug: seedOrgSlug, subscriptionTier: 'PROFESSIONAL' },
+      });
+    }
+
+    await prisma.user.upsert({
+      where: { email: seedEmail },
+      update: { passwordHash: seedHash },
+      create: {
+        organizationId: seedOrg.id,
+        email: seedEmail,
+        username: seedUsername,
+        passwordHash: seedHash,
+        firstName: seedFirst,
+        lastName: seedLast,
+        role: 'ADMIN',
+        isActive: true,
+        emailVerified: true,
+      },
+    });
+    console.log(`✅ Test admin created: ${seedEmail} / ${seedPassword}`);
+  }
 
   console.log('✅ Seed complete!');
-  console.log('');
-  console.log('📊 Created:');
-  console.log('   3 Subscription plans (Starter, Professional, Enterprise)');
-  console.log('   1 Platform organization (VealBiz Platform)');
-  console.log('   1 Super admin user');
-  console.log('');
-  console.log('🔑 Super Admin login:');
-  console.log(`   admin@vealbiz.com / ${superAdminPassword}`);
 }
 
 main()

@@ -75,6 +75,12 @@ interface NoteItem {
   author: { firstName: string; lastName: string; avatarUrl?: string | null };
 }
 
+interface SectionAnalysis {
+  resume?: string;
+  coverLetter?: string;
+  applicationResponses?: { label: string; analysis: string }[];
+}
+
 interface AIReport {
   overallScore: number;
   recommendation: string;
@@ -82,6 +88,7 @@ interface AIReport {
   concerns: string[];
   confidenceLevel: string;
   dimensionScores: Record<string, number>;
+  sectionAnalysis?: SectionAnalysis;
 }
 
 interface InterviewItem {
@@ -633,8 +640,10 @@ export default function JobApplicantDetail() {
 
   function renderAIEvaluation() {
     if (!detail) return null;
+    const formFields = detail.job.applicationForm?.fields ?? [];
+    const score = detail.aiReport?.overallScore ?? 0;
     return (
-      <section className="bg-vb-card border border-vb-border rounded-xl p-5 space-y-3">
+      <section className="bg-vb-card border border-vb-border rounded-xl p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-medium text-vb-text flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-purple-400" />
@@ -662,43 +671,90 @@ export default function JobApplicantDetail() {
         </div>
 
         {detail.aiReport ? (
-          <div className="space-y-3">
-            <div className="flex items-center gap-4">
-              <div className={`w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold flex-shrink-0 ${
-                detail.aiReport.overallScore >= 70 ? 'bg-green-500/10 text-green-400' :
-                detail.aiReport.overallScore >= 40 ? 'bg-amber-500/10 text-amber-400' :
-                'bg-red-500/10 text-red-400'
-              }`}>
-                {detail.aiReport.overallScore}
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span className={`text-sm font-medium ${
-                    RECOMMENDATION_LABELS[detail.aiReport.recommendation]?.color ?? 'text-vb-text'
-                  }`}>
-                    {RECOMMENDATION_LABELS[detail.aiReport.recommendation]?.label ?? detail.aiReport.recommendation}
-                  </span>
-                  <span className="text-xs text-vb-text-muted">·</span>
-                  <span className="text-xs text-vb-text-muted">{detail.aiReport.confidenceLevel} confidence</span>
-                </div>
-              </div>
-            </div>
+          <div className="space-y-4">
+            {/* Summary sentence */}
+            <p className="text-sm text-vb-text leading-relaxed">
+              According to {detail.firstName}'s submission, total screening score is{' '}
+              <span className={`font-semibold ${score >= 70 ? 'text-green-400' : score >= 40 ? 'text-amber-400' : 'text-red-400'}`}>
+                {score}
+              </span>.
+            </p>
 
-            {/* Summary paragraphs */}
-            <div className="space-y-2">
+            {/* Breakdown */}
+            <div className="space-y-2.5">
+              <p className="text-xs font-medium text-vb-text-muted uppercase tracking-wide">Here is a breakdown:</p>
+
+              {(() => {
+                const sa = detail.aiReport.sectionAnalysis;
+                if (sa) return (
+                  <>
+                    {sa.resume && (
+                      <div className="space-y-1">
+                        <p className="text-xs font-semibold text-vb-text-muted uppercase tracking-wide">Resume</p>
+                        <p className="text-sm text-vb-text-secondary leading-relaxed">{sa.resume}</p>
+                      </div>
+                    )}
+                    {sa.coverLetter && (
+                      <div className="space-y-1">
+                        <p className="text-xs font-semibold text-vb-text-muted uppercase tracking-wide">Cover Letter</p>
+                        <p className="text-sm text-vb-text-secondary leading-relaxed">{sa.coverLetter}</p>
+                      </div>
+                    )}
+                    {Array.isArray(sa.applicationResponses) && sa.applicationResponses.map((r, i) => (
+                      <div key={i} className="space-y-1">
+                        <p className="text-xs font-semibold text-vb-text-muted uppercase tracking-wide">{r.label}</p>
+                        <p className="text-sm text-vb-text-secondary leading-relaxed">{r.analysis}</p>
+                      </div>
+                    ))}
+                  </>
+                );
+                // Legacy fallback
+                return (
+                  <>
+                    {detail.uploadedFiles.some((f) => f.type === 'resume') && (
+                      <p className="text-sm text-vb-text-secondary leading-relaxed">Resume: {detail.firstName} submitted a resume.</p>
+                    )}
+                    {formFields
+                      .filter((f) => !f.system)
+                      .map((f) => {
+                        const item = detail.applicationData.find((d) => d.fieldId === f.id);
+                        const val = item?.value;
+                        if (!val || String(val).trim() === '') return null;
+                        return (
+                          <p key={f.id} className="text-sm text-vb-text-secondary leading-relaxed">
+                            {f.label}: {detail.firstName} mentioned — {String(val)}
+                          </p>
+                        );
+                      })}
+                  </>
+                );
+              })()}
+
               {detail.aiReport.strengths.length > 0 && (
-                <p className="text-sm text-vb-text-secondary leading-relaxed">
-                  <span className="text-green-400 font-medium">Strengths:</span>{' '}
-                  {detail.aiReport.strengths.join('. ')}.
-                </p>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-vb-text-muted uppercase tracking-wide">Strengths</p>
+                  {detail.aiReport.strengths.map((s, i) => (
+                    <p key={i} className="text-sm text-vb-text-secondary leading-relaxed">{s}</p>
+                  ))}
+                </div>
               )}
               {detail.aiReport.concerns.length > 0 && (
-                <p className="text-sm text-vb-text-secondary leading-relaxed">
-                  <span className="text-amber-400 font-medium">Concerns:</span>{' '}
-                  {detail.aiReport.concerns.join('. ')}.
-                </p>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-vb-text-muted uppercase tracking-wide">Concerns</p>
+                  {detail.aiReport.concerns.map((c, i) => (
+                    <p key={`c-${i}`} className="text-sm text-amber-400/80 leading-relaxed">{c}</p>
+                  ))}
+                </div>
               )}
             </div>
+
+            <p className="text-xs text-vb-text-muted">
+              Recommendation:{' '}
+              <span className={RECOMMENDATION_LABELS[detail.aiReport.recommendation]?.color ?? 'text-vb-text'}>
+                {RECOMMENDATION_LABELS[detail.aiReport.recommendation]?.label ?? detail.aiReport.recommendation}
+              </span>
+              {' '}· {detail.aiReport.confidenceLevel} confidence
+            </p>
           </div>
         ) : (
           <button

@@ -3,9 +3,9 @@ import { useNavigate, Link } from 'react-router-dom';
 import { AuthLayout } from '@/components/auth/AuthLayout';
 import { useAuthStore } from '@/stores/authStore';
 import api from '@/lib/api';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Mail } from 'lucide-react';
 
-const STEPS = ['Personal Info', 'Company', 'Account'];
+const STEPS = ['Personal Info', 'Company', 'Account', 'Verify Email'];
 
 export default function Register() {
   const navigate = useNavigate();
@@ -14,6 +14,9 @@ export default function Register() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [verifyCode, setVerifyCode] = useState('');
+  // pendingAuth stores the registration result while user completes step 4
+  const [pendingAuth, setPendingAuth] = useState<{ user: Parameters<typeof setAuth>[0]; accessToken: string } | null>(null);
 
   const [form, setForm] = useState({
     firstName: '',
@@ -36,9 +39,10 @@ export default function Register() {
 
   const canProceed = () => {
     if (step === 0) return form.firstName && form.lastName;
-    if (step === 1) return form.organizationName;
+    if (step === 1) return !!form.organizationName;
     if (step === 2)
-      return form.email && form.password && form.password === form.confirmPassword;
+      return form.email && form.username && form.password && form.password === form.confirmPassword;
+    if (step === 3) return verifyCode.length === 6;
     return false;
   };
 
@@ -49,38 +53,56 @@ export default function Register() {
       return;
     }
 
-    // Final step — submit
-    setLoading(true);
-    try {
-      const { data } = await api.post('/auth/register', {
-        firstName: form.firstName,
-        lastName: form.lastName,
-        jobTitle: form.jobTitle,
-        phone: form.phone,
-        email: form.email,
-        username: form.username || undefined,
-        password: form.password,
-        organizationName: form.organizationName,
-        industry: form.industry || undefined,
-        companySize: form.companySize || undefined,
-        website: form.website || undefined,
-        country: form.country || undefined,
-      });
-
-      setAuth(data.user, data.accessToken);
-      navigate('/dashboard');
-    } catch (err: unknown) {
-      const res = (err as { response?: { data?: { error?: string; details?: { fieldErrors?: Record<string, string[]> } } } })?.response?.data;
-      let msg = res?.error || 'Registration failed. Please try again.';
-      if (res?.details?.fieldErrors) {
-        const fields = Object.entries(res.details.fieldErrors)
-          .map(([field, errors]) => `${field}: ${(errors as string[]).join(', ')}`)
-          .join('\n');
-        if (fields) msg += '\n' + fields;
+    if (step === 2) {
+      // Submit registration — move to step 4 (email verify)
+      setLoading(true);
+      try {
+        const { data } = await api.post('/auth/register', {
+          firstName: form.firstName,
+          lastName: form.lastName,
+          jobTitle: form.jobTitle,
+          phone: form.phone,
+          email: form.email,
+          username: form.username,
+          password: form.password,
+          organizationName: form.organizationName,
+          industry: form.industry || undefined,
+          companySize: form.companySize || undefined,
+          website: form.website || undefined,
+          country: form.country || undefined,
+        });
+        // Store auth but don't navigate yet — show verify step
+        setPendingAuth({ user: data.user, accessToken: data.accessToken });
+        setStep(3);
+      } catch (err: unknown) {
+        const res = (err as { response?: { data?: { error?: string; details?: { fieldErrors?: Record<string, string[]> } } } })?.response?.data;
+        let msg = res?.error || 'Registration failed. Please try again.';
+        if (res?.details?.fieldErrors) {
+          const fields = Object.entries(res.details.fieldErrors)
+            .map(([field, errors]) => `${field}: ${(errors as string[]).join(', ')}`)
+            .join('\n');
+          if (fields) msg += '\n' + fields;
+        }
+        setError(msg);
+      } finally {
+        setLoading(false);
       }
-      setError(msg);
-    } finally {
-      setLoading(false);
+      return;
+    }
+
+    if (step === 3) {
+      // Verify email code
+      setLoading(true);
+      try {
+        await api.post('/auth/verify-registration', { email: form.email, code: verifyCode });
+        if (pendingAuth) setAuth(pendingAuth.user, pendingAuth.accessToken);
+        navigate('/dashboard');
+      } catch (err: unknown) {
+        const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Invalid or expired code.';
+        setError(msg);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -207,7 +229,6 @@ export default function Register() {
           </>
         )}
 
-        {/* Step 3: Account Credentials */}
         {step === 2 && (
           <>
             <h2 className="text-2xl font-bold text-gray-900">
@@ -218,7 +239,8 @@ export default function Register() {
                 label="Username"
                 value={form.username}
                 onChange={(v) => update('username', v)}
-                placeholder="Optional"
+                placeholder="e.g. john_doe"
+                required
               />
               <Input
                 label="Work Email"
@@ -240,11 +262,7 @@ export default function Register() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-9 text-gray-400 hover:text-gray-600"
                 >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
               <p className="text-xs text-gray-400 -mt-1">Min 8 chars, include uppercase, number & special character (!@#$%^&*)</p>
@@ -255,11 +273,54 @@ export default function Register() {
                 onChange={(v) => update('confirmPassword', v)}
                 required
               />
-              {form.password &&
-                form.confirmPassword &&
-                form.password !== form.confirmPassword && (
-                  <p className="text-red-500 text-xs">Passwords do not match</p>
-                )}
+              {form.password && form.confirmPassword && form.password !== form.confirmPassword && (
+                <p className="text-red-500 text-xs">Passwords do not match</p>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Step 4: Email Verification */}
+        {step === 3 && (
+          <>
+            <div className="flex flex-col items-center gap-3 py-2">
+              <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+                <Mail className="w-6 h-6 text-gray-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 text-center">Check your email</h2>
+              <p className="text-gray-500 text-sm text-center">
+                We sent a 6-digit verification code to <span className="font-medium text-gray-700">{form.email}</span>. Enter it below to activate your account.
+              </p>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Verification Code <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={verifyCode}
+                  onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="w-full px-3 py-3 border border-gray-200 rounded-lg text-gray-900 text-xl font-bold tracking-widest text-center focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent placeholder:text-gray-300"
+                  placeholder="000000"
+                />
+              </div>
+              <p className="text-xs text-gray-400 text-center">
+                Didn't receive it?{' '}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await api.post('/auth/resend-verification', { email: form.email });
+                    } catch { /* silently ignore */ }
+                  }}
+                  className="text-gray-600 hover:text-gray-900 underline"
+                >
+                  Resend code
+                </button>
+              </p>
             </div>
           </>
         )}
@@ -270,10 +331,14 @@ export default function Register() {
           disabled={!canProceed() || loading}
           className="w-full py-3 bg-gray-900 text-white rounded-lg font-medium text-sm hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          {loading ? 'Creating account...' : step < 2 ? 'Continue' : 'Create Account'}
+          {loading
+            ? step === 2 ? 'Creating account...' : 'Verifying...'
+            : step === 2 ? 'Create Account'
+            : step === 3 ? 'Verify & Continue'
+            : 'Continue'}
         </button>
 
-        {step > 0 && (
+        {step > 0 && step < 3 && (
           <button
             onClick={() => setStep(step - 1)}
             className="w-full text-center text-sm text-gray-500 hover:text-gray-700"

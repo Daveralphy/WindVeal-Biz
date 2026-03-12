@@ -55,8 +55,16 @@ export async function applicantRoutes(app: FastifyInstance) {
       where,
       include: {
         currentStage: true,
-        job: { select: { id: true, title: true } },
+        job: {
+          select: {
+            id: true,
+            title: true,
+            applicationForm: { select: { fields: true } },
+          },
+        },
         aiReport: { select: { overallScore: true, recommendation: true } },
+        applicationData: { select: { fieldId: true, value: true } },
+        uploadedFiles: { select: { type: true, fileName: true, storageUrl: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -244,23 +252,40 @@ export async function applicantRoutes(app: FastifyInstance) {
     const isMovingBack = targetOrder < currentOrder;
 
     if (isMovingBack) {
-      // Remove all forward history entries for stages above target
       const stageIdsToRemove = allStages
         .filter((s) => s.order > targetOrder && s.order <= currentOrder)
         .map((s) => s.id);
 
-      const [updated] = await prisma.$transaction([
+      // Find the earliest time the applicant entered any of those stages — used to prune emails
+      const firstEntry = await prisma.stageHistory.findFirst({
+        where: { applicantId: applicant.id, toStageId: { in: stageIdsToRemove } },
+        orderBy: { movedAt: 'asc' },
+      });
+      const revertTimestamp = firstEntry?.movedAt;
+
+      const ops = [
         prisma.applicant.update({
           where: { id: applicant.id },
           data: { currentStageId: stageId, qualified: null },
           include: { currentStage: true },
         }),
-        prisma.stageHistory.deleteMany({
-          where: {
-            applicantId: applicant.id,
-            toStageId: { in: stageIdsToRemove },
-          },
+        // Delete interviews tied to the reverted stages
+        prisma.interview.deleteMany({
+          where: { applicantId: applicant.id, stageId: { in: stageIdsToRemove } },
         }),
+        // Delete emails sent after the applicant first entered the reverted stages
+        ...(revertTimestamp
+          ? [prisma.emailLog.deleteMany({
+              where: { applicantId: applicant.id, sentAt: { gte: revertTimestamp } },
+            })]
+          : []),
+        // Remove any offer (becomes invalid when moving back)
+        prisma.offer.deleteMany({ where: { applicantId: applicant.id } }),
+        // Remove stage history for the reverted stages
+        prisma.stageHistory.deleteMany({
+          where: { applicantId: applicant.id, toStageId: { in: stageIdsToRemove } },
+        }),
+        // Record the backward move
         prisma.stageHistory.create({
           data: {
             applicantId: applicant.id,
@@ -270,8 +295,9 @@ export async function applicantRoutes(app: FastifyInstance) {
             note,
           },
         }),
-      ]);
+      ];
 
+      const [updated] = await prisma.$transaction(ops);
       return updated;
     }
 
@@ -560,6 +586,7 @@ export async function applicantRoutes(app: FastifyInstance) {
         concerns: report.concerns,
         recommendation: report.recommendation,
         confidenceLevel: report.confidenceLevel,
+        sectionAnalysis: report.sectionAnalysis ?? undefined,
       },
       create: {
         applicantId: applicant.id,
@@ -569,6 +596,7 @@ export async function applicantRoutes(app: FastifyInstance) {
         concerns: report.concerns,
         recommendation: report.recommendation,
         confidenceLevel: report.confidenceLevel,
+        sectionAnalysis: report.sectionAnalysis ?? undefined,
       },
     });
 

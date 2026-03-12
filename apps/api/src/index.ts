@@ -19,6 +19,35 @@ import { aiRoutes } from './routes/ai.js';
 import { chatRoutes } from './routes/chat.js';
 import { adminRoutes } from './routes/admin.js';
 import { offerRoutes } from './routes/offers.js';
+import { inviteRoutes } from './routes/invites.js';
+import { oauthRoutes } from './routes/oauth.js';
+import prisma from './lib/prisma.js';
+
+// ─── Cleanup: delete unverified accounts older than 7 days ───────────────────
+async function cleanupExpiredUnverifiedAccounts() {
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const expired = await prisma.user.findMany({
+    where: { emailVerified: false, createdAt: { lt: cutoff } },
+    select: { id: true, organizationId: true },
+  });
+  for (const user of expired) {
+    try {
+      const count = await prisma.user.count({ where: { organizationId: user.organizationId } });
+      if (count <= 1) {
+        await prisma.organization.delete({ where: { id: user.organizationId } });
+      } else {
+        await prisma.user.delete({ where: { id: user.id } });
+      }
+    } catch (e) {
+      console.error('[cleanup] Failed to delete expired unverified account:', user.id, e);
+    }
+  }
+  if (expired.length > 0) {
+    console.log(`[cleanup] Removed ${expired.length} expired unverified account(s)`);
+  }
+}
+cleanupExpiredUnverifiedAccounts();
+setInterval(cleanupExpiredUnverifiedAccounts, 60 * 60 * 1000); // every hour
 
 const app = Fastify({
   logger: env.NODE_ENV === 'development',
@@ -40,6 +69,7 @@ await app.register(multipart, {
 
 // Routes
 await app.register(authRoutes, { prefix: '/api/auth' });
+await app.register(oauthRoutes, { prefix: '/api/auth' });
 await app.register(jobRoutes, { prefix: '/api/jobs' });
 await app.register(applicantRoutes, { prefix: '/api/applicants' });
 await app.register(dashboardRoutes, { prefix: '/api/dashboard' });
@@ -53,6 +83,7 @@ await app.register(aiRoutes, { prefix: '/api/ai' });
 await app.register(chatRoutes, { prefix: '/api/chat' });
 await app.register(adminRoutes, { prefix: '/api/admin' });
 await app.register(offerRoutes, { prefix: '/api/offers' });
+await app.register(inviteRoutes, { prefix: '/api/invites' });
 
 // Health check
 app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));

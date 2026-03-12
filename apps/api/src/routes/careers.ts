@@ -254,7 +254,7 @@ export async function publicCareersRoutes(app: FastifyInstance) {
 
     const job = await prisma.job.findFirst({
       where: { id: jobId, organizationId: org.id, status: 'ACTIVE', visibility: 'PORTAL' },
-      select: { id: true, pipelineStages: { orderBy: { order: 'asc' }, take: 1, select: { id: true } } },
+      select: { id: true, title: true, pipelineStages: { orderBy: { order: 'asc' }, take: 1, select: { id: true } } },
     });
 
     if (!job) {

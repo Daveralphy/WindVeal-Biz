@@ -41,6 +41,7 @@ interface TrendData {
 
 interface TodayInterview {
   id: string;
+  applicantId: string;
   applicantName: string;
   jobTitle: string;
   scheduledAt: string;
@@ -244,7 +245,11 @@ export default function Dashboard() {
                 const time = new Date(interview.scheduledAt);
                 const TypeIcon = interview.type === 'VIDEO' ? Video : interview.type === 'PHONE' ? Phone : MapPin;
                 return (
-                  <div key={interview.id} className="flex items-center gap-3 px-4 py-3">
+                  <Link
+                    key={interview.id}
+                    to={`/applicants/${interview.applicantId}`}
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-vb-muted/20 transition-colors"
+                  >
                     <div className="flex-shrink-0 w-12 text-center">
                       <p className="text-vb-text font-bold text-xs">{time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                     </div>
@@ -258,7 +263,7 @@ export default function Dashboard() {
                         interview.status === 'CONFIRMED' ? 'bg-green-500/10 text-green-400' : 'bg-amber-500/10 text-amber-400'
                       }`}>{interview.status === 'CONFIRMED' ? 'Confirmed' : 'Scheduled'}</span>
                     </div>
-                  </div>
+                  </Link>
                 );
               })}
             </div>

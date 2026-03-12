@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { AuthLayout } from '@/components/auth/AuthLayout';
 import { useAuthStore } from '@/stores/authStore';
 import api from '@/lib/api';
@@ -11,8 +11,14 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [searchParams] = useSearchParams();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const oauthError = searchParams.get('oauthError');
+    if (oauthError) setError(decodeURIComponent(oauthError));
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,9 +42,12 @@ export default function Login() {
         navigate('/dashboard');
       }
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        'Invalid email or password.';
+      const errData = (err as { response?: { data?: { error?: string; pendingVerification?: boolean; email?: string } } })?.response?.data;
+      if (errData?.pendingVerification) {
+        navigate(`/verify-email?email=${encodeURIComponent(errData.email || email)}`);
+        return;
+      }
+      const msg = errData?.error || 'Invalid email or password.';
       setError(msg);
     } finally {
       setLoading(false);
@@ -132,7 +141,11 @@ export default function Login() {
 
         {/* Social login buttons */}
         <div className="space-y-3">
-          <button className="w-full py-2.5 border border-gray-200 rounded-lg text-sm text-gray-700 font-medium hover:bg-gray-50 flex items-center justify-center gap-3 transition-colors">
+          <button
+            type="button"
+            onClick={() => { window.location.href = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/auth/google`; }}
+            className="w-full py-2.5 border border-gray-200 rounded-lg text-sm text-gray-700 font-medium hover:bg-gray-50 flex items-center justify-center gap-3 transition-colors"
+          >
             <svg className="w-4 h-4" viewBox="0 0 24 24">
               <path
                 fill="#4285F4"
@@ -153,7 +166,11 @@ export default function Login() {
             </svg>
             Continue with Google
           </button>
-          <button className="w-full py-2.5 border border-gray-200 rounded-lg text-sm text-gray-700 font-medium hover:bg-gray-50 flex items-center justify-center gap-3 transition-colors">
+          <button
+            type="button"
+            onClick={() => { window.location.href = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/auth/microsoft`; }}
+            className="w-full py-2.5 border border-gray-200 rounded-lg text-sm text-gray-700 font-medium hover:bg-gray-50 flex items-center justify-center gap-3 transition-colors"
+          >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="#00A4EF">
               <path d="M11.4 24H0V12.6h11.4V24zM24 24H12.6V12.6H24V24zM11.4 11.4H0V0h11.4v11.4zM24 11.4H12.6V0H24v11.4z" />
             </svg>

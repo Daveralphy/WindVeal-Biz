@@ -355,6 +355,11 @@ interface AIScreeningResult {
     score: number;
     feedback: string[];
   };
+  sectionAnalysis: {
+    resume?: string;
+    coverLetter?: string;
+    applicationResponses?: { label: string; analysis: string }[];
+  };
 }
 
 // ─── Full AI Applicant Screening ─────────────────────────────
@@ -372,7 +377,7 @@ export async function screenApplicant(context: ScreeningContext): Promise<AIScre
       messages: [
         {
           role: 'system',
-          content: `You are VealAI, a STRICT ATS screening assistant. Analyze applicant data rigorously against job requirements. You have access to the applicant's resume text (extracted from PDF), all application responses, cover letter, and LinkedIn profile data. Use ALL of this information holistically. Always respond with valid JSON only — no markdown, no explanation. The JSON must have: overallScore (0-100), dimensionScores (object with skillsMatch, experienceRelevance, communicationQuality, cultureFit, completeness, identityConsistency as 0-100 numbers), strengths (string array, max 5), concerns (string array, max 5), recommendation (one of: ADVANCE, REQUEST_INFO, CONSIDER_OTHER, REJECT), confidenceLevel (HIGH, MEDIUM, or LOW), resumeAnalysis (object with score 0-100 and feedback string array max 4).
+          content: `You are VealAI, a STRICT ATS screening assistant. Analyze applicant data rigorously against job requirements. You have access to the applicant's resume text (extracted from PDF), all application responses, cover letter, and LinkedIn profile data. Use ALL of this information holistically. Always respond with valid JSON only — no markdown, no explanation. The JSON must have: overallScore (0-100), dimensionScores (object with skillsMatch, experienceRelevance, communicationQuality, cultureFit, completeness, identityConsistency as 0-100 numbers), strengths (string array, max 5), concerns (string array, max 5), recommendation (one of: ADVANCE, REQUEST_INFO, CONSIDER_OTHER, REJECT), confidenceLevel (HIGH, MEDIUM, or LOW), resumeAnalysis (object with score 0-100 and feedback string array max 4), sectionAnalysis (object with optional fields: resume (2-4 sentence narrative about what the resume shows and how it matches the role), coverLetter (2-3 sentence narrative about the cover letter's quality and relevance), applicationResponses (array of objects {label, analysis} — one per significant non-system form field with a 1-2 sentence analysis of what the applicant said and how it relates to the role)).
 
 SCORING RULES (follow strictly):
 - 0-10: Applicant provided no useful information, nonsensical content, or completely irrelevant submissions (random text, jokes, unrelated documents, single phrases)
@@ -393,11 +398,13 @@ CRITICAL: If the applicant submitted irrelevant content (not a real resume, gibb
         { role: 'user', content: prompt },
       ],
       temperature: 0.3,
-      max_tokens: 1000,
+      max_tokens: 1500,
     });
 
     const text = completion.choices[0]?.message?.content?.trim() || '';
     const parsed = JSON.parse(text);
+
+    const sectionAnalysis = parsed.sectionAnalysis ?? {};
 
     return {
       overallScore: Math.min(100, Math.max(0, Number(parsed.overallScore) ?? 0)),
@@ -409,6 +416,13 @@ CRITICAL: If the applicant submitted irrelevant content (not a real resume, gibb
       resumeAnalysis: {
         score: Math.min(100, Math.max(0, Number(parsed.resumeAnalysis?.score) ?? 0)),
         feedback: Array.isArray(parsed.resumeAnalysis?.feedback) ? parsed.resumeAnalysis.feedback.slice(0, 4) : [],
+      },
+      sectionAnalysis: {
+        resume: typeof sectionAnalysis.resume === 'string' ? sectionAnalysis.resume : undefined,
+        coverLetter: typeof sectionAnalysis.coverLetter === 'string' ? sectionAnalysis.coverLetter : undefined,
+        applicationResponses: Array.isArray(sectionAnalysis.applicationResponses)
+          ? sectionAnalysis.applicationResponses.filter((r: unknown) => typeof (r as Record<string, unknown>)?.label === 'string').slice(0, 10)
+          : undefined,
       },
     };
   } catch (err) {
@@ -519,6 +533,15 @@ function getFallbackScreening(ctx: ScreeningContext): AIScreeningResult {
       feedback: ctx.hasResume
         ? ['Resume was uploaded but content analysis requires AI', 'Manual review recommended']
         : ['No resume was uploaded', 'Applicant should be asked to provide a resume'],
+    },
+    sectionAnalysis: {
+      resume: ctx.hasResume
+        ? `${ctx.applicantName} submitted a resume. Full AI analysis was unavailable — manual review is recommended for detailed evaluation.`
+        : undefined,
+      coverLetter: ctx.coverLetter
+        ? `${ctx.applicantName} included a cover letter. Full AI analysis was unavailable — please review manually.`
+        : undefined,
+      applicationResponses: undefined,
     },
   };
 }

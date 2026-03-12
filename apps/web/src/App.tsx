@@ -19,6 +19,7 @@ import CareerDesign from '@/pages/CareerDesign';
 import Analytics from '@/pages/Analytics';
 import Team from '@/pages/Team';
 import Settings from '@/pages/Settings';
+import Profile from '@/pages/Profile';
 import AdminDashboard from '@/pages/admin/AdminDashboard';
 import AdminOrganizations from '@/pages/admin/AdminOrganizations';
 import AdminUsers from '@/pages/admin/AdminUsers';
@@ -27,6 +28,10 @@ import AdminAIUsage from '@/pages/admin/AdminAIUsage';
 import AdminAnalytics from '@/pages/admin/AdminAnalytics';
 import PublicCareers from '@/pages/public/PublicCareers';
 import PublicJobApply from '@/pages/public/PublicJobApply';
+import TeamInvite from '@/pages/TeamInvite';
+import AcceptInvite from '@/pages/AcceptInvite';
+import OAuthCallback from '@/pages/OAuthCallback';
+import VerifyEmail from '@/pages/VerifyEmail';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -79,6 +84,8 @@ export default function App() {
             </GuestRoute>
           }
         />
+        <Route path="/auth/callback" element={<OAuthCallback />} />
+        <Route path="/verify-email" element={<GuestRoute><VerifyEmail /></GuestRoute>} />
 
         {/* Protected app routes */}
         <Route
@@ -103,7 +110,9 @@ export default function App() {
           <Route path="/careers/design" element={<CareerDesign />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/team" element={<Team />} />
+          <Route path="/team/invite" element={<TeamInvite />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/profile" element={<Profile />} />
         </Route>
 
         {/* Admin routes */}
@@ -127,6 +136,9 @@ export default function App() {
         {/* Public careers pages — no auth */}
         <Route path="/:slug/careers" element={<PublicCareers />} />
         <Route path="/:slug/careers/:jobId" element={<PublicJobApply />} />
+
+        {/* Public invite accept page — no auth */}
+        <Route path="/invite/:token" element={<AcceptInvite />} />
 
         {/* Default redirect */}
         <Route path="*" element={<DefaultRedirect />} />

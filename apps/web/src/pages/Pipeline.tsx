@@ -202,7 +202,7 @@ const STAGE_CONTEXT: Record<string, {
     icon: ShieldCheck,
     color: 'text-teal-400',
     nextStage: 'Reference Check',
-    checklist: ['Initiate background check with candidate's consent', 'Set expected completion date', 'Review results before progressing'],
+    checklist: ["Initiate background check with candidate's consent", 'Set expected completion date', 'Review results before progressing'],
   },
   'Reference Check': {
     icon: UserCheck,
@@ -657,7 +657,6 @@ export default function Pipeline() {
                       </div>
                     );
                   })()}
-                  </div>
 
                   {/* AI Screening Button */}
                   <div className="bg-vb-surface border border-vb-border rounded-lg p-4">
