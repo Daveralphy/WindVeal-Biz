@@ -69,6 +69,10 @@ button { font: inherit; color: inherit; }
 .btn-secondary { background: var(--surface); color: var(--navy); border-color: var(--line); }
 .btn-secondary:hover:not(:disabled) { border-color: var(--field); background: var(--soft); }
 :root[data-theme="dark"] .btn-secondary { color: var(--ink); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .btn-primary { background: var(--blue); }
+  :root:not([data-theme="light"]) .btn-secondary { color: var(--ink); }
+}
 .btn-ghost { background: transparent; color: var(--deep); padding-left: 6px; padding-right: 6px; }
 .btn-ghost:hover:not(:disabled) { text-decoration: underline; }
 .btn-danger { background: var(--surface); color: var(--red); border-color: #f1c9c3; }

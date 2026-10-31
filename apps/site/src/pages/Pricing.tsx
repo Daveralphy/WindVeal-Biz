@@ -162,7 +162,7 @@ export default function Pricing() {
           </div>
           <div className="enterprise-right">
             <b>Custom</b>
-            <Link to="/contact?topic=sales" className="btn btn-secondary btn-lg">
+            <Link to="/contact?topic=sales" className="btn btn-primary btn-lg">
               Contact us
             </Link>
           </div>
