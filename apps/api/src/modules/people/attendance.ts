@@ -1,0 +1,165 @@
+import type { FastifyInstance } from "fastify";
+import { and, eq, gte, inArray, isNull, lte, ne, sql as dsql } from "drizzle-orm";
+import { z } from "zod";
+import { db } from "../../db/client";
+import { attendance, employees, leaveRequests, leaveTypes } from "../../db/schema";
+import { can, requireAccess, requireOrg, type OrgContext } from "../../lib/context";
+import { badRequest, conflict, forbidden, parse } from "../../lib/http";
+import { audit } from "../../lib/audit";
+import { toCsv } from "../../lib/csv";
+import { dateStr, fullName, getEmployee, myEmployee, notDeleted, optDate } from "./shared";
+import { eachDay, localDate, minutesOfDay, parseHm } from "./util";
+
+type Status = "present" | "late" | "not_in" | "on_leave" | "sick";
+
+const STATUS_LABEL: Record<Status, string> = { present: "Present", late: "Late", not_in: "Not in yet", on_leave: "On leave", sick: "Sick" };
+
+/** Builds the attendance board for one day: everyone current, with their record and status. */
+async function board(ctx: OrgContext, date: string, opts: { search?: string; location?: string } = {}) {
+  const workdayStart = ctx.org.settings.workdayStart ?? "09:00";
+  const startMin = parseHm(workdayStart);
+  const people = (await db.select().from(employees)
+    .where(and(notDeleted(ctx.org.id), ne(employees.status, "left"))).orderBy(employees.firstName, employees.lastName))
+    .filter((e) => !e.startDate || e.startDate <= date)
+    .filter((e) => !opts.location || e.location === opts.location)
+    .filter((e) => {
+      const s = opts.search?.trim().toLowerCase();
+      return !s || fullName(e).toLowerCase().includes(s) || (e.jobTitle ?? "").toLowerCase().includes(s);
+    });
+  const ids = people.map((p) => p.id);
+  const records = ids.length ? await db.select().from(attendance)
+    .where(and(eq(attendance.orgId, ctx.org.id), eq(attendance.workDate, date), isNull(attendance.deletedAt), inArray(attendance.employeeId, ids))) : [];
+  const leaves = ids.length ? await db.select({ employeeId: leaveRequests.employeeId, type: leaveTypes.name }).from(leaveRequests)
+    .innerJoin(leaveTypes, eq(leaveTypes.id, leaveRequests.leaveTypeId))
+    .where(and(eq(leaveRequests.orgId, ctx.org.id), eq(leaveRequests.status, "approved"), isNull(leaveRequests.deletedAt),
+      lte(leaveRequests.startDate, date), gte(leaveRequests.endDate, date), inArray(leaveRequests.employeeId, ids))) : [];
+  const isToday = date === localDate();
+  const rows = people.map((e) => {
+    const r = records.find((x) => x.employeeId === e.id) ?? null;
+    const leave = leaves.find((l) => l.employeeId === e.id);
+    let status: Status;
+    if (r?.clockIn) status = minutesOfDay(r.clockIn) > startMin ? "late" : "present";
+    else if (leave) status = /sick/i.test(leave.type) ? "sick" : "on_leave";
+    else status = "not_in";
+    const end = r?.clockOut ?? (isToday && r?.clockIn ? new Date() : null);
+    const minutes = r?.clockIn && end ? Math.max(0, Math.round((end.getTime() - r.clockIn.getTime()) / 60_000)) : null;
+    return {
+      employee: { id: e.id, name: fullName(e), jobTitle: e.jobTitle, location: e.location, userId: e.userId },
+      record: r ? { id: r.id, clockIn: r.clockIn, clockOut: r.clockOut, source: r.source, note: r.note, corrected: !!r.correctedBy } : null,
+      status, statusLabel: STATUS_LABEL[status], minutes, leaveType: leave?.type ?? null,
+    };
+  });
+  return {
+    date, workdayStart, rows,
+    stats: {
+      total: rows.length,
+      present: rows.filter((r) => r.status === "present" || r.status === "late").length,
+      late: rows.filter((r) => r.status === "late").length,
+      away: rows.filter((r) => r.status === "on_leave" || r.status === "sick").length,
+      notIn: rows.filter((r) => r.status === "not_in").length,
+    },
+  };
+}
+
+export default async function attendanceRoutes(app: FastifyInstance) {
+  /** The signed-in person's own clock for today. */
+  app.get("/api/people/attendance/me", async (req) => {
+    const ctx = await requireOrg(req);
+    const me = await myEmployee(ctx);
+    if (!me) return { employee: null, record: null, date: localDate() };
+    const [r] = await db.select().from(attendance)
+      .where(and(eq(attendance.employeeId, me.id), eq(attendance.workDate, localDate()), isNull(attendance.deletedAt))).limit(1);
+    return {
+      employee: { id: me.id, name: fullName(me), firstName: me.firstName },
+      record: r ? { id: r.id, clockIn: r.clockIn, clockOut: r.clockOut } : null, date: localDate(),
+    };
+  });
+
+  app.post("/api/people/attendance/clock-in", async (req) => {
+    const ctx = await requireOrg(req);
+    const me = await myEmployee(ctx);
+    if (!me) throw badRequest("You don't have an employee record yet. Ask HR to add you to People & HR.");
+    const today = localDate();
+    const [r] = await db.select().from(attendance)
+      .where(and(eq(attendance.employeeId, me.id), eq(attendance.workDate, today), isNull(attendance.deletedAt))).limit(1);
+    if (r?.clockIn && !r.clockOut) throw conflict("You're already clocked in.");
+    if (r?.clockOut) throw conflict("You've already clocked out today. Ask your manager to correct your times if needed.");
+    const now = new Date();
+    if (r) await db.update(attendance).set({ clockIn: now, version: dsql`${attendance.version} + 1` }).where(eq(attendance.id, r.id));
+    else await db.insert(attendance).values({ orgId: ctx.org.id, employeeId: me.id, workDate: today, clockIn: now, source: "app" });
+    return { ok: true, clockIn: now };
+  });
+
+  app.post("/api/people/attendance/clock-out", async (req) => {
+    const ctx = await requireOrg(req);
+    const me = await myEmployee(ctx);
+    if (!me) throw badRequest("You don't have an employee record yet. Ask HR to add you to People & HR.");
+    const [r] = await db.select().from(attendance)
+      .where(and(eq(attendance.employeeId, me.id), eq(attendance.workDate, localDate()), isNull(attendance.deletedAt))).limit(1);
+    if (!r?.clockIn) throw conflict("You haven't clocked in today.");
+    if (r.clockOut) throw conflict("You've already clocked out.");
+    const now = new Date();
+    await db.update(attendance).set({ clockOut: now, version: dsql`${attendance.version} + 1` }).where(eq(attendance.id, r.id));
+    return { ok: true, clockOut: now };
+  });
+
+  app.get<{ Querystring: { date?: string; search?: string; location?: string } }>("/api/people/attendance", async (req) => {
+    const ctx = await requireAccess(req, "people", "view");
+    const { date } = parse(z.object({ date: optDate }), { date: req.query.date });
+    return board(ctx, date ?? localDate(), req.query);
+  });
+
+  /** Corrections by HR / managers with people "edit". Every change needs a note and is audited. */
+  app.post("/api/people/attendance/corrections", async (req) => {
+    const ctx = await requireAccess(req, "people", "edit");
+    const input = parse(z.object({
+      employeeId: z.string().uuid(),
+      date: dateStr,
+      clockIn: z.union([z.string().datetime({ offset: true }), z.null()]),
+      clockOut: z.union([z.string().datetime({ offset: true }), z.null()]),
+      note: z.string().trim().min(3, "Say why the times were changed").max(300),
+    }), req.body);
+    const e = await getEmployee(ctx.org.id, input.employeeId);
+    const clockIn = input.clockIn ? new Date(input.clockIn) : null;
+    const clockOut = input.clockOut ? new Date(input.clockOut) : null;
+    if (clockOut && !clockIn) throw badRequest("Some details need fixing.", { clockIn: "Add a clock-in time" });
+    if (clockIn && clockOut && clockOut <= clockIn) throw badRequest("Some details need fixing.", { clockOut: "Clock out must be after clock in" });
+    const [r] = await db.select().from(attendance)
+      .where(and(eq(attendance.employeeId, e.id), eq(attendance.workDate, input.date), isNull(attendance.deletedAt))).limit(1);
+    const values = { clockIn, clockOut, correctedBy: ctx.user.id, note: input.note, source: "correction" };
+    await db.transaction(async (tx) => {
+      if (r) await tx.update(attendance).set({ ...values, version: dsql`${attendance.version} + 1` }).where(eq(attendance.id, r.id));
+      else await tx.insert(attendance).values({ ...values, orgId: ctx.org.id, employeeId: e.id, workDate: input.date });
+      const t = (d: Date | null) => (d ? d.toISOString().slice(11, 16) + " UTC" : "none");
+      await audit(ctx, {
+        action: "attendance.corrected", category: "data", entityType: "employee", entityId: e.id,
+        summary: `${ctx.user.name} corrected ${fullName(e)}'s attendance for ${input.date}`,
+        meta: { before: r ? { clockIn: r.clockIn, clockOut: r.clockOut } : null, after: { clockIn: t(clockIn), clockOut: t(clockOut) }, note: input.note },
+      }, tx);
+    });
+    return { ok: true };
+  });
+
+  app.get<{ Querystring: { from?: string; to?: string; date?: string; location?: string; search?: string } }>("/api/people/attendance/export", async (req, reply) => {
+    const ctx = await requireAccess(req, "people", "view");
+    if (!can(ctx, "export_data")) throw forbidden("You don't have permission to export data.");
+    const q = parse(z.object({ from: optDate, to: optDate, date: optDate }), { from: req.query.from, to: req.query.to, date: req.query.date });
+    const from = q.from ?? q.date ?? localDate();
+    const to = q.to ?? q.date ?? from;
+    if (to < from) throw badRequest("Some details need fixing.", { to: "The end date can't be before the start date" });
+    const days = eachDay(from, to, 93);
+    const rows: unknown[][] = [];
+    const hm = (d: Date | null | undefined) => (d ? `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}` : "");
+    for (const d of days) {
+      const b = await board(ctx, d, req.query);
+      for (const r of b.rows) {
+        rows.push([d, r.employee.name, r.employee.jobTitle, r.employee.location, hm(r.record?.clockIn), hm(r.record?.clockOut),
+          r.minutes != null ? (r.minutes / 60).toFixed(2) : "", r.statusLabel, r.record?.note ?? ""]);
+      }
+    }
+    await audit(ctx, { action: "attendance.exported", category: "data", summary: `${ctx.user.name} exported attendance for ${from === to ? from : `${from} to ${to}`}` });
+    reply.header("Content-Type", "text/csv; charset=utf-8");
+    reply.header("Content-Disposition", `attachment; filename="attendance-${from}${to !== from ? `-to-${to}` : ""}.csv"`);
+    return toCsv(["Date", "Name", "Job title", "Location", "Clock in", "Clock out", "Hours", "Status", "Note"], rows);
+  });
+}

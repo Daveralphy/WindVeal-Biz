@@ -4,6 +4,7 @@ export function formatMoney(amount: number | string | null | undefined, currency
     return new Intl.NumberFormat("en-GB", {
       style: "currency",
       currency,
+      currencyDisplay: "narrowSymbol",
       maximumFractionDigits: compact ? 1 : 0,
       notation: compact ? "compact" : "standard",
     }).format(n);

@@ -1,11 +1,72 @@
-import { EmptyState, PageHeader } from "@windveal/ui";
+import { useState } from "react";
+import { Navigate, Route, Routes, useLocation, useMatch, useNavigate, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { FolderPlus, Upload } from "lucide-react";
+import { Button, EmptyState, PageHeader, Tabs } from "@windveal/ui";
+import { formatBytes } from "@windveal/shared";
+import { api } from "../../lib/api";
+import { useSession } from "../../lib/session";
+import { Library, type LibraryView } from "./library";
+import { FilePage } from "./file";
+import { UploadModal } from "./upload";
+import { NewFolderModal, useFolders } from "./shared";
+import "./documents.css";
 
-// Placeholder: the documents module replaces this file with its own nested <Routes>.
-export default function Module() {
+function FolderRoute({ view, onUpload, archived }: { view: LibraryView; onUpload: () => void; archived: number }) {
+  const m = useMatch("/documents/folder/:id");
+  return <Library key={view} view={view} folderId={m?.params.id ?? null} onUpload={onUpload} archivedCount={archived} />;
+}
+
+export default function DocumentsModule() {
+  const { can } = useSession();
+  const navigate = useNavigate();
+  const loc = useLocation();
+  const [params, setParams] = useSearchParams();
+  const [newFolder, setNewFolder] = useState(false);
+  const { data: summary } = useQuery({ queryKey: ["dc-summary"], queryFn: () => api.get<{ files: number; archived: number }>("/api/documents/summary"), enabled: can("documents", "view") });
+  const { data: storage } = useQuery({ queryKey: ["storage"], queryFn: () => api.get<{ used: number; limit: number }>("/api/storage"), staleTime: 60_000 });
+  const { data: tree } = useFolders();
+  const folderMatch = useMatch("/documents/folder/:id");
+  const folderId = folderMatch?.params.id ?? null;
+
+  if (!can("documents", "view")) {
+    return <><PageHeader title="Documents" /><EmptyState title="You don't have access to Documents">Ask an admin if you need it.</EmptyState></>;
+  }
+
+  const canEdit = can("documents", "edit");
+  const uploadOpen = params.get("upload") === "1";
+  const setUpload = (open: boolean) => {
+    const p = new URLSearchParams(params);
+    if (open) p.set("upload", "1"); else p.delete("upload");
+    setParams(p, { replace: true });
+  };
+  const tab = loc.pathname.startsWith("/documents/recent") ? "recent" : loc.pathname.startsWith("/documents/shared") ? "shared"
+    : loc.pathname.startsWith("/documents/archive") ? "archive" : "all";
+  const subtitle = summary
+    ? `${summary.files.toLocaleString("en-GB")} file${summary.files === 1 ? "" : "s"}${storage ? ` · ${formatBytes(storage.used)} of ${formatBytes(storage.limit)} used` : ""}`
+    : " ";
+
   return (
-    <>
-      <PageHeader title="Documents" />
-      <EmptyState title="Coming soon" />
-    </>
+    <div className="dc">
+      <PageHeader title="Documents" subtitle={subtitle}
+        actions={canEdit ? <>
+          <Button variant="secondary" className="hide-sm" icon={<FolderPlus size={16} />} onClick={() => setNewFolder(true)}>New folder</Button>
+          <Button className="dc-upload-btn" icon={<Upload size={16} />} onClick={() => setUpload(true)}>Upload</Button>
+        </> : undefined} />
+      <Tabs value={tab} onChange={(k) => navigate(k === "all" ? "/documents" : `/documents/${k}`)}
+        items={[{ key: "all", label: "All files" }, { key: "recent", label: "Recent" }, { key: "shared", label: "Shared with me" }, { key: "archive", label: "Archive" }]} />
+      <Routes>
+        <Route index element={<FolderRoute view="all" onUpload={() => setUpload(true)} archived={summary?.archived ?? 0} />} />
+        <Route path="folder/:id" element={<FolderRoute view="all" onUpload={() => setUpload(true)} archived={summary?.archived ?? 0} />} />
+        <Route path="recent" element={<FolderRoute view="recent" onUpload={() => setUpload(true)} archived={summary?.archived ?? 0} />} />
+        <Route path="shared" element={<FolderRoute view="shared" onUpload={() => setUpload(true)} archived={summary?.archived ?? 0} />} />
+        <Route path="archive" element={<FolderRoute view="archive" onUpload={() => setUpload(true)} archived={summary?.archived ?? 0} />} />
+        <Route path="file/:id" element={<FilePage />} />
+        <Route path="files/:id" element={<FilePage />} />
+        <Route path="*" element={<Navigate to="/documents" replace />} />
+      </Routes>
+      {canEdit && <UploadModal open={uploadOpen} onClose={() => setUpload(false)} folderId={folderId} folders={tree?.folders ?? []} />}
+      {canEdit && <NewFolderModal open={newFolder} onClose={() => setNewFolder(false)} parentId={folderId} folders={tree?.folders ?? []} onCreated={(id) => navigate(`/documents/folder/${id}`)} />}
+    </div>
   );
 }

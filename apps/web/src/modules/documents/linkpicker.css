@@ -1,0 +1,11 @@
+/* Link picker, shared by Documents and Workflows. */
+.lp { position: relative; }
+.lp-results { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 4px); background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 24px 48px -16px rgba(15,26,58,.3); padding: 6px; max-height: 260px; overflow-y: auto; }
+.lp-results button { display: flex; gap: 10px; align-items: center; width: 100%; text-align: left; border: 0; background: none; padding: 8px; border-radius: 9px; cursor: pointer; font: inherit; }
+.lp-results button:hover { background: var(--soft); }
+.lp-note { padding: 10px; color: var(--muted); font-size: 13px; }
+.lp-ic { width: 30px; height: 30px; border-radius: 9px; background: var(--pale); color: var(--deep); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.lp-text { min-width: 0; flex: 1; }
+.lp-text b { display: block; color: var(--ink); font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lp-text small { display: block; color: var(--muted); font-size: 12px; }
+.lp-chosen { display: flex; gap: 10px; align-items: center; border: 1px solid var(--field); border-radius: 11px; padding: 6px 6px 6px 8px; }

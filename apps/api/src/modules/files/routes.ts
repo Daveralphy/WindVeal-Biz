@@ -1,8 +1,8 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { and, eq, isNull, sql as dsql } from "drizzle-orm";
-import { PLAN_LIMITS, hasAccess } from "@windveal/shared";
+import { PLAN_LIMITS, hasAccess, type Workspace } from "@windveal/shared";
 import { db } from "../../db/client";
-import { fileLinks, fileVersions, files, folders } from "../../db/schema";
+import { employees, fileLinks, fileVersions, files, folders } from "../../db/schema";
 import { requireOrg, type OrgContext } from "../../lib/context";
 import { AppError, badRequest, forbidden, notFound } from "../../lib/http";
 import { MAX_UPLOAD_BYTES, checkFileType, putObject, readObject } from "../../lib/storage";
@@ -14,16 +14,53 @@ export async function storageUsed(orgId: string): Promise<number> {
   return Number(r?.n ?? 0);
 }
 
+const LINK_WORKSPACE: Record<string, Workspace> = {
+  employee: "people", application: "recruitment", job: "recruitment",
+  company: "crm", deal: "crm", lead: "crm", task: "workflows",
+};
+
+/**
+ * Can this member see / attach files on a record? Employee files are sensitive: only People & HR
+ * editors or the employee themself. Other records follow the workspace they belong to.
+ */
+export async function canAccessLinkTarget(ctx: OrgContext, linkType: string, linkId: string, level: "view" | "edit"): Promise<boolean> {
+  if (ctx.membership.role === "admin") return true;
+  const ws = LINK_WORKSPACE[linkType];
+  if (!ws) return false;
+  if (linkType === "employee") {
+    if (hasAccess(ctx.access.people, "edit")) return true;
+    const [e] = await db.select({ userId: employees.userId }).from(employees).where(and(eq(employees.id, linkId), eq(employees.orgId, ctx.org.id))).limit(1);
+    return e?.userId === ctx.user.id;
+  }
+  return hasAccess(ctx.access[ws], level);
+}
+
 /** Can this member open a file? Restricted folders limit access to listed roles; admins see everything. */
 export async function canReadFile(ctx: OrgContext, f: typeof files.$inferSelect): Promise<boolean> {
   if (f.orgId !== ctx.org.id) return false;
   if (ctx.membership.role === "admin") return true;
-  if (f.kind === "system") return true; // attachments are protected by the record they're linked to
+  if (f.kind === "system") {
+    // Attachments are protected by the record(s) they're linked to.
+    if (f.isPublic || f.uploadedBy === ctx.user.id) return true;
+    const links = await db.select().from(fileLinks).where(eq(fileLinks.fileId, f.id));
+    for (const l of links) if (await canAccessLinkTarget(ctx, l.linkType, l.linkId, "view")) return true;
+    return false;
+  }
   if (!hasAccess(ctx.access.documents, "view")) return false;
-  if (!f.folderId) return true;
-  const [folder] = await db.select().from(folders).where(eq(folders.id, f.folderId)).limit(1);
-  if (!folder?.restricted) return true;
-  return folder.accessRoles.includes(ctx.membership.role);
+  return folderVisible(ctx, f.folderId);
+}
+
+/** A folder is visible only if it and every folder above it allow this member's role. */
+export async function folderVisible(ctx: OrgContext, folderId: string | null): Promise<boolean> {
+  if (ctx.membership.role === "admin") return true;
+  let id = folderId;
+  for (let depth = 0; id && depth < 50; depth++) {
+    const [folder] = await db.select().from(folders).where(and(eq(folders.id, id), eq(folders.orgId, ctx.org.id))).limit(1);
+    if (!folder) return false;
+    if (folder.restricted && !folder.accessRoles.includes(ctx.membership.role)) return false;
+    id = folder.parentId;
+  }
+  return true;
 }
 
 type UploadQuery = { folderId?: string; kind?: "document" | "system"; linkType?: string; linkId?: string; category?: string; allowDuplicate?: string; replaceFileId?: string };
@@ -43,10 +80,15 @@ export async function handleUpload(req: FastifyRequest<{ Querystring: UploadQuer
   }
   const q = req.query;
   const kind = q.kind ?? "document";
+  if (q.linkType || q.linkId) {
+    if (!q.linkType || !q.linkId || !(await canAccessLinkTarget(ctx, q.linkType, q.linkId, "edit"))) {
+      throw forbidden("You can't attach files to that record.");
+    }
+  }
   if (q.folderId) {
     const [folder] = await db.select().from(folders).where(and(eq(folders.id, q.folderId), eq(folders.orgId, ctx.org.id), isNull(folders.deletedAt))).limit(1);
     if (!folder) throw notFound("That folder");
-    if (folder.restricted && ctx.membership.role !== "admin" && !folder.accessRoles.includes(ctx.membership.role)) throw forbidden();
+    if (!(await folderVisible(ctx, folder.id))) throw forbidden();
   }
   const stored = await putObject(ctx.org.id, buf);
 
@@ -65,7 +107,8 @@ export async function handleUpload(req: FastifyRequest<{ Querystring: UploadQuer
   if (q.allowDuplicate !== "1" && kind === "document") {
     const [dup] = await db.select().from(files)
       .where(and(eq(files.orgId, ctx.org.id), eq(files.sha256, stored.sha256), isNull(files.deletedAt), isNull(files.archivedAt))).limit(1);
-    if (dup) return { file: null, duplicateOf: { id: dup.id, name: dup.name, folderId: dup.folderId } };
+    // Only reveal the duplicate if this member could open it anyway.
+    if (dup && (await canReadFile(ctx, dup))) return { file: null, duplicateOf: { id: dup.id, name: dup.name, folderId: dup.folderId } };
   }
 
   const [f] = await db.insert(files).values({

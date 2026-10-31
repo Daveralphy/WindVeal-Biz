@@ -1,0 +1,52 @@
+/* Insights — module styles, built on the shared tokens (light + dark). */
+.ins .tabs { margin-top: 18px; }
+.ins-range { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 0 6px 0 16px; color: var(--ink); }
+.ins-range select { border: 0; background: transparent; font: inherit; font-weight: 600; font-size: 14px; color: var(--ink); padding: 10px 8px 10px 0; cursor: pointer; }
+.ins-range select:focus { outline: none; }
+.ins-range:focus-within { box-shadow: 0 0 0 4px var(--focus); border-color: var(--blue); }
+
+.ins-stats { margin-bottom: 20px; }
+.ins-kpi { padding: 16px 18px; position: relative; }
+.ins-kpi b { font-size: 27px; margin: 6px 0 2px; }
+.ins-kpi em { font-weight: 600; }
+.ins-kpi em.down { color: var(--red); }
+.ins-tip { position: relative; display: inline-flex; }
+.ins-tip button { border: 0; background: none; color: var(--muted); cursor: help; padding: 2px; display: inline-flex; border-radius: 50%; }
+.ins-tip [role="tooltip"] { position: absolute; right: -6px; top: calc(100% + 8px); width: 250px; background: var(--ink); color: var(--surface); font-size: 12.5px; line-height: 1.45; padding: 10px 12px; border-radius: 10px; box-shadow: 0 16px 30px -12px rgba(0,0,0,.4); z-index: 20; opacity: 0; visibility: hidden; transition: opacity .12s; font-weight: 400; }
+.ins-tip:hover [role="tooltip"], .ins-tip:focus-within [role="tooltip"] { opacity: 1; visibility: visible; }
+
+.ins-grid { margin-bottom: 20px; }
+.ins-chart { margin: 0; }
+.ins-grid .card + .card { margin-top: 0; }
+.ins-chart .card-head p { font-size: 13.5px; }
+.ins-link { color: var(--deep); font-weight: 600; font-size: 14px; white-space: nowrap; }
+.ins-link:hover { text-decoration: underline; }
+.ins-chart .empty { padding: 24px 10px; }
+.ins-empty { padding: 30px 0; text-align: center; }
+.ins-foot { font-size: 13.5px; color: var(--muted); margin-top: 4px; }
+.ins-static { display: inline-flex; align-items: center; background-image: none; padding-right: 12px; }
+.ins-table { margin-bottom: 8px; }
+.ins-table .table td.num { font-variant-numeric: tabular-nums; }
+.ins-total td { font-weight: 700; color: var(--ink); background: var(--soft); }
+
+.ins-formats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ins-formats button { display: flex; gap: 12px; align-items: center; text-align: left; border: 1px solid var(--line); border-radius: 14px; padding: 14px; background: var(--surface); cursor: pointer; }
+.ins-formats button.on { border-color: var(--blue); box-shadow: 0 0 0 3px var(--focus); }
+.ins-formats b { display: block; color: var(--ink); }
+.ins-formats small { color: var(--muted); font-size: 12.5px; }
+.ins-formats .ic { width: 36px; height: 36px; border-radius: 10px; background: var(--pale); color: var(--deep); font-size: 10.5px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.ins-formats .ic.xls { background: var(--ok-bg); color: var(--ok); }
+.ins-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 20px; }
+.ins-safe { display: flex; gap: 10px; align-items: flex-start; background: var(--soft); border-radius: 12px; padding: 12px 14px; font-size: 13px; color: var(--text); }
+.ins-safe svg { flex: none; margin-top: 2px; color: var(--ok); }
+
+@media (max-width: 640px) {
+  .ins .page-head .actions { width: 100%; }
+  .ins-range { flex: 1; }
+  .ins-range select { flex: 1; }
+  .ins-kpi b { font-size: 22px; }
+  .ins-tip [role="tooltip"] { width: 200px; }
+  .ins-formats, .ins-cols { grid-template-columns: 1fr; }
+  .ins-chart .card-head { flex-direction: column; gap: 4px; }
+  .ins .toolbar .chip-select { flex: 1; }
+}

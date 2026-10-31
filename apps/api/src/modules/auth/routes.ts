@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { and, desc, eq, gt, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, sql as dsql } from "drizzle-orm";
 import { forgotPasswordInput, loginInput, registerInput, resetPasswordInput, verifyEmailInput } from "@windveal/shared";
 import { db } from "../../db/client";
 import { authTokens, devices, invitations, memberships, organisations, sessions, users } from "../../db/schema";
@@ -11,7 +11,8 @@ import { env } from "../../env";
 import { audit } from "../../lib/audit";
 
 const DAY = 86_400_000;
-const AUTH_LIMIT = { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } };
+// Generous limit under automated tests (many sign-ups from one address), strict otherwise.
+const AUTH_LIMIT = { config: { rateLimit: { max: env.isTest ? 10_000 : 10, timeWindow: "1 minute" } } };
 
 function deviceLabelFrom(ua: string | undefined): string {
   const s = ua ?? "";
@@ -186,6 +187,26 @@ export default async function authRoutes(app: FastifyInstance) {
   app.get("/api/auth/me", async (req) => {
     if (!req.auth) return { user: null };
     return mePayload(req.auth.user.id);
+  });
+
+  app.patch("/api/auth/profile", async (req) => {
+    const auth = requireUser(req);
+    const { name } = parse(registerInput.pick({ name: true }), req.body);
+    await db.update(users).set({ name }).where(eq(users.id, auth.user.id));
+    return mePayload(auth.user.id);
+  });
+
+  app.post("/api/auth/change-password", AUTH_LIMIT, async (req) => {
+    const auth = requireUser(req);
+    const input = parse(resetPasswordInput.pick({ password: true }).extend({ currentPassword: loginInput.shape.password }), req.body);
+    if (!(await verifyPassword(auth.user.passwordHash, input.currentPassword))) {
+      throw badRequest("Your current password isn't right.", { currentPassword: "Incorrect password" });
+    }
+    await db.update(users).set({ passwordHash: await hashPassword(input.password) }).where(eq(users.id, auth.user.id));
+    // Sign out other sessions, keep this one.
+    await db.update(sessions).set({ revokedAt: new Date() })
+      .where(and(eq(sessions.userId, auth.user.id), isNull(sessions.revokedAt), dsql`${sessions.id} <> ${auth.sessionId}`));
+    return { ok: true };
   });
 
   app.get("/api/auth/devices", async (req) => {

@@ -224,3 +224,11 @@
   .code-boxes { gap: 6px; }
   .code-boxes input { width: 42px; height: 54px; font-size: 22px; }
 }
+
+/* two-column page layouts (collapse to one column on small screens) */
+.grid-side.side-360 { grid-template-columns: minmax(0, 1fr) 360px; }
+.grid-side.side-left-260 { grid-template-columns: 260px minmax(0, 1fr); }
+.grid-side.side-wide { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+@media (max-width: 900px) {
+  .grid-side.side-360, .grid-side.side-left-260, .grid-side.side-wide { grid-template-columns: minmax(0, 1fr); }
+}

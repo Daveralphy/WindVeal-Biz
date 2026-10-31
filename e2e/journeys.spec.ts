@@ -1,0 +1,83 @@
+import { expect, test, type Page } from "@playwright/test";
+import { signIn } from "./helpers";
+
+/** Fails the test on any server error or uncaught page error while visiting. */
+function watchErrors(page: Page) {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(`page error: ${e.message}`));
+  page.on("response", (r) => { if (r.status() >= 500) errors.push(`${r.status()} ${r.url()}`); });
+  return errors;
+}
+
+const SCREENS = [
+  "/", "/people", "/people/departments", "/people/leave", "/people/attendance", "/people/onboarding",
+  "/recruitment", "/recruitment/candidates", "/recruitment/interviews", "/recruitment/careers", "/recruitment/jobs/new",
+  "/crm", "/crm/pipeline", "/crm/companies", "/crm/leads", "/crm/follow-ups",
+  "/workflows", "/workflows/approvals", "/workflows/all", "/workflows/templates",
+  "/documents", "/documents/recent", "/documents/shared", "/documents/archive",
+  "/insights", "/insights/sales", "/insights/people", "/insights/hiring", "/insights/work",
+  "/import", "/settings", "/settings/members", "/settings/roles", "/settings/billing", "/settings/audit", "/settings/profile", "/help",
+];
+
+for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+  test(`every screen loads without errors (${viewport.width}px)`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    const errors = watchErrors(page);
+    await signIn(page);
+    for (const path of SCREENS) {
+      await page.goto(path);
+      await page.waitForLoadState("networkidle");
+      await expect(page.locator(".loading")).toHaveCount(0, { timeout: 10_000 });
+      // No horizontal scrolling on phones.
+      if (viewport.width < 500) {
+        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+        if (overflow > 2) {
+          const culprits = await page.evaluate(() => [...document.querySelectorAll("body *")]
+            .filter((e) => e.getBoundingClientRect().right > window.innerWidth + 1 && getComputedStyle(e).position !== "fixed")
+            .slice(0, 3).map((e) => `${e.tagName.toLowerCase()}.${String((e as HTMLElement).className).split(" ")[0]}`));
+          errors.push(`${path} scrolls sideways by ${overflow}px (${culprits.join(", ")})`);
+        }
+      }
+    }
+    expect(errors).toEqual([]);
+  });
+}
+
+test("a candidate applies on the careers page and is hired into People & HR", async ({ page, context }) => {
+  const errors = watchErrors(page);
+  // Public careers page (no sign-in).
+  await page.goto("http://localhost:5174/careers/sunrise-foods");
+  await expect(page.getByRole("heading", { name: "Sunrise Foods" })).toBeVisible();
+  await page.getByRole("link", { name: /Accounts Officer/ }).first().click();
+  await expect(page.getByRole("heading", { name: "Accounts Officer" })).toBeVisible();
+  await page.getByRole("link", { name: /Apply for this role/ }).first().click();
+
+  const email = `nkem-${Date.now()}@example.com`;
+  await page.getByLabel(/First name/).fill("Nkem");
+  await page.getByLabel(/Last name/).fill("Obi");
+  await page.getByLabel(/^Email/).fill(email);
+  await page.getByLabel(/^Phone/).fill("0803 555 0100");
+  await page.locator('input[type="file"]').setInputFiles({ name: "cv.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 test cv") });
+  // Answer the job's required questions.
+  await page.getByLabel(/years of relevant experience/i).selectOption({ index: 2 });
+  await page.getByText("Yes", { exact: true }).first().click();
+  await page.getByRole("checkbox").last().check();
+  await page.getByRole("button", { name: /Submit application/ }).click();
+  await expect(page.getByText(/Application sent/i)).toBeVisible();
+
+  // The recruiter sees the new applicant and hires them.
+  await signIn(page);
+  await page.goto("/recruitment/candidates");
+  await page.getByText("Nkem Obi").first().click();
+  await expect(page.getByRole("heading", { name: "Nkem Obi" })).toBeVisible();
+  const appUrl = page.url();
+  const appId = appUrl.split("/applications/")[1]!.split(/[?#]/)[0]!;
+  const r = await page.request.post(`http://localhost:5173/api/recruitment/applications/${appId}/hire`, {
+    data: { jobTitle: "Accounts Officer", startDate: new Date(Date.now() + 14 * 86_400_000).toISOString().slice(0, 10) },
+  });
+  expect(r.ok()).toBeTruthy();
+  await page.goto("/people?q=Nkem");
+  await expect(page.getByText("Nkem Obi").first()).toBeVisible();
+  expect(errors).toEqual([]);
+  void context;
+});

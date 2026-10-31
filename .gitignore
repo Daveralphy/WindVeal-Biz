@@ -13,3 +13,6 @@ apps/api/.mailbox/
 .DS_Store
 Thumbs.db
 storage-test/
+storage-e2e/
+test-results/
+playwright-report/

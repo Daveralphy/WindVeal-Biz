@@ -35,11 +35,59 @@ The product uses the WindVeal blue colour palette and a typography-led identity.
 
 ## Development
 
-The desktop application is planned to use Tauri with a React and TypeScript interface. Local data will be stored in an encrypted SQLite database, with PostgreSQL supporting the central service and synchronisation.
+WindVeal is currently built and tested as an online web application. Offline support and the Windows desktop app (Tauri, with an encrypted local database) come later, just before packaging.
 
-The initial application scaffold and its exact development scripts will be added as implementation begins. Until that scaffold is in place, this repository does not contain a runnable application.
+### What's in the repository
 
-Once the development setup has been added, this section will include the required tools, environment configuration, database setup, development command, tests and production build instructions.
+| Folder | What it is |
+| --- | --- |
+| `apps/web` | The business app (React, TypeScript, Vite) on http://localhost:5173 |
+| `apps/site` | The public website and each organisation's careers page on http://localhost:5174 |
+| `apps/api` | The central API (Fastify, Drizzle, PostgreSQL) on http://localhost:4000 |
+| `packages/shared` | Types, validation and permission rules shared by the apps and the API |
+| `packages/ui` | Design tokens and shared UI components |
+
+### Requirements
+
+- Node.js 20 or newer
+- pnpm 10 (`npm install -g pnpm@10`)
+- Docker Desktop (runs PostgreSQL 16)
+
+### First-time setup
+
+```bash
+pnpm install
+cp apps/api/.env.example apps/api/.env
+pnpm db:up        # start PostgreSQL in Docker (port 5433)
+pnpm db:push      # create the database tables
+pnpm db:seed      # optional: load demo data (see below)
+```
+
+**Demo data.** `pnpm db:seed` creates a sample business, *Sunrise Foods*, with people, jobs, candidates, clients, deals, tasks and approvals, plus WindVeal's own careers page. Sign in with any of these (password `Sunrise#2026x`):
+
+| Email | Role |
+| --- | --- |
+| amaka@sunrisefoods.test | Admin (primary admin) |
+| kofi@sunrisefoods.test | Manager |
+| efua@sunrisefoods.test | Member |
+
+### Run everything
+
+```bash
+pnpm dev          # API + business app + public site together
+```
+
+Then open http://localhost:5173 and create an account. In development no real emails are sent: verification codes, invitation links and password reset links appear at http://localhost:5173/dev/mailbox (and in the API console).
+
+To test the public careers page, open **Settings → Organisation** and use **Mark as verified** (development only), publish a job in **Recruitment**, then visit http://localhost:5174/careers/your-organisation-slug.
+
+### Checks
+
+```bash
+pnpm typecheck    # TypeScript across all packages
+pnpm test         # API tests (use a separate database, windveal_test)
+pnpm build        # production builds
+```
 
 ## Contributing
 
