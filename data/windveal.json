@@ -1,0 +1,30 @@
+{
+  "organisation": {
+    "slug": "windveal",
+    "legalName": "WindVeal",
+    "tradingName": "WindVeal",
+    "industry": "Technology",
+    "teamSize": "1 to 10 people",
+    "country": "NG",
+    "city": "",
+    "address": "",
+    "registrationNumber": "",
+    "website": "https://windveal.com",
+    "domain": "windveal.com",
+    "verificationStatus": "verified",
+    "plan": "enterprise",
+    "billing": "yearly",
+    "brandColor": "#486FE4",
+    "tagline": "Your business, in one place.",
+    "about": "WindVeal builds WindVeal Biz Platform: one place for a business's people, customers, documents and daily work.",
+    "logo": "../assets/brand/windveal-logo.png",
+    "cover": null,
+    "perks": []
+  },
+  "owner": {
+    "name": "Raphael Daveal",
+    "email": "raphael@windveal.com",
+    "jobTitle": "CEO and Manager",
+    "department": "Leadership"
+  }
+}

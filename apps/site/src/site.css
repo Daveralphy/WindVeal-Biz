@@ -7,13 +7,7 @@
   --tile-soft: #f5f7fc;
   --site-bg: #ffffff;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --tile-pale: #18234a;
-    --tile-soft: #141d3a;
-    --site-bg: var(--bg);
-  }
-}
+
 :root[data-theme="dark"] {
   --tile-pale: #18234a;
   --tile-soft: #141d3a;
@@ -1933,18 +1927,7 @@ img {
   flex-direction: column;
   font-size: 16px;
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .careers {
-    --c-ink: #eef2f0;
-    --c-text: #c5ccc9;
-    --c-muted: #9aa5a0;
-    --c-line: #2b3431;
-    --c-soft: #1a2120;
-    --c-surface: #111615;
-    --brand-soft: color-mix(in srgb, var(--brand) 26%, #111615);
-    --brand-text: color-mix(in srgb, var(--brand) 55%, #fff);
-  }
-}
+
 :root[data-theme="dark"] .careers {
   --c-ink: #eef2f0;
   --c-text: #c5ccc9;

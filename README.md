@@ -62,7 +62,20 @@ pnpm db:up        # start PostgreSQL in Docker (port 5433)
 pnpm db:push      # create the database tables
 ```
 
-The database starts empty: nothing is pre-filled. Register WindVeal (or any business) through the app the same way a real customer would.
+The database starts empty: nothing about a business is written into the code.
+
+**Load WindVeal (no sign-up needed).** WindVeal's details live in `data/windveal.json`: the organisation, Raphael Daveal as CEO and primary admin, windveal.com, verified, on the Enterprise plan, with the real logo. Load it with:
+
+```bash
+pnpm data:load                      # loads data/windveal.json
+pnpm data:load path/to/other.json   # or any organisation file in the same format
+```
+
+It creates a real, working account and prints a one-time link to set your password (valid 7 days). Running it again updates the organisation from the file without duplicating anything, so edit the JSON and load it again whenever details change.
+
+**Pricing.** Plans, prices for each currency, storage and AI limits, and the supported countries all come from `data/pricing.json`. The API re-reads it when it changes. The website works out each visitor's country from their device's time zone and language settings and shows prices in that currency.
+
+**Deleting.** The files in `data/` are yours to edit or delete. `pnpm db:reset` deletes everything in the database and uploaded files; run `pnpm data:load` afterwards to bring WindVeal back from the JSON.
 
 **Starting over.** `pnpm db:reset` permanently deletes everything on this computer (the database, uploaded files and the dev mailbox) and gives you a fresh, empty database. It asks you to type `DELETE` first.
 

@@ -7,12 +7,13 @@ import {
   SearchInput, Segmented, Select, Switch, Textarea, useToast,
 } from "@windveal/ui";
 import {
-  ACCESS_LEVELS, COUNTRIES, INDUSTRIES, PLAN_PRICES, SPECIAL_PERMISSIONS, TEAM_SIZES, WORKSPACES, WORKSPACE_LABELS, formatBytes, formatMoney,
+  ACCESS_LEVELS, INDUSTRIES, SPECIAL_PERMISSIONS, TEAM_SIZES, WORKSPACES, WORKSPACE_LABELS, formatBytes, formatMoney,
 } from "@windveal/shared";
 import { api, ApiError, publicFileUrl } from "../../lib/api";
 import { ME_KEY, useSession } from "../../lib/session";
 import { useForm } from "../../lib/form";
 import { CONTACT_EMAIL } from "../../lib/config";
+import { monthlyPrice, usePricing, yearlyTotal, type PricingPlan } from "../../lib/pricing";
 import { fmtDate, timeAgo } from "../../lib/format";
 
 function SettingsTabs() {
@@ -50,7 +51,7 @@ function Organisation() {
     }
   }, [o]);
   if (!o) return <Loading />;
-  const country = COUNTRIES.find((c) => c.code === o.country);
+  const countryName = new Intl.DisplayNames(["en"], { type: "region" }).of(o.country) ?? o.country;
   const owner = (membersQ.data ?? []).find((m) => m.isOwner);
   const primary = (membersQ.data ?? []).find((m) => m.isPrimaryAdmin);
   const status = o.verificationStatus as string;
@@ -65,7 +66,7 @@ function Organisation() {
                 <Input label="Trading name" optional {...f.bind("tradingName")} />
                 <Select label="Industry" options={INDUSTRIES} {...f.bind("industry")} />
                 <Select label="Team size" options={TEAM_SIZES} {...f.bind("teamSize")} />
-                <Input label="Country" value={`${country?.name ?? o.country} · ${o.currency}`} disabled hint="Sets your currency. Contact support to change it." readOnly />
+                <Input label="Country" value={`${countryName} · ${o.currency}`} disabled hint="Sets your currency. Contact support to change it." readOnly />
                 <Input label="City" {...f.bind("city")} />
                 <Input label="Business address" wrapClassName="span-2" {...f.bind("address")} />
                 <Input label="Company registration number" {...f.bind("registrationNumber")} />
@@ -400,44 +401,52 @@ function Billing() {
   const { org, hasSpecial } = useSession();
   const storage = useQuery({ queryKey: ["storage"], queryFn: () => api.get("/api/storage") });
   const members = useQuery({ queryKey: ["members"], queryFn: () => api.get<any[]>("/api/members") });
+  const pricing = usePricing();
   const [billing, setBilling] = useState<"monthly" | "yearly">("yearly");
   const [upgrade, setUpgrade] = useState<string | null>(null);
-  const prices = PLAN_PRICES[org.currency] ?? PLAN_PRICES.USD!;
-  const price = (p: "growth" | "pro") => formatMoney(billing === "yearly" ? prices[p] * 10 / 12 : prices[p], org.currency);
-  const planName = org.plan[0]!.toUpperCase() + org.plan.slice(1);
+  if (!pricing.data) return <Loading />;
+  const plans = pricing.data.plans;
+  const current = plans.find((p) => p.key === org.plan) ?? plans[0]!;
+  const enterprise = plans.find((p) => p.custom);
+  // Upgrades = plans listed after the current one that have a price.
+  const upgrades = plans.slice(plans.indexOf(current) + 1).filter((p) => !p.custom);
+  const perMonth = (p: PricingPlan) => {
+    const { amount, currency } = monthlyPrice(pricing.data!, p, org.currency);
+    return formatMoney(billing === "yearly" ? yearlyTotal(pricing.data!, amount) / 12 : amount, currency);
+  };
   return (
     <>
       <Card>
         <div className="grid-2">
           <div>
             <p className="muted" style={{ fontSize: 13, fontWeight: 600 }}>Current plan</p>
-            <p style={{ fontFamily: "var(--display)", fontSize: 28, fontWeight: 800, color: "var(--ink)" }}>{planName} <span className="muted" style={{ fontSize: 14, fontWeight: 500, fontFamily: "var(--font)" }}>{org.plan === "free" ? `${formatMoney(0, org.currency)} per month` : ""}</span></p>
-            <p style={{ margin: "6px 0 14px" }}>{org.plan === "free" ? "All six workspaces and 5 GB storage. No AI." : "Thanks for supporting WindVeal."}</p>
+            <p style={{ fontFamily: "var(--display)", fontSize: 28, fontWeight: 800, color: "var(--ink)" }}>{current.name} <span className="muted" style={{ fontSize: 14, fontWeight: 500, fontFamily: "var(--font)" }}>{current.custom ? "Custom pricing" : `${perMonth(current)} per month`}</span></p>
+            <p style={{ margin: "6px 0 14px" }}>{current.description}</p>
           </div>
           <div className="stack" style={{ gap: 14 }}>
             <div><div className="between" style={{ fontSize: 13.5, marginBottom: 6 }}><span>Storage</span><b className="ink">{storage.data ? `${formatBytes(storage.data.used)} of ${formatBytes(storage.data.limit)}` : "…"}</b></div><Progress value={storage.data ? (storage.data.used / storage.data.limit) * 100 : 0} /></div>
-            <div className="between" style={{ fontSize: 13.5 }}><span>WindVeal AI requests this month</span><b className="ink">{org.plan === "free" ? "Not included" : "0"}</b></div>
+            <div className="between" style={{ fontSize: 13.5 }}><span>WindVeal AI requests this month</span><b className="ink">{current.aiRequestsPerMonth ? `0 of ${current.aiRequestsPerMonth.toLocaleString("en-GB")}` : "Not included"}</b></div>
             <div className="between" style={{ fontSize: 13.5 }}><span>Team members</span><b className="ink">{members.data?.length ?? "…"} · no limit</b></div>
           </div>
         </div>
       </Card>
-      <Card title="Upgrade for more space and AI" subtitle={`Prices in ${org.currency}. Switch any time.`} actions={<Segmented value={billing} onChange={setBilling} options={[{ value: "monthly", label: "Monthly" }, { value: "yearly", label: "Yearly" }]} />}>
-        <div className="grid-2">
-          {(["growth", "pro"] as const).map((p) => (
-            <div key={p} style={{ border: `1.5px solid ${p === "growth" ? "var(--blue)" : "var(--line)"}`, borderRadius: 16, padding: 20 }}>
-              <div className="between"><h4 style={{ fontSize: 17 }}>{p === "growth" ? "Growth" : "Pro"}</h4>{p === "growth" && <Pill>Popular</Pill>}</div>
-              <p style={{ fontFamily: "var(--display)", fontSize: 24, fontWeight: 800, color: "var(--ink)", margin: "6px 0 2px" }}>{price(p)} <small className="muted" style={{ fontSize: 13, fontFamily: "var(--font)", fontWeight: 500 }}>per month{billing === "yearly" ? ", billed yearly" : ""}</small></p>
-              <ul style={{ paddingLeft: 18, margin: "12px 0 16px", fontSize: 13.5 }}>
-                {p === "growth" ? <><li>50 GB storage</li><li>WindVeal AI: 200 requests a month</li><li>Custom roles and permissions</li></> : <><li>100 GB storage</li><li>WindVeal AI: 1,000 requests a month</li><li>Advanced reports and exports</li></>}
-              </ul>
-              <Button block variant={p === "growth" ? "primary" : "secondary"} disabled={!hasSpecial("manage_billing")} onClick={() => setUpgrade(p)}>Upgrade to {p === "growth" ? "Growth" : "Pro"}</Button>
-            </div>
-          ))}
-        </div>
-        <div className="ent-row" style={{ marginTop: 14 }}><div><b className="ink" style={{ fontFamily: "var(--display)", fontSize: 16, display: "block" }}>Enterprise</b>Storage, AI and support built around your organisation.</div><a className="btn btn-secondary" href={`mailto:${CONTACT_EMAIL}`}>Talk to us</a></div>
-      </Card>
+      {(upgrades.length > 0 || (enterprise && !current.custom)) && (
+        <Card title="Upgrade for more space and AI" subtitle={`Prices in ${org.currency}. Switch any time.`} actions={upgrades.length > 0 && <Segmented value={billing} onChange={setBilling} options={[{ value: "monthly", label: "Monthly" }, { value: "yearly", label: "Yearly" }]} />}>
+          {upgrades.length > 0 && <div className="grid-2">
+            {upgrades.map((p) => (
+              <div key={p.key} style={{ border: `1.5px solid ${p.popular ? "var(--blue)" : "var(--line)"}`, borderRadius: 16, padding: 20 }}>
+                <div className="between"><h4 style={{ fontSize: 17 }}>{p.name}</h4>{p.popular && <Pill>Popular</Pill>}</div>
+                <p style={{ fontFamily: "var(--display)", fontSize: 24, fontWeight: 800, color: "var(--ink)", margin: "6px 0 2px" }}>{perMonth(p)} <small className="muted" style={{ fontSize: 13, fontFamily: "var(--font)", fontWeight: 500 }}>per month{billing === "yearly" ? ", billed yearly" : ""}</small></p>
+                <ul style={{ paddingLeft: 18, margin: "12px 0 16px", fontSize: 13.5 }}>{p.features.slice(1, 4).map((f) => <li key={f}>{f}</li>)}</ul>
+                <Button block variant={p.popular ? "primary" : "secondary"} disabled={!hasSpecial("manage_billing")} onClick={() => setUpgrade(p.key)}>Upgrade to {p.name}</Button>
+              </div>
+            ))}
+          </div>}
+          {enterprise && !current.custom && <div className="ent-row" style={{ marginTop: 14 }}><div><b className="ink" style={{ fontFamily: "var(--display)", fontSize: 16, display: "block" }}>{enterprise.name}</b>{enterprise.description}</div><a className="btn btn-secondary" href={`mailto:${CONTACT_EMAIL}`}>Talk to us</a></div>}
+        </Card>
+      )}
       <div className="grid-2">
-        <Card title="Payment method" subtitle="Added when you upgrade."><EmptyState title="No payment method">{org.plan === "free" ? "You're on the Free plan." : ""}</EmptyState></Card>
+        <Card title="Payment method" subtitle="Added when you upgrade."><EmptyState title="No payment method">{org.plan === "free" ? "You're on the Free plan." : org.plan === "enterprise" ? "Billed by agreement with WindVeal." : ""}</EmptyState></Card>
         <Card title="Invoices" subtitle="Download receipts for your records."><EmptyState title="No invoices yet">Invoices will appear here after you upgrade.</EmptyState></Card>
       </div>
       <Modal open={!!upgrade} onClose={() => setUpgrade(null)} title="Online payments are coming soon" footer={<Button onClick={() => setUpgrade(null)}>OK</Button>}>

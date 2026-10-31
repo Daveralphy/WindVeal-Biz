@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { and, eq, isNull, sql as dsql } from "drizzle-orm";
 import { z } from "zod";
-import { currencyForCountry, orgBrandingInput, orgDetailsInput, orgPlanInput, orgRoleInput, slugify } from "@windveal/shared";
+import { orgBrandingInput, orgDetailsInput, orgPlanInput, orgRoleInput, slugify } from "@windveal/shared";
 import { db } from "../../db/client";
 import { files, memberships, organisations, users } from "../../db/schema";
 import { requireAdmin, requireOrg, requireUser } from "../../lib/context";
@@ -10,6 +10,7 @@ import { audit } from "../../lib/audit";
 import { sendMail } from "../../lib/mailer";
 import { mePayload } from "../auth/routes";
 import { seedOrgDefaults } from "./defaults";
+import { currencyForCountry } from "../../lib/pricing";
 
 export function orgView(o: typeof organisations.$inferSelect) {
   return {
@@ -46,12 +47,14 @@ export default async function orgRoutes(app: FastifyInstance) {
       if (dup) throw conflict("A business with this registration number is already on WindVeal. Ask its admin to invite you, or contact support.",
         { registrationNumber: "Already registered" });
     }
+    const currency = currencyForCountry(input.country);
+    if (!currency) throw badRequest("WindVeal isn't available in that country yet.", { country: "Choose a supported country" });
     const slug = await uniqueSlug(input.tradingName || input.legalName);
     const org = await db.transaction(async (tx) => {
       const stages = await (async () => {
         const [o] = await tx.insert(organisations).values({
           slug, legalName: input.legalName, tradingName: input.tradingName || null, industry: input.industry, teamSize: input.teamSize,
-          country: input.country, currency: currencyForCountry(input.country), city: input.city, address: input.address,
+          country: input.country, currency, city: input.city, address: input.address,
           registrationNumber: input.registrationNumber || null, website: input.website || null, createdBy: auth.user.id, setupStep: "role",
         }).returning();
         await tx.insert(memberships).values({ orgId: o!.id, userId: auth.user.id, role: "admin", isPrimaryAdmin: true });

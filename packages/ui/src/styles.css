@@ -1,5 +1,6 @@
 /* WindVeal design tokens — the single source of truth for colours, type and spacing.
-   Built from the approved design previews. Light and dark themes. */
+   Built from the approved design previews. Light is the design; dark mode only applies when
+   someone turns it on in the app (data-theme="dark"). The browser's theme is not followed. */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap");
 
 :root {
@@ -35,14 +36,7 @@
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --pale: #1c2a55; --soft: #18213d; --bg: #0c1430; --surface: #121b38; --ink: #eef2ff; --text: #c3cbe3; --muted: #93a0c4;
-    --line: #26325a; --field: #34416b; --ok-bg: #12382a; --ok: #7fdcb2; --warn-bg: #3a2c12; --warn: #f2c27a; --warn-line: #5a4318;
-    --red-bg: #3d1a1a; --red: #ff9a8a; --violet-bg: #2c1f47; --violet: #cdb4f5; --deep: #9db6ff; --shadow: 0 30px 60px -30px rgba(0,0,0,.6);
-    color-scheme: dark;
-  }
-}
+
 :root[data-theme="dark"] {
   --pale: #1c2a55; --soft: #18213d; --bg: #0c1430; --surface: #121b38; --ink: #eef2ff; --text: #c3cbe3; --muted: #93a0c4;
   --line: #26325a; --field: #34416b; --ok-bg: #12382a; --ok: #7fdcb2; --warn-bg: #3a2c12; --warn: #f2c27a; --warn-line: #5a4318;
@@ -69,10 +63,7 @@ button { font: inherit; color: inherit; }
 .btn-secondary { background: var(--surface); color: var(--navy); border-color: var(--line); }
 .btn-secondary:hover:not(:disabled) { border-color: var(--field); background: var(--soft); }
 :root[data-theme="dark"] .btn-secondary { color: var(--ink); }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .btn-primary { background: var(--blue); }
-  :root:not([data-theme="light"]) .btn-secondary { color: var(--ink); }
-}
+
 .btn-ghost { background: transparent; color: var(--deep); padding-left: 6px; padding-right: 6px; }
 .btn-ghost:hover:not(:disabled) { text-decoration: underline; }
 .btn-danger { background: var(--surface); color: var(--red); border-color: #f1c9c3; }
@@ -279,9 +270,6 @@ button { font: inherit; color: inherit; }
 .wv-logo .on-dark { display: none; }
 :root[data-theme="dark"] .wv-logo:not(.fixed) .on-light { display: none; }
 :root[data-theme="dark"] .wv-logo:not(.fixed) .on-dark { display: block; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .wv-logo:not(.fixed) .on-light { display: none; }
-  :root:not([data-theme="light"]) .wv-logo:not(.fixed) .on-dark { display: block; }
-}
+
 .wv-logo.always-light .on-light { display: none; }
 .wv-logo.always-light .on-dark { display: block; }

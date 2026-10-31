@@ -1,0 +1,64 @@
+{
+  "defaultCurrency": "USD",
+  "yearlyMonthsFree": 2,
+  "countries": [
+    { "code": "NG", "name": "Nigeria", "currency": "NGN", "timeZones": ["Africa/Lagos"] },
+    { "code": "GH", "name": "Ghana", "currency": "GHS", "timeZones": ["Africa/Accra"] },
+    { "code": "KE", "name": "Kenya", "currency": "KES", "timeZones": ["Africa/Nairobi"] },
+    { "code": "ZA", "name": "South Africa", "currency": "ZAR", "timeZones": ["Africa/Johannesburg"] },
+    { "code": "GB", "name": "United Kingdom", "currency": "GBP", "timeZones": ["Europe/London"] },
+    { "code": "US", "name": "United States", "currency": "USD", "timeZones": ["America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles", "America/Anchorage", "Pacific/Honolulu", "America/Boise", "America/Detroit"] }
+  ],
+  "plans": [
+    {
+      "key": "free",
+      "name": "Free",
+      "description": "For teams getting everything in one place.",
+      "cta": "Get started free",
+      "storageGB": 5,
+      "aiRequestsPerMonth": 0,
+      "prices": { "NGN": 0, "GHS": 0, "KES": 0, "ZAR": 0, "GBP": 0, "USD": 0 },
+      "features": ["All six workspaces", "5 GB storage", "Import your spreadsheets", "Email support"]
+    },
+    {
+      "key": "growth",
+      "name": "Growth",
+      "description": "For growing businesses that want a little help from AI.",
+      "cta": "Start with Growth",
+      "popular": true,
+      "storageGB": 50,
+      "aiRequestsPerMonth": 200,
+      "prices": { "NGN": 39000, "GHS": 450, "KES": 4900, "ZAR": 690, "GBP": 39, "USD": 49 },
+      "features": ["Everything in Free", "50 GB storage", "WindVeal AI: 200 requests a month", "Custom roles and permissions", "Priority support"]
+    },
+    {
+      "key": "pro",
+      "name": "Pro",
+      "description": "For busy teams that use AI every day.",
+      "cta": "Start with Pro",
+      "storageGB": 100,
+      "aiRequestsPerMonth": 1000,
+      "prices": { "NGN": 79000, "GHS": 900, "KES": 9900, "ZAR": 1390, "GBP": 79, "USD": 99 },
+      "features": ["Everything in Growth", "100 GB storage", "WindVeal AI: 1,000 requests a month", "Advanced reports and exports", "Phone support"]
+    },
+    {
+      "key": "enterprise",
+      "name": "Enterprise",
+      "description": "Storage, AI and support built around your organisation, with dedicated onboarding and a named account manager.",
+      "cta": "Contact us",
+      "custom": true,
+      "storageGB": 1024,
+      "aiRequestsPerMonth": 10000,
+      "prices": {},
+      "features": ["Everything in Pro", "Storage to fit your needs", "AI to fit your needs", "Dedicated onboarding", "A named account manager"]
+    }
+  ],
+  "compare": [
+    { "label": "All six workspaces", "values": { "free": true, "growth": true, "pro": true, "enterprise": true } },
+    { "label": "Storage", "values": { "free": "5 GB", "growth": "50 GB", "pro": "100 GB", "enterprise": "Custom" } },
+    { "label": "WindVeal AI requests / month", "values": { "free": false, "growth": "200", "pro": "1,000", "enterprise": "Custom" } },
+    { "label": "Custom roles and permissions", "values": { "free": false, "growth": true, "pro": true, "enterprise": true } },
+    { "label": "Advanced reports and exports", "values": { "free": false, "growth": false, "pro": true, "enterprise": true } },
+    { "label": "Dedicated onboarding", "values": { "free": false, "growth": false, "pro": false, "enterprise": true } }
+  ]
+}

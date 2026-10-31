@@ -1,4 +1,7 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 function req(name: string, fallback?: string): string {
   const v = process.env[name] ?? fallback;
@@ -13,6 +16,8 @@ export const env = {
   siteUrl: req("SITE_URL", "http://localhost:5174"),
   port: Number(process.env.API_PORT ?? 4000),
   storageDir: path.resolve(process.env.STORAGE_DIR ?? "./storage"),
+  /** Folder with editable data files (pricing.json, organisation files). */
+  dataDir: path.resolve(process.env.DATA_DIR ?? path.join(repoRoot, "data")),
   isProd: process.env.NODE_ENV === "production",
   isTest: process.env.NODE_ENV === "test" || process.env.VITEST === "true",
 };

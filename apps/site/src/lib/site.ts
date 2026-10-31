@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { COUNTRIES, PLAN_PRICES } from "@windveal/shared";
 
 export const APP_URL: string = (import.meta.env.VITE_APP_URL as string | undefined) ?? "http://localhost:5173";
 export const SIGN_IN_URL = `${APP_URL}/sign-in`;
@@ -16,22 +15,4 @@ export function useTitle(title: string) {
   useEffect(() => {
     document.title = title;
   }, [title]);
-}
-
-/** Picks a pricing currency from the visitor's locale region, e.g. "en-NG" → NGN. */
-export function detectCurrency(): string {
-  const langs = typeof navigator !== "undefined" ? [...(navigator.languages ?? []), navigator.language] : [];
-  for (const lang of langs) {
-    if (!lang) continue;
-    let region: string | undefined;
-    try {
-      region = new Intl.Locale(lang).region;
-    } catch {
-      region = lang.split(/[-_]/)[1];
-    }
-    if (!region) continue;
-    const country = COUNTRIES.find((c) => c.code === region.toUpperCase());
-    if (country && PLAN_PRICES[country.currency]) return country.currency;
-  }
-  return "USD";
 }

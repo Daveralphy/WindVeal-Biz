@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { COUNTRIES } from "@windveal/shared";
 
 export interface CareersOrg {
   name: string;
@@ -137,7 +136,7 @@ export function employmentLabel(t: string | null): string {
 
 export function countryName(c: string | null): string | null {
   if (!c) return null;
-  return COUNTRIES.find((x) => x.code === c.toUpperCase())?.name ?? c;
+  try { return new Intl.DisplayNames(["en"], { type: "region" }).of(c.toUpperCase()) ?? c; } catch { return c; }
 }
 
 export function orgPlace(org: CareersOrg): string {

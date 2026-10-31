@@ -7,7 +7,8 @@ function initial(): Theme {
     const saved = localStorage.getItem("wv-theme");
     if (saved === "light" || saved === "dark") return saved;
   } catch { /* ignore */ }
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  // The approved design is light; dark mode is only used when someone chooses it in the app.
+  return "light";
 }
 
 export function applyTheme(t: Theme) {

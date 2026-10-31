@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { and, eq, isNull, sql as dsql } from "drizzle-orm";
-import { PLAN_LIMITS, hasAccess, type Workspace } from "@windveal/shared";
+import { hasAccess, type Workspace } from "@windveal/shared";
+import { loadPricing, planStorageBytes } from "../../lib/pricing";
 import { db } from "../../db/client";
 import { employees, fileLinks, fileVersions, files, folders } from "../../db/schema";
 import { requireOrg, type OrgContext } from "../../lib/context";
@@ -75,7 +76,7 @@ export async function handleUpload(req: FastifyRequest<{ Querystring: UploadQuer
   if (!buf || part.file.truncated) throw new AppError(413, "file_too_large", `Too large. The limit is ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`);
   if (buf.length === 0) throw badRequest("That file is empty.");
   const used = await storageUsed(ctx.org.id);
-  if (used + buf.length > PLAN_LIMITS[ctx.org.plan].storageBytes) {
+  if (used + buf.length > planStorageBytes(ctx.org.plan)) {
     throw new AppError(413, "storage_full", "Your organisation has run out of storage. Upgrade your plan for more space.");
   }
   const q = req.query;
@@ -160,8 +161,14 @@ export default async function fileRoutes(app: FastifyInstance) {
     return reply.send(readObject(f.storageKey));
   });
 
+  /** Public pricing (plans, prices per currency, supported countries) from data/pricing.json. */
+  app.get("/api/public/pricing", async (_req, reply) => {
+    reply.header("Cache-Control", "public, max-age=60");
+    return loadPricing();
+  });
+
   app.get("/api/storage", async (req) => {
     const ctx = await requireOrg(req);
-    return { used: await storageUsed(ctx.org.id), limit: PLAN_LIMITS[ctx.org.plan].storageBytes };
+    return { used: await storageUsed(ctx.org.id), limit: planStorageBytes(ctx.org.plan) };
   });
 }

@@ -3,7 +3,8 @@ import { Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Building2, Check, Clock, Plus, Upload, UserCheck, X } from "lucide-react";
 import { BrandLogo, Button, IconButton, Input, Notice, Segmented, Select, Textarea } from "@windveal/ui";
-import { COUNTRIES, INDUSTRIES, PLAN_PRICES, TEAM_SIZES, currencyForCountry, formatMoney } from "@windveal/shared";
+import { INDUSTRIES, TEAM_SIZES, formatMoney } from "@windveal/shared";
+import { monthlyPrice, usePricing, yearlyTotal, type PricingPlan } from "../../lib/pricing";
 import { api, ApiError, publicFileUrl } from "../../lib/api";
 import { ME_KEY, useMe, type Me } from "../../lib/session";
 import { useForm } from "../../lib/form";
@@ -64,8 +65,10 @@ function Details() {
       f.setValues({ legalName: o.legalName, tradingName: o.tradingName ?? "", industry: o.industry ?? "", teamSize: o.teamSize ?? "", country: o.country, city: o.city ?? "", address: o.address ?? "", registrationNumber: o.registrationNumber ?? "", website: o.website ?? "" });
     }
   }, [orgQ.data]);
-  const currency = currencyForCountry(f.values.country);
-  const currencyName = new Intl.DisplayNames(["en"], { type: "currency" }).of(currency);
+  const pricing = usePricing();
+  const countries = pricing.data?.countries ?? [];
+  const currency = countries.find((c) => c.code === f.values.country)?.currency ?? "";
+  const currencyName = currency ? new Intl.DisplayNames(["en"], { type: "currency" }).of(currency) : "";
   return (
     <Wizard step="details">
       <h1>Tell us about your business.</h1>
@@ -89,8 +92,8 @@ function Details() {
         <div className="wz-group">
           <h3>Location</h3>
           <div className="form-grid">
-            <Select label="Country" options={COUNTRIES.map((c) => ({ value: c.code, label: c.name }))} disabled={!!me?.org}
-              hint={`Your prices will be shown in ${currencyName} (${currency}).`} {...f.bind("country")} />
+            <Select label="Country" options={countries.map((c) => ({ value: c.code, label: c.name }))} disabled={!!me?.org}
+              hint={currency ? `Your prices will be shown in ${currencyName} (${currency}).` : "Loading countries…"} {...f.bind("country")} />
             <Input label="City" {...f.bind("city")} />
             <Input label="Business address" wrapClassName="span-2" {...f.bind("address")} />
           </div>
@@ -293,17 +296,13 @@ function Plan() {
   const { data: me } = useMe();
   const navigate = useNavigate();
   const refresh = useMeUpdater();
-  const [plan, setPlan] = useState<"free" | "growth" | "pro">("free");
+  const [plan, setPlan] = useState<PricingPlan["key"]>("free");
   const [billing, setBilling] = useState<"monthly" | "yearly">("yearly");
   const [busy, setBusy] = useState(false);
-  const currency = me?.org?.currency ?? "USD";
-  const prices = PLAN_PRICES[currency] ?? PLAN_PRICES.USD!;
-  const price = (p: "free" | "growth" | "pro") => (p === "free" ? 0 : prices[p]);
-  const cards = [
-    { key: "free" as const, name: "Free", items: ["All six workspaces", "5 GB storage", "Import your spreadsheets"] },
-    { key: "growth" as const, name: "Growth", pop: true, items: ["Everything in Free", "50 GB storage", "WindVeal AI: 200 / month"] },
-    { key: "pro" as const, name: "Pro", items: ["Everything in Growth", "100 GB storage", "WindVeal AI: 1,000 / month"] },
-  ];
+  const pricing = usePricing();
+  const orgCurrency = me?.org?.currency ?? "";
+  const cards = (pricing.data?.plans ?? []).filter((p) => !p.custom);
+  const enterprise = pricing.data?.plans.find((p) => p.custom);
   const go = async () => {
     setBusy(true);
     try { await api.post("/api/org/plan", { plan, billing }); await refresh(); navigate("/setup/team"); } finally { setBusy(false); }
@@ -313,19 +312,22 @@ function Plan() {
       <h1>Choose your plan.</h1>
       <p className="sub">Start free and finish setting up. Upgrade whenever you need more space or AI.</p>
       <div style={{ marginBottom: 20 }}>
-        <Segmented value={billing} onChange={setBilling} options={[{ value: "monthly", label: "Monthly" }, { value: "yearly", label: <>Yearly <span style={{ fontSize: 12, opacity: .8 }}>2 months free</span></> }]} />
+        <Segmented value={billing} onChange={setBilling} options={[{ value: "monthly", label: "Monthly" }, { value: "yearly", label: <>Yearly <span style={{ fontSize: 12, opacity: .8 }}>{pricing.data?.yearlyMonthsFree ?? 2} months free</span></> }]} />
       </div>
       <div className="plans">
-        {cards.map((c) => (
-          <button key={c.key} type="button" className={`plan-card ${plan === c.key ? "on" : ""}`} onClick={() => setPlan(c.key)}>
-            {c.pop && <span className="pop">Popular</span>}
-            <h4>{c.name}</h4>
-            <div className="pr">{formatMoney(price(c.key), currency)}<small>per month{billing === "yearly" && c.key !== "free" ? ` · ${formatMoney(price(c.key) * 10, currency)} a year` : ""}</small></div>
-            <ul>{c.items.map((i) => <li key={i}>{i}</li>)}</ul>
-          </button>
-        ))}
+        {pricing.data && cards.map((c) => {
+          const { amount, currency } = monthlyPrice(pricing.data!, c, orgCurrency);
+          return (
+            <button key={c.key} type="button" className={`plan-card ${plan === c.key ? "on" : ""}`} onClick={() => setPlan(c.key)}>
+              {c.popular && <span className="pop">Popular</span>}
+              <h4>{c.name}</h4>
+              <div className="pr">{formatMoney(amount, currency)}<small>per month{billing === "yearly" && amount > 0 ? ` · ${formatMoney(yearlyTotal(pricing.data!, amount), currency)} a year` : ""}</small></div>
+              <ul>{c.features.slice(0, 3).map((i) => <li key={i}>{i}</li>)}</ul>
+            </button>
+          );
+        })}
       </div>
-      <div className="ent-row"><div><h4 style={{ fontSize: 17 }}>Enterprise</h4><span>Storage, AI and support built around your organisation.</span></div><a className="btn btn-secondary" href={`mailto:${CONTACT_EMAIL}`}>Talk to us</a></div>
+      {enterprise && <div className="ent-row"><div><h4 style={{ fontSize: 17 }}>{enterprise.name}</h4><span>{enterprise.description}</span></div><a className="btn btn-secondary" href={`mailto:${CONTACT_EMAIL}`}>Talk to us</a></div>}
       <p className="field-hint" style={{ marginTop: 12 }}>No payment needed now. {plan !== "free" ? "You'll start on Free and can add payment details to upgrade from Settings → Plan and billing." : ""}</p>
       <div className="wz-foot">
         <Link to="/setup/branding" className="link row"><ArrowLeft size={15} />Back</Link>

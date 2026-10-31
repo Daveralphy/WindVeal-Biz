@@ -17,7 +17,8 @@
     "test": "pnpm -r test",
     "build": "pnpm -r build",
     "test:e2e": "node e2e/prepare.mjs && playwright test -c e2e/playwright.config.ts",
-    "db:reset": "node scripts/db-reset.mjs"
+    "db:reset": "node scripts/db-reset.mjs",
+    "data:load": "pnpm --filter @windveal/api exec tsx --env-file=.env src/db/load-organisation.ts"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

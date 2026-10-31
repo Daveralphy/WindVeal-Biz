@@ -1,6 +1,6 @@
 /* CRM module — uses the shared design tokens from @windveal/ui (light + dark). */
 .crm { --crm-won-bg: #e8f5ee; --crm-won-line: #cdeadb; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .crm { --crm-won-bg: #10291f; --crm-won-line: #1d4535; } }
+
 :root[data-theme="dark"] .crm { --crm-won-bg: #10291f; --crm-won-line: #1d4535; }
 
 .crm .grow { flex: 1; }
