@@ -30,7 +30,6 @@ const PLANS: {
       <>
         <b>{gb(PLAN_LIMITS.free.storageBytes)}</b> storage
       </>,
-      "Works offline",
       "Import your spreadsheets",
       "Email support",
     ],
@@ -78,7 +77,6 @@ const COMPARE: [string, ...(string | boolean)[]][] = [
   ["All six workspaces", true, true, true, true],
   ["Storage", gb(PLAN_LIMITS.free.storageBytes), gb(PLAN_LIMITS.growth.storageBytes), gb(PLAN_LIMITS.pro.storageBytes), "Custom"],
   ["WindVeal AI requests / month", false, PLAN_LIMITS.growth.aiRequests.toLocaleString("en-GB"), PLAN_LIMITS.pro.aiRequests.toLocaleString("en-GB"), "Custom"],
-  ["Works offline", true, true, true, true],
   ["Custom roles and permissions", false, true, true, true],
   ["Advanced reports and exports", false, false, true, true],
   ["Dedicated onboarding", false, false, false, true],

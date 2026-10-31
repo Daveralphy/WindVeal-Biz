@@ -105,8 +105,8 @@ export default function ApplyPage() {
     if (!d.lastName.trim()) e.lastName = "Enter your last name.";
     if (!d.email.trim()) e.email = "Enter your email address.";
     else if (!EMAIL_RE.test(d.email.trim())) e.email = "Enter a valid email address, like name@example.com.";
-    if (!d.phone.trim()) e.phone = "Enter your phone number.";
-    else if (d.phone.replace(/\D/g, "").length < 7) e.phone = "Enter a valid phone number.";
+    // Phone is optional; only check it if one was entered.
+    if (d.phone.trim() && d.phone.replace(/\D/g, "").length < 7) e.phone = "Enter a valid phone number.";
     if (!cv) e.cv = errors.cv ?? "Upload your CV.";
     for (const q of questions) {
       const v = (answers[q.id] ?? "").trim();
@@ -238,7 +238,7 @@ export default function ApplyPage() {
                   <FieldWrap id="f-email" label="Email" required error={errors.email}>
                     <input id="f-email" type="email" className="input" placeholder="you@example.com" autoComplete="email" value={d.email} onChange={set("email")} {...errProps("f-email", errors.email)} />
                   </FieldWrap>
-                  <FieldWrap id="f-phone" label="Phone" required error={errors.phone}>
+                  <FieldWrap id="f-phone" label="Phone" optional error={errors.phone}>
                     <input id="f-phone" type="tel" className="input" placeholder="+234" autoComplete="tel" value={d.phone} onChange={set("phone")} {...errProps("f-phone", errors.phone)} />
                   </FieldWrap>
                   <div className="span-2">

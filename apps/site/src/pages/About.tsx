@@ -12,7 +12,7 @@ export default function About() {
           </h1>
           <figure className="about-photo">
             <img src="/images/about.jpg" alt="A team working on laptops around a shared table" />
-            <figcaption>One place where a growing business can run its people, clients and daily work, even when the internet lets you down.</figcaption>
+            <figcaption>One place where a growing business can run its people, clients and daily work, with every record in its proper place.</figcaption>
           </figure>
         </div>
       </section>
@@ -25,7 +25,7 @@ export default function About() {
               Most growing businesses run on a patchwork of spreadsheets, chat groups, paper files and apps that don't talk to each other. Information gets lost, work gets
               repeated and nobody has the full picture.
             </p>
-            <p>WindVeal brings that work into one place. It's built to be simple enough for any team to pick up, and dependable enough to keep going when the connection doesn't.</p>
+            <p>WindVeal brings that work into one place. It's built to be simple enough for any team to pick up, and dependable enough to run the whole business on.</p>
           </div>
         </div>
       </section>
@@ -37,7 +37,7 @@ export default function About() {
             items={[
               { title: "Simple beats clever", text: "Tools should fit how your team already works, not the other way round." },
               { title: "Your data is yours", text: "Your organisation's records stay private, secure and under your control." },
-              { title: "Always available", text: "Business doesn't stop when the internet does, so neither should your tools." },
+              { title: "Built to rely on", text: "Every change is recorded, every number is real, and nothing is added without your say-so." },
             ]}
           />
         </div>

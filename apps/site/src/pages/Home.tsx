@@ -162,7 +162,7 @@ export default function Home() {
           <Benefits
             items={[
               { title: "Everything in one place", text: "Stop switching between spreadsheets, chats and apps. Your whole team works from one place." },
-              { title: "Works without internet", text: "Keep working through outages. Everything catches up when you're back online." },
+              { title: "The right access for everyone", text: "Give each person the workspaces they need, and keep sensitive details like pay private." },
               { title: "Start with what you have", text: "Bring in the spreadsheets you already use and be up and running fast." },
             ]}
           />
