@@ -271,7 +271,7 @@ button { font: inherit; color: inherit; }
 
 /* ---------- WindVeal logo: dark text on light backgrounds, white text on dark ones ---------- */
 .wv-logo { display: inline-flex; line-height: 0; }
-.wv-logo img { display: block; height: 100%; width: auto; }
+.wv-logo img { display: block; height: 100%; width: auto; -webkit-user-drag: none; user-select: none; }
 .wv-logo .on-dark { display: none; }
 :root[data-theme="dark"] .wv-logo:not(.fixed) .on-light { display: none; }
 :root[data-theme="dark"] .wv-logo:not(.fixed) .on-dark { display: block; }

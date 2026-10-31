@@ -25,7 +25,7 @@ function OrgMark({ size = 40 }: { size?: number }) {
   const { org } = useSession();
   return (
     <span className="mark" style={{ width: size, height: size, background: org.brandColor || "var(--navy)" }}>
-      {org.logoFileId ? <img src={publicFileUrl(org.logoFileId)} alt="" /> : org.name.slice(0, 1).toUpperCase()}
+      {org.logoFileId ? <img src={publicFileUrl(org.logoFileId)} alt="" draggable={false} /> : org.name.slice(0, 1).toUpperCase()}
     </span>
   );
 }
