@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { ArrowRight, ChevronDown, Menu, X } from "lucide-react";
+import { BrandLogo } from "@windveal/ui";
 import { GET_STARTED_URL, SIGN_IN_URL } from "../lib/site";
 import { WORKSPACE_LIST } from "../lib/workspaces";
 
 export function Logo({ light }: { light?: boolean }) {
-  return <img className="logo" src={light ? "/logo-light.png" : "/logo.png"} alt="WindVeal" width={196} height={40} />;
+  return <BrandLogo className="logo" tone={light ? "light" : "auto"} />;
 }
 
 export function Header({ overlay }: { overlay?: boolean }) {

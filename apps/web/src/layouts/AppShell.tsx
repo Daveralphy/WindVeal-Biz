@@ -5,7 +5,7 @@ import {
   Bell, Briefcase, ChevronDown, CircleHelp, CreditCard, Download, FileText, Home, LineChart, LogOut, Menu as MenuIcon, Moon,
   PanelLeftClose, PanelLeftOpen, Plus, Search, Settings, SquareCheck, User, UserPlus, Users, X,
 } from "lucide-react";
-import { Avatar, Menu, Progress, Switch, IconButton } from "@windveal/ui";
+import { Avatar, BrandLogo, Menu, Progress, Switch, IconButton } from "@windveal/ui";
 import { formatBytes, type Workspace } from "@windveal/shared";
 import { api, publicFileUrl } from "../lib/api";
 import { useSession } from "../lib/session";
@@ -76,7 +76,7 @@ function Sidebar({ mini, onToggle, onNavigate }: { mini: boolean; onToggle?: () 
           <Link to="/settings/billing" onClick={onNavigate}>Upgrade for more space →</Link>
         </div>
       )}
-      <div className="sb-foot"><img src="/logo.png" alt="WindVeal" /><span>v1.0</span></div>
+      <div className="sb-foot"><BrandLogo height={18} /><span>v1.0</span></div>
     </aside>
   );
 }

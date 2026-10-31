@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Building2, Check, Clock, Plus, Upload, UserCheck, X } from "lucide-react";
-import { Button, IconButton, Input, Notice, Segmented, Select, Textarea } from "@windveal/ui";
+import { BrandLogo, Button, IconButton, Input, Notice, Segmented, Select, Textarea } from "@windveal/ui";
 import { COUNTRIES, INDUSTRIES, PLAN_PRICES, TEAM_SIZES, currencyForCountry, formatMoney } from "@windveal/shared";
 import { api, ApiError, publicFileUrl } from "../../lib/api";
 import { ME_KEY, useMe, type Me } from "../../lib/session";
@@ -25,7 +25,7 @@ function Wizard({ step, children }: { step: string; children: ReactNode }) {
   const exit = async () => { await api.post("/api/auth/logout"); qc.clear(); navigate("/sign-in"); };
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
-      <header className="wz-top"><div className="in"><img src="/logo.png" alt="WindVeal" /><button className="link" onClick={exit}>Save and exit</button></div></header>
+      <header className="wz-top"><div className="in"><BrandLogo height={36} /><button className="link" onClick={exit}>Save and exit</button></div></header>
       <div className="wz-bar"><i style={{ width: `${((idx + 1) / STEPS.length) * 100}%` }} /></div>
       <div className="wz">
         <aside className="wz-side">

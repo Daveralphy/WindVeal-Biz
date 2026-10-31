@@ -1,3 +1,4 @@
+import { BrandLogo } from "@windveal/ui";
 /* Static, illustrative product UI built in HTML/CSS for marketing pages. */
 import type { ReactNode } from "react";
 import { FileText, Search } from "lucide-react";
@@ -9,7 +10,7 @@ export function AppShot({ active, label, children, short }: { active: string; la
     <div className={`shot${short ? " shot-short" : ""}`} role="img" aria-label={label}>
       <div className="shot-window">
         <aside className="shot-side">
-          <img src="/logo.png" alt="" className="shot-logo" />
+          <BrandLogo className="shot-logo" />
           {NAV.map((n) => (
             <span key={n} className={n === active ? "on" : undefined}>
               {n}

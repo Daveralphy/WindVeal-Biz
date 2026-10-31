@@ -268,3 +268,16 @@ button { font: inherit; color: inherit; }
   .drawer-head, .drawer-body, .drawer-foot { padding-left: 18px; padding-right: 18px; }
   .hide-sm { display: none !important; }
 }
+
+/* ---------- WindVeal logo: dark text on light backgrounds, white text on dark ones ---------- */
+.wv-logo { display: inline-flex; line-height: 0; }
+.wv-logo img { display: block; height: 100%; width: auto; }
+.wv-logo .on-dark { display: none; }
+:root[data-theme="dark"] .wv-logo:not(.fixed) .on-light { display: none; }
+:root[data-theme="dark"] .wv-logo:not(.fixed) .on-dark { display: block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .wv-logo:not(.fixed) .on-light { display: none; }
+  :root:not([data-theme="light"]) .wv-logo:not(.fixed) .on-dark { display: block; }
+}
+.wv-logo.always-light .on-light { display: none; }
+.wv-logo.always-light .on-dark { display: block; }

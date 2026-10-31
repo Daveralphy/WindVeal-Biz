@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check, KeyRound, Mail, UserPlus } from "lucide-react";
-import { Button, Checkbox, Input, Loading, Notice, PasswordInput } from "@windveal/ui";
+import { BrandLogo, Button, Checkbox, Input, Loading, Notice, PasswordInput } from "@windveal/ui";
 import { api, ApiError } from "../../lib/api";
 import { ME_KEY, useMe, type Me } from "../../lib/session";
 import { useForm } from "../../lib/form";
@@ -11,7 +11,7 @@ function AuthLayout({ children, photo, aside }: { children: ReactNode; photo: st
   return (
     <div className="auth">
       <div className="auth-form">
-        <Link to="/" className="logo" aria-label="WindVeal home"><img src="/logo.png" alt="WindVeal" /></Link>
+        <Link to="/" className="logo" aria-label="WindVeal home"><BrandLogo height={40} /></Link>
         <div className="auth-box">{children}</div>
         <div className="auth-legal"><span>© {new Date().getFullYear()} WindVeal</span><span>Privacy · Terms</span></div>
       </div>
@@ -25,7 +25,7 @@ function AuthLayout({ children, photo, aside }: { children: ReactNode; photo: st
 function SoloLayout({ children, topRight }: { children: ReactNode; topRight?: ReactNode }) {
   return (
     <div className="solo">
-      <div className="solo-top"><Link to="/"><img src="/logo.png" alt="WindVeal" /></Link>{topRight}</div>
+      <div className="solo-top"><Link to="/" aria-label="WindVeal home"><BrandLogo height={38} /></Link>{topRight}</div>
       <div className="solo-card">{children}</div>
     </div>
   );

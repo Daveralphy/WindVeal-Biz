@@ -37,7 +37,7 @@
 .sb-store .progress { margin: 8px 0 10px; }
 .sb-store a { font-weight: 600; color: var(--deep); }
 .sb-foot { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px 0; font-size: 11.5px; color: var(--muted); }
-.sb-foot img { height: 18px; display: block; }
+
 .mini .sb-store, .mini .sb-foot { display: none; }
 
 .main { min-width: 0; display: flex; flex-direction: column; }
@@ -69,7 +69,7 @@
 /* ---------- auth layout ---------- */
 .auth { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-height: 100vh; background: var(--surface); }
 .auth-form { display: flex; flex-direction: column; padding: 40px 72px; }
-.auth-form .logo img { height: 40px; display: block; }
+/* logo sizing comes from <BrandLogo height> */
 .auth-box { flex: 1; display: flex; flex-direction: column; justify-content: center; max-width: 440px; width: 100%; margin: 0 auto; padding: 40px 0; gap: 0; }
 .auth-box h1 { font-size: 42px; line-height: 1.05; font-weight: 800; margin-bottom: 10px; }
 .auth-box .sub { font-size: 16.5px; margin-bottom: 30px; }
@@ -89,7 +89,7 @@
 .link:hover { text-decoration: underline; }
 .solo { min-height: 100vh; background: var(--bg); display: flex; flex-direction: column; align-items: center; padding: 32px 24px; }
 .solo-top { width: 100%; max-width: 1200px; display: flex; justify-content: space-between; align-items: center; }
-.solo-top img { height: 38px; display: block; }
+
 .solo-card { background: var(--surface); border-radius: 28px; padding: 48px; max-width: 520px; width: 100%; margin: auto 0; text-align: center; box-shadow: var(--shadow); }
 .solo-card .ic { width: 64px; height: 64px; border-radius: 20px; background: var(--pale); color: var(--blue); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 22px; }
 .solo-card h1 { font-size: 32px; line-height: 1.1; font-weight: 800; margin-bottom: 10px; }
@@ -109,7 +109,7 @@
 /* ---------- setup wizard ---------- */
 .wz-top { background: var(--surface); border-bottom: 1px solid var(--line); }
 .wz-top .in { max-width: 1280px; margin: 0 auto; padding: 0 40px; height: 76px; display: flex; align-items: center; justify-content: space-between; }
-.wz-top img { height: 36px; display: block; }
+
 .wz { max-width: 1280px; margin: 0 auto; padding: 40px 40px 80px; display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 48px; align-items: start; }
 .wz-steps { list-style: none; margin: 0; padding: 0; }
 .wz-steps li { display: flex; gap: 14px; align-items: center; padding: 10px 0; font-size: 15px; color: var(--muted); position: relative; }
