@@ -12,6 +12,7 @@ import {
 import { api, ApiError, publicFileUrl } from "../../lib/api";
 import { ME_KEY, useSession } from "../../lib/session";
 import { useForm } from "../../lib/form";
+import { CONTACT_EMAIL } from "../../lib/config";
 import { fmtDate, timeAgo } from "../../lib/format";
 
 function SettingsTabs() {
@@ -433,14 +434,14 @@ function Billing() {
             </div>
           ))}
         </div>
-        <div className="ent-row" style={{ marginTop: 14 }}><div><b className="ink" style={{ fontFamily: "var(--display)", fontSize: 16, display: "block" }}>Enterprise</b>Storage, AI and support built around your organisation.</div><a className="btn btn-secondary" href="mailto:hello@windveal.com">Talk to us</a></div>
+        <div className="ent-row" style={{ marginTop: 14 }}><div><b className="ink" style={{ fontFamily: "var(--display)", fontSize: 16, display: "block" }}>Enterprise</b>Storage, AI and support built around your organisation.</div><a className="btn btn-secondary" href={`mailto:${CONTACT_EMAIL}`}>Talk to us</a></div>
       </Card>
       <div className="grid-2">
         <Card title="Payment method" subtitle="Added when you upgrade."><EmptyState title="No payment method">{org.plan === "free" ? "You're on the Free plan." : ""}</EmptyState></Card>
         <Card title="Invoices" subtitle="Download receipts for your records."><EmptyState title="No invoices yet">Invoices will appear here after you upgrade.</EmptyState></Card>
       </div>
       <Modal open={!!upgrade} onClose={() => setUpgrade(null)} title="Online payments are coming soon" footer={<Button onClick={() => setUpgrade(null)}>OK</Button>}>
-        <p>Card and bank payments for {org.currency} will be added before launch. To upgrade now, email <a className="link" href="mailto:hello@windveal.com">hello@windveal.com</a> and we'll set it up for you.</p>
+        <p>Card and bank payments for {org.currency} will be added before launch. To upgrade now, email <a className="link" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> and we'll set it up for you.</p>
       </Modal>
     </>
   );

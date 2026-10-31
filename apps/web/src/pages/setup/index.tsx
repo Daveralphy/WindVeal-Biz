@@ -7,6 +7,7 @@ import { COUNTRIES, INDUSTRIES, PLAN_PRICES, TEAM_SIZES, currencyForCountry, for
 import { api, ApiError, publicFileUrl } from "../../lib/api";
 import { ME_KEY, useMe, type Me } from "../../lib/session";
 import { useForm } from "../../lib/form";
+import { CONTACT_EMAIL } from "../../lib/config";
 
 const STEPS = [
   { key: "account", label: "Your account" },
@@ -324,7 +325,7 @@ function Plan() {
           </button>
         ))}
       </div>
-      <div className="ent-row"><div><h4 style={{ fontSize: 17 }}>Enterprise</h4><span>Storage, AI and support built around your organisation.</span></div><a className="btn btn-secondary" href="mailto:hello@windveal.com">Talk to us</a></div>
+      <div className="ent-row"><div><h4 style={{ fontSize: 17 }}>Enterprise</h4><span>Storage, AI and support built around your organisation.</span></div><a className="btn btn-secondary" href={`mailto:${CONTACT_EMAIL}`}>Talk to us</a></div>
       <p className="field-hint" style={{ marginTop: 12 }}>No payment needed now. {plan !== "free" ? "You'll start on Free and can add payment details to upgrade from Settings → Plan and billing." : ""}</p>
       <div className="wz-foot">
         <Link to="/setup/branding" className="link row"><ArrowLeft size={15} />Back</Link>

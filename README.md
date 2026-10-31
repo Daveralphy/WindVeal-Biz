@@ -60,16 +60,13 @@ pnpm install
 cp apps/api/.env.example apps/api/.env
 pnpm db:up        # start PostgreSQL in Docker (port 5433)
 pnpm db:push      # create the database tables
-pnpm db:seed      # optional: load demo data (see below)
 ```
 
-**Demo data.** `pnpm db:seed` creates a sample business, *Sunrise Foods*, with people, jobs, candidates, clients, deals, tasks and approvals, plus WindVeal's own careers page. Sign in with any of these (password `Sunrise#2026x`):
+The database starts empty: nothing is pre-filled. Register WindVeal (or any business) through the app the same way a real customer would.
 
-| Email | Role |
-| --- | --- |
-| amaka@sunrisefoods.test | Admin (primary admin) |
-| kofi@sunrisefoods.test | Manager |
-| efua@sunrisefoods.test | Member |
+**Starting over.** `pnpm db:reset` permanently deletes everything on this computer (the database, uploaded files and the dev mailbox) and gives you a fresh, empty database. It asks you to type `DELETE` first.
+
+**Settings.** Contact emails, website links and which careers page "Careers at WindVeal" opens are set in `apps/web/.env` and `apps/site/.env` (copy the `.env.example` files). Nothing business-specific is written into the code.
 
 ### Run everything
 
@@ -79,13 +76,14 @@ pnpm dev          # API + business app + public site together
 
 Then open http://localhost:5173 and create an account. In development no real emails are sent: verification codes, invitation links and password reset links appear at http://localhost:5173/dev/mailbox (and in the API console).
 
-To test the public careers page, open **Settings → Organisation** and use **Mark as verified** (development only), publish a job in **Recruitment**, then visit http://localhost:5174/careers/your-organisation-slug.
+To test the public careers page, open **Settings → Organisation** and use **Mark as verified** (development only), publish a job in **Recruitment**, then visit http://localhost:5174/careers/your-organisation-slug (for WindVeal, `windveal`).
 
 ### Checks
 
 ```bash
 pnpm typecheck    # TypeScript across all packages
 pnpm test         # API tests (use a separate database, windveal_test)
+pnpm test:e2e     # browser tests in Edge (use a throwaway database with a fictional test business)
 pnpm build        # production builds
 ```
 

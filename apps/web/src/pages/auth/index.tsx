@@ -4,9 +4,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check, KeyRound, Mail, UserPlus } from "lucide-react";
 import { BrandLogo, Button, Checkbox, Input, Loading, Notice, PasswordInput } from "@windveal/ui";
 import { api, ApiError } from "../../lib/api";
+import { SITE_URL } from "../../lib/config";
 
-/** The public website (home page). */
-const SITE_URL = import.meta.env.VITE_SITE_URL ?? "http://localhost:5174";
 import { ME_KEY, useMe, type Me } from "../../lib/session";
 import { useForm } from "../../lib/form";
 

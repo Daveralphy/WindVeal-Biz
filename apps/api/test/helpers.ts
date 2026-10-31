@@ -35,7 +35,7 @@ export class Client {
   del = (u: string) => this.req("DELETE", u);
 }
 
-export const PASSWORD = "Sunrise#2026x";
+export const PASSWORD = "Testing#2026x";
 
 export async function signUp(app: FastifyInstance, name = "Test Person") {
   const c = new Client(app);
@@ -48,7 +48,7 @@ export async function signUp(app: FastifyInstance, name = "Test Person") {
   return { c, email };
 }
 
-export async function signUpWithOrg(app: FastifyInstance, orgName = `Sunrise ${randomUUID().slice(0, 6)}`) {
+export async function signUpWithOrg(app: FastifyInstance, orgName = `Test Org ${randomUUID().slice(0, 6)}`) {
   const { c, email } = await signUp(app, "Amaka Okafor");
   const r = await c.post("/api/org", {
     legalName: `${orgName} Limited`, tradingName: orgName, industry: "Retail", teamSize: "11 to 50 people",

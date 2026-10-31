@@ -1,3 +1,4 @@
+import { COMPANY_CAREERS_PATH } from "../lib/site";
 import { Benefits, CtaBand, MarketingLayout } from "../components/Layout";
 import { useTitle } from "../lib/site";
 
@@ -71,7 +72,7 @@ export default function About() {
         title="Want to work with us?"
         text="Join our team, or get in touch to talk about WindVeal for your business."
         primary={{ label: "Contact us", href: "/contact" }}
-        secondary={{ label: "Careers at WindVeal", href: "/careers/windveal" }}
+        secondary={{ label: "Careers at WindVeal", href: COMPANY_CAREERS_PATH }}
       />
     </MarketingLayout>
   );

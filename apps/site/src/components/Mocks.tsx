@@ -208,7 +208,7 @@ const DEALS: { stage: string; count: number; cards: [string, string, string, str
     count: 6,
     cards: [
       ["Harbour Logistics", "Fleet services", "KM", "$12k"],
-      ["Sunrise Foods", "Supply contract", "AO", "$8k"],
+      ["Savanna Mart", "Supply contract", "AO", "$8k"],
       ["Bluegate Schools", "Uniforms", "EN", "$5k"],
     ],
   },
@@ -458,7 +458,7 @@ export function MiniDeals() {
       "Lead",
       [
         ["Harbour Logistics", "Fleet", "KM", "$12k"],
-        ["Sunrise Foods", "Supply", "AO", "$8k"],
+        ["Savanna Mart", "Supply", "AO", "$8k"],
       ],
     ],
     ["Proposal", [["Northline Hotels", "Linen", "AO", "$15k"]]],

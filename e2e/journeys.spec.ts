@@ -46,8 +46,8 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
 test("a candidate applies on the careers page and is hired into People & HR", async ({ page, context }) => {
   const errors = watchErrors(page);
   // Public careers page (no sign-in).
-  await page.goto("http://localhost:5174/careers/sunrise-foods");
-  await expect(page.getByRole("heading", { name: "Sunrise Foods" })).toBeVisible();
+  await page.goto("http://localhost:5174/careers/example-trading");
+  await expect(page.getByRole("heading", { name: "Example Trading" })).toBeVisible();
   await page.getByRole("link", { name: /Accounts Officer/ }).first().click();
   await expect(page.getByRole("heading", { name: "Accounts Officer" })).toBeVisible();
   await page.getByRole("link", { name: /Apply for this role/ }).first().click();

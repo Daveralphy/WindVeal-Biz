@@ -22,11 +22,11 @@ async function upload(app: FastifyInstance, c: Client, fileName: string, content
 
 const STAFF_CSV = [
   "Full Name,Email,Dept,Start,Mgr,Phone No.",
-  "Ngozi Eze,ngozi@sunrise.ng,Finance,03/02/2021,,0803 555 0100",
-  "Amaka Okafor,amaka@sunrise.ng,Finance,15/07/2022,N. Eze,0803 555 0142",
+  "Ngozi Eze,ngozi@example.test,Finance,03/02/2021,,0803 555 0100",
+  "Amaka Okafor,amaka@example.test,Finance,15/07/2022,N. Eze,0803 555 0142",
   "Kofi Mensah,kofi.mensah@gmail.com,Sales,01/03/2020,Ngozi Eze,0812 555 0199",
   "Efua Nyarko,efua@bad,Sales,02/04/2023,,0705 555 0110",
-  "John Obi,john@sunrise.ng,Operations,1 Mar 2020,Someone Unknown,0909 555 0137",
+  "John Obi,john@example.test,Operations,1 Mar 2020,Someone Unknown,0909 555 0137",
 ].join("\n");
 
 async function orgIdOf(c: Client) {
@@ -39,7 +39,7 @@ describe("imports", () => {
     const { c } = await signUpWithOrg(app);
     const orgId = await orgIdOf(c);
     // An existing employee who also appears in the file.
-    const [existing] = await db.insert(employees).values({ orgId, firstName: "Kofi", lastName: "Mensah", email: "kofi.m@sunrise.ng" }).returning();
+    const [existing] = await db.insert(employees).values({ orgId, firstName: "Kofi", lastName: "Mensah", email: "kofi.m@example.test" }).returning();
 
     const up = await upload(app, c, "staff_list.csv", STAFF_CSV);
     expect(up.status).toBe(200);
@@ -70,7 +70,7 @@ describe("imports", () => {
     expect(dup.decision).toBe("skip");
 
     const cmp = await c.get(`/api/imports/jobs/${job.id}/duplicate/${dup.id}`);
-    expect(cmp.body.existing.email).toBe("kofi.m@sunrise.ng");
+    expect(cmp.body.existing.email).toBe("kofi.m@example.test");
     expect(cmp.body.incoming.email).toBe("kofi.mensah@gmail.com");
 
     const ready = await c.get(`/api/imports/jobs/${job.id}/rows?tab=ready`);
@@ -129,7 +129,7 @@ describe("imports", () => {
     const app = await getApp();
     const { c } = await signUpWithOrg(app);
     const orgId = await orgIdOf(c);
-    const [existing] = await db.insert(employees).values({ orgId, firstName: "Kofi", lastName: "Mensah", email: "kofi.m@sunrise.ng", jobTitle: "Rep" }).returning();
+    const [existing] = await db.insert(employees).values({ orgId, firstName: "Kofi", lastName: "Mensah", email: "kofi.m@example.test", jobTitle: "Rep" }).returning();
     const up = await upload(app, c, "staff.csv", STAFF_CSV);
     const jobId = up.body.job.id;
     const rows = (await c.get(`/api/imports/jobs/${jobId}/rows?tab=all`)).body.rows;
@@ -137,7 +137,7 @@ describe("imports", () => {
     const efua = rows.find((r: any) => r.label === "Efua Nyarko");
     const john = rows.find((r: any) => r.label === "John Obi");
     expect((await c.patch(`/api/imports/rows/${kofi.id}`, { decision: "update" })).body.row.decision).toBe("update");
-    const fixed = await c.patch(`/api/imports/rows/${efua.id}`, { values: { email: "efua@sunrise.ng" } });
+    const fixed = await c.patch(`/api/imports/rows/${efua.id}`, { values: { email: "efua@example.test" } });
     expect(fixed.body.row.status).toBe("ready");
     expect((await c.patch(`/api/imports/rows/${john.id}`, { excluded: true })).body.row.status).toBe("excluded");
     const commit = await c.post(`/api/imports/jobs/${jobId}/commit`, { confirm: true });
@@ -195,19 +195,19 @@ describe("imports", () => {
     const staff = wb.addWorksheet("Employees");
     staff.addRow([]);
     staff.addRow(["Full Name", "Dept", "Start", "Email"]);
-    staff.addRow(["Amaka Okafor", "Finance", new Date(Date.UTC(2021, 1, 3)), { text: "amaka@sunrise.ng", hyperlink: "mailto:amaka@sunrise.ng" }]);
+    staff.addRow(["Amaka Okafor", "Finance", new Date(Date.UTC(2021, 1, 3)), { text: "amaka@example.test", hyperlink: "mailto:amaka@example.test" }]);
     const clients = wb.addWorksheet("Clients");
     clients.addRow(["Company", "Contact person", "Email"]);
     clients.addRow(["Northline Hotels", "Grace Adeyemi", "grace@northline.ng"]);
     const buf = Buffer.from(await wb.xlsx.writeBuffer() as ArrayBuffer);
-    const up = await upload(app, c, "sunrise_records.xlsx", buf);
+    const up = await upload(app, c, "staff_records.xlsx", buf);
     expect(up.status).toBe(200);
     const [s1, s2] = up.body.job.sheets;
     expect(s1).toMatchObject({ name: "Employees", rowCount: 1, destination: "people.employees" });
     expect(s2).toMatchObject({ name: "Clients", rowCount: 1, destination: "crm.companies" });
     const rows = (await c.get(`/api/imports/jobs/${up.body.job.id}/rows?sheet=Employees`)).body.rows;
     expect(rows[0].rowNumber).toBe(3);
-    expect(rows[0].values).toMatchObject({ startDate: "2021-02-03", email: "amaka@sunrise.ng", department: "Finance" });
+    expect(rows[0].values).toMatchObject({ startDate: "2021-02-03", email: "amaka@example.test", department: "Finance" });
     const commit = await c.post(`/api/imports/jobs/${up.body.job.id}/commit`, { confirm: true });
     expect(commit.body.job.summary).toMatchObject({ added: 2, employees: 1, companies: 1, contacts: 1 });
   });

@@ -131,7 +131,7 @@ export function Library({ view, folderId, onUpload, archivedCount }: { view: Lib
       <aside className="dc-side hide-sm"><FolderTreeNav folders={folders} rootTotal={rootTotal} current={folderId} archived={archivedCount} view={view} /></aside>
       <div className="dc-main">
         <div className="toolbar dc-toolbar">
-          <SearchInput value={q} onChange={setQ} placeholder={'Search files, or try "contract Northline"'} />
+          <SearchInput value={q} onChange={setQ} placeholder="Search files by name, tag or category" />
           <Select className="chip-select" aria-label="Type" value={type} onChange={(e) => setType(e.target.value)}>
             <option value="">Type: All</option>
             <option value="pdf">PDF</option><option value="doc">Documents</option><option value="xls">Spreadsheets</option><option value="img">Images</option><option value="other">Other</option>

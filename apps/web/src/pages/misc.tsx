@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { BookOpen, Compass, LifeBuoy, Mail } from "lucide-react";
 import { Card, EmptyState, Loading, PageHeader } from "@windveal/ui";
 import { api } from "../lib/api";
+import { SUPPORT_EMAIL } from "../lib/config";
 import { timeAgo } from "../lib/format";
 
 export function Help() {
@@ -30,7 +31,7 @@ export function Help() {
       </div>
       <Card title="Still need help?" subtitle="We usually reply within one working day.">
         <div className="row" style={{ gap: 18, flexWrap: "wrap" }}>
-          <a className="btn btn-primary" href="mailto:support@windveal.com"><Mail size={16} />Email support</a>
+          <a className="btn btn-primary" href={`mailto:${SUPPORT_EMAIL}`}><Mail size={16} />Email support</a>
           <span className="row muted"><LifeBuoy size={16} />Keyboard shortcuts: Ctrl K to search, Ctrl B to collapse the sidebar.</span>
         </div>
       </Card>

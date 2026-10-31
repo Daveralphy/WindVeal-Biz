@@ -1,3 +1,4 @@
+import { COMPANY_CAREERS_PATH } from "../lib/site";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
@@ -49,7 +50,7 @@ export function Footer() {
                 <Link to="/contact">Contact</Link>
               </li>
               <li>
-                <Link to="/careers/windveal">Careers at WindVeal</Link>
+                <Link to={COMPANY_CAREERS_PATH}>Careers at WindVeal</Link>
               </li>
             </ul>
           </div>

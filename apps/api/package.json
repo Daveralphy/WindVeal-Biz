@@ -10,8 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:push": "drizzle-kit push --force",
-    "db:generate": "drizzle-kit generate",
-    "db:seed": "tsx --env-file=.env src/db/seed.ts"
+    "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.1",

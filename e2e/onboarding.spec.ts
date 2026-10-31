@@ -38,7 +38,7 @@ test("a new business signs up, sets up and lands on Overview", async ({ page }) 
 
 test("wrong password shows one clear message", async ({ page }) => {
   await page.goto("/sign-in");
-  await page.getByLabel("Email").fill("amaka@sunrisefoods.test");
+  await page.getByLabel("Email").fill("admin@example-trading.test");
   await page.getByLabel("Password", { exact: true }).fill("Not#theRight1");
   await page.getByRole("button", { name: /^Sign in/ }).click();
   await expect(page.getByText("Email or password is incorrect.")).toBeVisible();
@@ -46,7 +46,7 @@ test("wrong password shows one clear message", async ({ page }) => {
 
 test("the admin sees the demo business and can open each workspace", async ({ page }) => {
   await signIn(page);
-  await expect(page.getByText("Sunrise Foods").first()).toBeVisible();
+  await expect(page.getByText("Example Trading").first()).toBeVisible();
   for (const [href, heading] of [["/recruitment", "Recruitment"], ["/people", "People & HR"], ["/crm", "CRM"], ["/workflows", "Workflows"], ["/documents", "Documents"], ["/insights", "Insights"], ["/settings", "Settings"]] as const) {
     await page.locator(`nav[aria-label="Main"] a[href="${href}"]`).click();
     await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
@@ -54,7 +54,7 @@ test("the admin sees the demo business and can open each workspace", async ({ pa
 });
 
 test("a member can't open admin-only settings", async ({ page }) => {
-  await signIn(page, "efua@sunrisefoods.test");
+  await signIn(page, "member@example-trading.test");
   await page.goto("/settings/audit");
   await expect(page).toHaveURL(/\/settings$/);
   await expect(page.getByRole("link", { name: "Audit history" })).toHaveCount(0);

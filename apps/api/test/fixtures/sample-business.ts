@@ -1,22 +1,19 @@
 /**
- * Demo data for local testing. Creates two verified organisations:
- *  - "Sunrise Foods" (slug sunrise-foods) with people, jobs, candidates, clients, deals, tasks and approvals
- *  - "WindVeal" (slug windveal) with an open job, so "Careers at WindVeal" works
- * Safe to run more than once: it skips organisations that already exist.
- *
- * Sign in as amaka@sunrisefoods.test / Sunrise#2026x (admin), kofi@sunrisefoods.test (manager),
- * efua@sunrisefoods.test (member) — all with the same password.
+ * TEST DATA ONLY. Loads a fictional business ("Example Trading", slug example-trading) into a
+ * throwaway test database for the browser tests (see e2e/prepare.mjs). Never run this against
+ * your real database. Sign in as admin@example-trading.test / Testing#2026x (admin),
+ * manager@example-trading.test (manager), member@example-trading.test (member).
  */
 import { eq } from "drizzle-orm";
 import { DEFAULT_DEAL_STAGES, DEFAULT_LEAD_STAGES, DEFAULT_RECRUITMENT_STAGES } from "@windveal/shared";
-import { db, sql } from "./client";
-import * as s from "./schema";
-import { hashPassword } from "../lib/crypto";
-import { seedOrgDefaults } from "../modules/org/defaults";
-import { createApproval } from "../lib/approvals";
-import { createTask, startChecklist } from "../lib/tasks";
+import { db, sql } from "../../src/db/client";
+import * as s from "../../src/db/schema";
+import { hashPassword } from "../../src/lib/crypto";
+import { seedOrgDefaults } from "../../src/modules/org/defaults";
+import { createApproval } from "../../src/lib/approvals";
+import { createTask, startChecklist } from "../../src/lib/tasks";
 
-const PASSWORD = "Sunrise#2026x";
+const PASSWORD = "Testing#2026x";
 const DAY = 86_400_000;
 const d = (offset: number) => new Date(Date.now() + offset * DAY);
 const ymd = (offset: number) => d(offset).toISOString().slice(0, 10);
@@ -28,19 +25,19 @@ async function user(email: string, name: string, hash: string) {
   return u!;
 }
 
-async function sunrise(hash: string) {
-  const [exists] = await db.select().from(s.organisations).where(eq(s.organisations.slug, "sunrise-foods")).limit(1);
-  if (exists) { console.log("Sunrise Foods already exists — skipping."); return; }
+async function sampleBusiness(hash: string) {
+  const [exists] = await db.select().from(s.organisations).where(eq(s.organisations.slug, "example-trading")).limit(1);
+  if (exists) { console.log("Example Trading already exists — skipping."); return; }
 
-  const amaka = await user("amaka@sunrisefoods.test", "Amaka Okafor", hash);
-  const kofi = await user("kofi@sunrisefoods.test", "Kofi Mensah", hash);
-  const efua = await user("efua@sunrisefoods.test", "Efua Nyarko", hash);
-  const fatima = await user("fatima@sunrisefoods.test", "Fatima Abubakar", hash);
+  const amaka = await user("admin@example-trading.test", "Amaka Okafor", hash);
+  const kofi = await user("manager@example-trading.test", "Kofi Mensah", hash);
+  const efua = await user("member@example-trading.test", "Efua Nyarko", hash);
+  const fatima = await user("hr@example-trading.test", "Fatima Abubakar", hash);
 
   const [org] = await db.insert(s.organisations).values({
-    slug: "sunrise-foods", legalName: "Sunrise Foods Limited", tradingName: "Sunrise Foods", industry: "Food and beverage distribution",
+    slug: "example-trading", legalName: "Example Trading Limited", tradingName: "Example Trading", industry: "Food and beverage distribution",
     teamSize: "51 to 200 people", country: "NG", currency: "NGN", city: "Lagos", address: "14 Creek Road, Apapa", registrationNumber: "RC 1048291",
-    website: "sunrisefoods.example", verificationStatus: "verified", ownerName: "Chinedu Okafor", ownerEmail: "chinedu@sunrisefoods.test",
+    website: "example-trading.test", verificationStatus: "verified", ownerName: "Chinedu Okafor", ownerEmail: "chinedu@example-trading.test",
     createdBy: amaka.id, brandColor: "#1E6B47", tagline: "Fresh food, delivered to the businesses that feed Nigeria.",
     about: "Since 2012 we've supplied fresh produce and pantry staples to restaurants, hotels and shops across Lagos and Abuja.",
     setupStep: "done", settings: { leadStages: DEFAULT_LEAD_STAGES, dealStages: DEFAULT_DEAL_STAGES, perks: ["Health cover for you and your family", "Paid training and clear paths to promotion", "Staff meals and transport support", "20 days paid leave"] },
@@ -64,7 +61,7 @@ async function sunrise(hash: string) {
   const emp = async (first: string, last: string, title: string, dept: string, opts: Partial<typeof s.employees.$inferInsert> = {}) => {
     const [row] = await db.insert(s.employees).values({
       orgId, firstName: first, lastName: last, jobTitle: title, departmentId: depts[dept], location: "Lagos", employmentType: "Full-time",
-      email: `${first.toLowerCase()}.${last.toLowerCase()}@sunrisefoods.test`, phone: "0803 555 01" + String(Math.floor(Math.random() * 90) + 10),
+      email: `${first.toLowerCase()}.${last.toLowerCase()}@example-trading.test`, phone: "0803 555 01" + String(Math.floor(Math.random() * 90) + 10),
       startDate: ymd(-400 - Math.floor(Math.random() * 900)), status: "active", ...opts,
     }).returning();
     await db.insert(s.employmentHistory).values({ orgId, employeeId: row!.id, occurredOn: row!.startDate ?? ymd(-400), event: `Joined as ${title}` });
@@ -168,32 +165,9 @@ async function sunrise(hash: string) {
   await db.insert(s.approvalRules).values({ orgId, kind: "purchase", minAmount: "250000", approverUserId: fatima.id, label: "Finance" });
   await createApproval({ orgId, kind: "purchase", title: "Delivery van tyres", details: "4 tyres for van LAG-482-KJ. Two are worn below the safe limit.", amount: 480000, requestedBy: kofi.id, firstApproverUserId: amaka.id, firstLabel: "Operations manager" });
 
-  console.log("✓ Sunrise Foods created — sign in as amaka@sunrisefoods.test /", PASSWORD);
-}
-
-async function windveal(hash: string) {
-  const [exists] = await db.select().from(s.organisations).where(eq(s.organisations.slug, "windveal")).limit(1);
-  if (exists) { console.log("WindVeal already exists — skipping."); return; }
-  const admin = await user("admin@windveal.test", "WindVeal Admin", hash);
-  const [org] = await db.insert(s.organisations).values({
-    slug: "windveal", legalName: "WindVeal Limited", tradingName: "WindVeal", industry: "Technology", teamSize: "11 to 50 people",
-    country: "NG", currency: "NGN", city: "Lagos", address: "Lagos, Nigeria", verificationStatus: "verified", createdBy: admin.id,
-    brandColor: "#263F91", tagline: "Building the platform growing businesses run on.", setupStep: "done",
-    about: "WindVeal builds WindVeal Biz Platform: one place for a business's people, customers, documents and daily work.",
-    settings: { leadStages: DEFAULT_LEAD_STAGES, dealStages: DEFAULT_DEAL_STAGES, perks: ["Remote-friendly", "Learning budget", "Health cover"] },
-  }).returning();
-  await db.insert(s.memberships).values({ orgId: org!.id, userId: admin.id, role: "admin", isPrimaryAdmin: true, isOwner: true });
-  await seedOrgDefaults(db, org!.id, admin.id);
-  await db.insert(s.jobs).values({
-    orgId: org!.id, title: "Product Designer", slug: "product-designer", location: "Lagos (hybrid)", employmentType: "Full-time",
-    description: "Help shape how growing businesses run their day.\n\nWhat you'll do\n• Design clear, calm screens\n• Work closely with engineers and customers",
-    status: "open", published: true, openedAt: new Date(), stages: DEFAULT_RECRUITMENT_STAGES, hiringManagerUserId: admin.id,
-    questions: [{ id: "q1", label: "Link to your portfolio", type: "text", required: true }],
-  });
-  console.log("✓ WindVeal created — sign in as admin@windveal.test /", PASSWORD);
+  console.log("✓ Example Trading created — sign in as admin@example-trading.test /", PASSWORD);
 }
 
 const hash = await hashPassword(PASSWORD);
-await sunrise(hash);
-await windveal(hash);
+await sampleBusiness(hash);
 await sql.end();

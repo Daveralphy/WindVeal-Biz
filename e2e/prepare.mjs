@@ -1,4 +1,4 @@
-// Recreates the e2e database and loads demo data. Runs before Playwright starts the servers.
+// Recreates the throwaway e2e database and loads the fictional test business. Runs before Playwright starts the servers.
 import { execSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,4 +13,4 @@ await admin.end();
 const api = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../apps/api");
 const env = { ...process.env, DATABASE_URL: url };
 execSync("npx drizzle-kit push --force", { cwd: api, stdio: "ignore", env });
-execSync("npx tsx src/db/seed.ts", { cwd: api, stdio: "inherit", env });
+execSync("npx tsx test/fixtures/sample-business.ts", { cwd: api, stdio: "inherit", env });

@@ -1,8 +1,8 @@
 import { expect, type Page } from "@playwright/test";
 
-export const PASSWORD = "Sunrise#2026x";
+export const PASSWORD = "Testing#2026x";
 
-export async function signIn(page: Page, email = "amaka@sunrisefoods.test", password = PASSWORD) {
+export async function signIn(page: Page, email = "admin@example-trading.test", password = PASSWORD) {
   await page.goto("/sign-in");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
