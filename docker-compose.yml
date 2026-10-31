@@ -1,0 +1,14 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: windveal-db
+    environment:
+      POSTGRES_USER: windveal
+      POSTGRES_PASSWORD: windveal
+      POSTGRES_DB: windveal
+    ports:
+      - "5433:5432"
+    volumes:
+      - windveal-db:/var/lib/postgresql/data
+volumes:
+  windveal-db:

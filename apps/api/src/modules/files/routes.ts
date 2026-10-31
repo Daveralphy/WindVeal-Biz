@@ -1,0 +1,124 @@
+import type { FastifyInstance, FastifyRequest } from "fastify";
+import { and, eq, isNull, sql as dsql } from "drizzle-orm";
+import { PLAN_LIMITS, hasAccess } from "@windveal/shared";
+import { db } from "../../db/client";
+import { fileLinks, fileVersions, files, folders } from "../../db/schema";
+import { requireOrg, type OrgContext } from "../../lib/context";
+import { AppError, badRequest, forbidden, notFound } from "../../lib/http";
+import { MAX_UPLOAD_BYTES, checkFileType, putObject, readObject } from "../../lib/storage";
+import { audit } from "../../lib/audit";
+
+export async function storageUsed(orgId: string): Promise<number> {
+  const [r] = await db.select({ n: dsql<number>`coalesce(sum(${files.size}),0)::bigint` }).from(files)
+    .where(and(eq(files.orgId, orgId), isNull(files.deletedAt)));
+  return Number(r?.n ?? 0);
+}
+
+/** Can this member open a file? Restricted folders limit access to listed roles; admins see everything. */
+export async function canReadFile(ctx: OrgContext, f: typeof files.$inferSelect): Promise<boolean> {
+  if (f.orgId !== ctx.org.id) return false;
+  if (ctx.membership.role === "admin") return true;
+  if (f.kind === "system") return true; // attachments are protected by the record they're linked to
+  if (!hasAccess(ctx.access.documents, "view")) return false;
+  if (!f.folderId) return true;
+  const [folder] = await db.select().from(folders).where(eq(folders.id, f.folderId)).limit(1);
+  if (!folder?.restricted) return true;
+  return folder.accessRoles.includes(ctx.membership.role);
+}
+
+type UploadQuery = { folderId?: string; kind?: "document" | "system"; linkType?: string; linkId?: string; category?: string; allowDuplicate?: string; replaceFileId?: string };
+
+/** Shared upload handler: validation (type, size, plan storage), duplicate detection, versioning. */
+export async function handleUpload(req: FastifyRequest<{ Querystring: UploadQuery }>, ctx: OrgContext) {
+  const part = await req.file({ limits: { fileSize: MAX_UPLOAD_BYTES } });
+  if (!part) throw badRequest("Choose a file to upload.");
+  const typeError = checkFileType(part.filename, part.mimetype);
+  if (typeError) throw new AppError(415, "file_type", typeError);
+  const buf = await part.toBuffer().catch(() => null);
+  if (!buf || part.file.truncated) throw new AppError(413, "file_too_large", `Too large. The limit is ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.`);
+  if (buf.length === 0) throw badRequest("That file is empty.");
+  const used = await storageUsed(ctx.org.id);
+  if (used + buf.length > PLAN_LIMITS[ctx.org.plan].storageBytes) {
+    throw new AppError(413, "storage_full", "Your organisation has run out of storage. Upgrade your plan for more space.");
+  }
+  const q = req.query;
+  const kind = q.kind ?? "document";
+  if (q.folderId) {
+    const [folder] = await db.select().from(folders).where(and(eq(folders.id, q.folderId), eq(folders.orgId, ctx.org.id), isNull(folders.deletedAt))).limit(1);
+    if (!folder) throw notFound("That folder");
+    if (folder.restricted && ctx.membership.role !== "admin" && !folder.accessRoles.includes(ctx.membership.role)) throw forbidden();
+  }
+  const stored = await putObject(ctx.org.id, buf);
+
+  // New version of an existing file.
+  if (q.replaceFileId) {
+    const [f] = await db.select().from(files).where(and(eq(files.id, q.replaceFileId), eq(files.orgId, ctx.org.id))).limit(1);
+    if (!f) throw notFound("That file");
+    const v = f.currentVersion + 1;
+    await db.insert(fileVersions).values({ fileId: f.id, version: v, storageKey: stored.key, size: stored.size, uploadedBy: ctx.user.id });
+    const [u] = await db.update(files).set({ storageKey: stored.key, size: stored.size, sha256: stored.sha256, currentVersion: v, mime: part.mimetype })
+      .where(eq(files.id, f.id)).returning();
+    await audit(ctx, { action: "file.new_version", category: "data", entityType: "file", entityId: f.id, summary: `${ctx.user.name} uploaded version ${v} of ${f.name}` });
+    return { file: u!, duplicateOf: null };
+  }
+
+  if (q.allowDuplicate !== "1" && kind === "document") {
+    const [dup] = await db.select().from(files)
+      .where(and(eq(files.orgId, ctx.org.id), eq(files.sha256, stored.sha256), isNull(files.deletedAt), isNull(files.archivedAt))).limit(1);
+    if (dup) return { file: null, duplicateOf: { id: dup.id, name: dup.name, folderId: dup.folderId } };
+  }
+
+  const [f] = await db.insert(files).values({
+    orgId: ctx.org.id, folderId: q.folderId ?? null, name: part.filename, mime: part.mimetype, size: stored.size, storageKey: stored.key,
+    sha256: stored.sha256, kind, category: q.category ?? null, uploadedBy: ctx.user.id,
+  }).returning();
+  await db.insert(fileVersions).values({ fileId: f!.id, version: 1, storageKey: stored.key, size: stored.size, uploadedBy: ctx.user.id });
+  if (q.linkType && q.linkId) {
+    await db.insert(fileLinks).values({ orgId: ctx.org.id, fileId: f!.id, linkType: q.linkType, linkId: q.linkId });
+  }
+  if (kind === "document") {
+    await audit(ctx, { action: "file.uploaded", category: "data", entityType: "file", entityId: f!.id, summary: `${ctx.user.name} uploaded ${f!.name}` });
+  }
+  return { file: f!, duplicateOf: null };
+}
+
+export function fileView(f: typeof files.$inferSelect) {
+  return {
+    id: f.id, name: f.name, mime: f.mime, size: f.size, folderId: f.folderId, category: f.category, tags: f.tags, expiresOn: f.expiresOn,
+    currentVersion: f.currentVersion, kind: f.kind, uploadedBy: f.uploadedBy, createdAt: f.createdAt, updatedAt: f.updatedAt, archivedAt: f.archivedAt,
+  };
+}
+
+export default async function fileRoutes(app: FastifyInstance) {
+  app.post<{ Querystring: UploadQuery }>("/api/files", async (req) => {
+    const ctx = await requireOrg(req);
+    if ((req.query.kind ?? "document") === "document" && !hasAccess(ctx.access.documents, "edit")) throw forbidden("You can't upload to Documents.");
+    const r = await handleUpload(req, ctx);
+    return { file: r.file ? fileView(r.file) : null, duplicateOf: r.duplicateOf };
+  });
+
+  app.get<{ Params: { id: string }; Querystring: { download?: string } }>("/api/files/:id/content", async (req, reply) => {
+    const ctx = await requireOrg(req);
+    const [f] = await db.select().from(files).where(and(eq(files.id, req.params.id), isNull(files.deletedAt))).limit(1);
+    if (!f || !(await canReadFile(ctx, f))) throw notFound("That file");
+    reply.header("Content-Type", f.mime || "application/octet-stream");
+    reply.header("Content-Disposition", `${req.query.download ? "attachment" : "inline"}; filename="${encodeURIComponent(f.name)}"`);
+    reply.header("X-Content-Type-Options", "nosniff");
+    return reply.send(readObject(f.storageKey));
+  });
+
+  /** Public images (organisation logo/cover for the careers page). */
+  app.get<{ Params: { id: string } }>("/api/public/files/:id", async (req, reply) => {
+    const [f] = await db.select().from(files).where(and(eq(files.id, req.params.id), eq(files.isPublic, true), isNull(files.deletedAt))).limit(1);
+    if (!f || !f.mime.startsWith("image/")) throw notFound("That file");
+    reply.header("Content-Type", f.mime);
+    reply.header("Cache-Control", "public, max-age=300");
+    reply.header("X-Content-Type-Options", "nosniff");
+    return reply.send(readObject(f.storageKey));
+  });
+
+  app.get("/api/storage", async (req) => {
+    const ctx = await requireOrg(req);
+    return { used: await storageUsed(ctx.org.id), limit: PLAN_LIMITS[ctx.org.plan].storageBytes };
+  });
+}
