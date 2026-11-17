@@ -10,13 +10,13 @@ function watchErrors(page: Page) {
 }
 
 const SCREENS = [
-  "/", "/me/attendance", "/me/attendance/history", "/me/attendance/leave", "/me/attendance/holidays", "/me/tasks", "/me/tasks/mine", "/me/finance", "/me/finance/payslips", "/people", "/people/directory", "/people/departments", "/people/leave", "/people/attendance", "/people/onboarding",
+  "/", "/me/attendance", "/me/attendance/history", "/me/attendance/leave", "/me/attendance/holidays", "/me/tasks", "/me/tasks/mine", "/me/finance", "/me/finance/payslips", "/me/finance/expenses", "/me/requests", "/me/requests/handle", "/people", "/people/directory", "/people/departments", "/people/leave", "/people/attendance", "/people/onboarding",
   "/recruitment", "/recruitment/jobs", "/recruitment/candidates", "/recruitment/interviews", "/recruitment/careers", "/recruitment/jobs/new",
   "/crm", "/crm/pipeline", "/crm/companies", "/crm/leads", "/crm/follow-ups",
   "/workflows", "/workflows/mine", "/workflows/approvals", "/workflows/all", "/workflows/templates",
   "/documents", "/documents/library", "/documents/recent", "/documents/shared", "/documents/archive",
   "/insights", "/insights/sales", "/insights/people", "/insights/hiring", "/insights/work",
-  "/import", "/import/new", "/import/history", "/settings", "/settings/members", "/settings/invitations", "/settings/roles", "/settings/roles/new", "/billing", "/settings/audit", "/help",
+  "/import", "/import/new", "/import/history", "/settings", "/settings/members", "/settings/invitations", "/settings/roles", "/settings/requests", "/settings/roles/new", "/billing", "/settings/audit", "/help",
   "/profile", "/profile/edit", "/profile/company", "/profile/company/edit", "/admin", "/admin/organisations", "/admin/people",
 ];
 

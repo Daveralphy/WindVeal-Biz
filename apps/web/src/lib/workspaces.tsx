@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import {
   Briefcase, Building2, CalendarDays, CheckSquare, Clock, FileText, Flag, FolderOpen, Globe, History, LayoutDashboard, LineChart, ListChecks,
   ListTodo, Network, Phone, Rows3, Share2, Archive, SquareCheck, Stamp, UserPlus, UserSearch, Users, Workflow, BarChart3, Kanban,
-  Settings, ShieldCheck, Mail, Bell, Wallet, Sun, KeyRound, ScrollText, Upload, User, Building, Building2 as Org,
+  Settings, ShieldCheck, Mail, Bell, Wallet, Sun, Inbox, Receipt, KeyRound, ScrollText, Upload, User, Building, Building2 as Org,
 } from "lucide-react";
 import type { Workspace } from "@windveal/shared";
 import { useQuery } from "@tanstack/react-query";
@@ -10,7 +10,7 @@ import { useSession } from "./session";
 import { api } from "./api";
 
 /** What decides whether someone can see an area or one of its sections. */
-export type Viewer = { isAdmin: boolean; platformAdmin: boolean; canImport: boolean; canManageMembers: boolean; canDocuments: boolean; hasOnboarding: boolean };
+export type Viewer = { isAdmin: boolean; platformAdmin: boolean; canImport: boolean; canManageMembers: boolean; canDocuments: boolean; hasOnboarding: boolean; handlesRequests: boolean };
 
 /** A page inside a workspace, shown in that workspace's sidebar. */
 export type Section = {
@@ -25,7 +25,7 @@ export type Section = {
   also?: RegExp;
 };
 /** My Workspace is split into spaces, one per own thing (each with its own sidebar). */
-export type MineKey = "attendance" | "tasks" | "finance";
+export type MineKey = "attendance" | "tasks" | "finance" | "requests";
 export type AreaKey = Workspace | MineKey | "settings" | "admin" | "profile";
 export type WorkspaceDef = {
   key: AreaKey; label: string; base: string; icon: (size?: number) => ReactNode; blurb: string; sections: Section[];
@@ -67,6 +67,14 @@ export const WORKSPACE_DEFS: WorkspaceDef[] = [
     sections: [
       { to: "/me/finance", label: "Pay", icon: <Wallet size={18} /> },
       { to: "/me/finance/payslips", label: "Payslips", icon: <FileText size={18} /> },
+      { to: "/me/finance/expenses", label: "Expense claims", icon: <Receipt size={18} /> },
+    ],
+  },
+  {
+    key: "requests", label: "Requests", base: "/me/requests", icon: i(Inbox), blurb: "Ask for equipment, purchases, letters or help.", group: "mine",
+    sections: [
+      { to: "/me/requests", label: "My requests", icon: <Inbox size={18} /> },
+      { to: "/me/requests/handle", label: "To handle", icon: <CheckSquare size={18} />, badge: "requestsToHandle", visible: (v) => v.handlesRequests },
     ],
   },
   {
@@ -140,6 +148,7 @@ export const WORKSPACE_DEFS: WorkspaceDef[] = [
       { to: "/settings/members", label: "Members", icon: <Users size={18} /> },
       { to: "/settings/invitations", label: "Invitations", icon: <Mail size={18} />, badge: "invitations" },
       { to: "/settings/roles", label: "Roles", icon: <KeyRound size={18} />, visible: (v) => v.isAdmin },
+      { to: "/settings/requests", label: "Requests", icon: <Inbox size={18} />, visible: (v) => v.isAdmin },
       { to: "/settings/audit", label: "Audit history", icon: <ScrollText size={18} />, visible: (v) => v.isAdmin },
     ],
   },
@@ -179,11 +188,11 @@ export function sectionActive(ws: WorkspaceDef, s: Section, path: string): boole
 /** Who can open which areas and sections (workspace access for workspaces; roles for the rest). */
 export function useAreaAccess() {
   const { isAdmin, user, can, hasSpecial } = useSession();
-  const mine = useQuery({ queryKey: ["my", "summary"], queryFn: () => api.get<{ onboarding: boolean }>("/api/my/summary"), staleTime: 60_000 });
+  const mine = useQuery({ queryKey: ["my", "summary"], queryFn: () => api.get<{ onboarding: boolean; handles?: boolean }>("/api/my/summary"), staleTime: 60_000 });
   const importer = hasSpecial("import_data");
   const viewer: Viewer = {
     isAdmin, platformAdmin: !!user.platformAdmin, canManageMembers: hasSpecial("manage_members"), canDocuments: can("documents"),
-    hasOnboarding: !!mine.data?.onboarding,
+    hasOnboarding: !!mine.data?.onboarding, handlesRequests: !!mine.data?.handles,
     canImport: isAdmin || (["people", "crm", "recruitment"] as Workspace[]).some((w) => can(w, "manage") || (importer && can(w, "edit"))),
   };
   // Documents also opens for people who can only import.

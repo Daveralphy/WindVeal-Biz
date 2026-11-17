@@ -13,6 +13,7 @@ import { CONTACT_EMAIL } from "../../lib/config";
 import { monthlyPrice, usePricing, yearlyTotal, type PricingPlan } from "../../lib/pricing";
 import { fmtDate, timeAgo } from "../../lib/format";
 import { InviteModal, MemberPage, RolePage, RolesList } from "./access";
+import { RequestSettings } from "./requests";
 
 /** Admins, and people whose role lets them invite and manage members. */
 function useCanManageMembers() {
@@ -314,6 +315,7 @@ export function SettingsRoutes() {
         <Route path="roles/:id" element={isAdmin ? <RolePage /> : <Navigate to="/settings" replace />} />
         <Route path="billing" element={<Navigate to="/billing" replace />} />
         <Route path="audit" element={isAdmin ? <Audit /> : <Navigate to="/settings" replace />} />
+        <Route path="requests" element={isAdmin ? <RequestSettings /> : <Navigate to="/settings" replace />} />
         <Route path="profile" element={<Navigate to="/profile" replace />} />
         <Route path="*" element={<Navigate to="/settings" replace />} />
       </Routes>

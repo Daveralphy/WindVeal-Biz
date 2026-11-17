@@ -22,6 +22,7 @@ const ABOUT: Record<string, string> = {
   attendance: "Clock in and out, your hours, and your leave.",
   tasks: "Everything given to you, from anywhere in the business.",
   finance: "Your pay, payslips and expense claims.",
+  requests: "Ask for equipment, purchases, letters or help.",
   people: "See who's in today, approve leave, and keep everyone's records up to date.",
   recruitment: "Post jobs on your careers page, move candidates along and book interviews.",
   crm: "Follow leads and deals through your pipeline, and never miss a follow-up.",
@@ -101,7 +102,8 @@ function TaskAction() {
 function actionFor(key: string, employeeId?: string): ReactNode {
   if (key === "attendance") return <ClockAction />;
   if (key === "tasks") return <TaskAction />;
-  if (key === "finance") return undefined;
+  if (key === "finance") return <Link className="btn btn-secondary btn-sm" to="/me/finance/expenses?new=1"><Plus size={14} />New claim</Link>;
+  if (key === "requests") return <Link className="btn btn-secondary btn-sm" to="/me/requests"><Plus size={14} />New request</Link>;
   return undefined;
 }
 

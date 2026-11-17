@@ -1,8 +1,9 @@
 import type { FastifyInstance } from "fastify";
-import { and, eq, gte, isNotNull, isNull, lt, lte, ne, sql as dsql } from "drizzle-orm";
-import { formatMoney, hasAccess, type Workspace } from "@windveal/shared";
+import { and, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, sql as dsql } from "drizzle-orm";
+import { OPEN_REQUEST, formatMoney, hasAccess, type Workspace } from "@windveal/shared";
 import { db } from "../../db/client";
 import {
+  staffRequests,
   applications, approvalSteps, approvals, attendance, checklists, deals, employees, files, importJobs, interviews, invitations, jobs, memberships,
   organisations, tasks, users,
 } from "../../db/schema";
@@ -193,6 +194,13 @@ export default async function homeRoutes(app: FastifyInstance) {
       ];
       badges.adminWaiting = adminWaiting;
     }
+    // Everyone's own counts (My Workspace), whatever their access.
+    const [myOpen] = await db.select({ n: count }).from(tasks)
+      .where(and(eq(tasks.orgId, orgId), eq(tasks.assigneeUserId, ctx.user.id), ne(tasks.status, "done"), isNull(tasks.deletedAt)));
+    badges.myTasks = myOpen?.n ?? 0;
+    const [toHandle] = await db.select({ n: count }).from(staffRequests)
+      .where(and(eq(staffRequests.orgId, orgId), eq(staffRequests.handlerUserId, ctx.user.id), inArray(staffRequests.status, OPEN_REQUEST), isNull(staffRequests.deletedAt)));
+    badges.requestsToHandle = toHandle?.n ?? 0;
     return { tiles, badges, adminWaiting };
   });
 }

@@ -1,4 +1,4 @@
-import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid, bigint } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, numeric, pgTable, text, timestamp, uniqueIndex, uuid, bigint } from "drizzle-orm/pg-core";
 import type { AccessLevel, NotificationPrefs, ReviewRequest, Workspace } from "@windveal/shared";
 import { pk, timestamps, tracked } from "./_common";
 
@@ -67,6 +67,8 @@ export type OrgSettings = {
   /** Organisation-level defaults per role (Settings → Roles and permissions). */
   roleAccess?: Partial<Record<"manager" | "member", Partial<Record<Workspace, AccessLevel>>>>;
   roleSpecial?: Partial<Record<"manager" | "member", string[]>>;
+  /** Who handles each kind of staff request ("expense" = who pays approved expense claims). Unset: the person's manager. */
+  requestHandlers?: Partial<Record<string, string>>;
 };
 
 export const organisations = pgTable("organisations", {
@@ -272,3 +274,24 @@ export const aiChats = pgTable("ai_chats", {
   messages: jsonb("messages").notNull().$type<unknown[]>(),
   ...timestamps(),
 }, (t) => [index("ai_chats_user_idx").on(t.userId, t.updatedAt)]);
+
+/** A request from someone on the team (equipment, IT help, a letter...) or an expense claim, and where it's got to. */
+export const staffRequests = pgTable("staff_requests", {
+  id: pk(),
+  orgId: uuid("org_id").notNull().references(() => organisations.id),
+  requesterUserId: uuid("requester_user_id").notNull().references(() => users.id),
+  kind: text("kind").notNull(),
+  title: text("title").notNull(),
+  details: text("details"),
+  /** Expense claims: how much, when it was spent, and the receipt. */
+  amount: numeric("amount", { precision: 14, scale: 2 }),
+  spentOn: text("spent_on"),
+  receiptFileId: uuid("receipt_file_id"),
+  status: text("status").notNull().default("waiting"),
+  /** Who it's with now, and at which step (manager, handler, or finance for expenses). */
+  handlerUserId: uuid("handler_user_id"),
+  stage: text("stage").notNull().default("handler"),
+  history: jsonb("history").$type<{ at: string; by: string; byName: string; action: string; note?: string }[]>().notNull().default([]),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  ...tracked(),
+}, (t) => [index("staff_requests_handler_idx").on(t.orgId, t.handlerUserId), index("staff_requests_requester_idx").on(t.orgId, t.requesterUserId)]);
