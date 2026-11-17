@@ -6,3 +6,20 @@
 .me-letter { white-space: pre-line; color: var(--text); font-size: 14px; line-height: 1.55; margin: 0 0 14px; }
 .me-answer { display: flex; flex-direction: column; gap: 2px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; color: var(--ink); }
 .me-note { font-size: 13px; margin-top: 18px; }
+
+/* Attendance > Today */
+.me-clock { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.me-clock .big { display: block; font: 800 40px var(--display); color: var(--ink); letter-spacing: -.02em; line-height: 1.1; }
+.me-clock small { display: block; color: var(--muted); font-size: 13.5px; margin-top: 2px; }
+.me-clock .grow { flex: 1; }
+.me-week { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
+.me-week div { border: 1px solid var(--line); border-radius: 12px; padding: 10px 6px; text-align: center; font-size: 12.5px; color: var(--muted); }
+.me-week div b { display: block; font-size: 15px; color: var(--ink); margin-top: 2px; }
+.me-week div.today { border-color: var(--ws-c); background: color-mix(in srgb, var(--ws-c) 8%, var(--surface)); }
+.me-small { font-size: 13px; margin: 12px 0 0; }
+.me-bal { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 6px; }
+.me-bal div { border-radius: 12px; padding: 10px 12px; background: var(--soft); }
+.me-bal b { display: block; font: 800 22px var(--display); color: var(--ink); }
+.me-bal small { color: var(--muted); font-size: 12px; }
+.me-today .card + .card { margin-top: 16px; }
+@media (max-width: 640px) { .me-clock .big { font-size: 32px; } .me-week { gap: 4px; } }

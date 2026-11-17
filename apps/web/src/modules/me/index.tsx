@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, Navigate, Route, Routes, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarPlus } from "lucide-react";
 import { Button, Card, EmptyState, Loading, PageHeader, Pill, Select } from "@windveal/ui";
 import { api } from "../../lib/api";
 import { useSession } from "../../lib/session";
-import { dayLabel, fmtDate, fmtTime } from "../../lib/format";
-import { DashCard, DashColumns, DashKpis, DashRow } from "../../components/dashboard";
+import { fmtDate, fmtTime } from "../../lib/format";
+import { fmtDuration, useMyClock } from "../people/clock";
 import { LeaveRequestRow, RequestLeaveModal, balanceText } from "../people/Leave";
 import { ChecklistDetail } from "../people/Onboarding";
 import type { Balance, LeaveRequest } from "../people/lib";
@@ -20,7 +20,7 @@ type Summary = {
 type Day = { date: string; clockIn: string | null; clockOut: string | null; breaks: number; corrected: boolean; note: string | null; minutes: number | null };
 type Today = { record: { clockIn: string | null; clockOut: string | null; onBreak?: boolean } | null };
 
-/** What My space has for this person; also decides which sections the sidebar shows. */
+/** What My Workspace has for this person (e.g. whether they're onboarding). */
 export function useMySummary() {
   return useQuery({ queryKey: ["my", "summary"], queryFn: () => api.get<Summary>("/api/my/summary"), staleTime: 60_000 });
 }
@@ -32,49 +32,8 @@ const hours = (m: number | null) => (m == null ? "" : `${Math.floor(m / 60)}h ${
 const thisMonth = () => new Date().toISOString().slice(0, 7);
 const useMyChecklists = () => useQuery({ queryKey: ["my", "checklists"], queryFn: () => api.get<{ id: string; kind: string; title: string; status: string; total: number; done: number }[]>("/api/my/checklists") });
 
-function Overview() {
-  const summary = useMySummary();
-  const today = useQuery({ queryKey: ["attendance", "me"], queryFn: () => api.get<Today>("/api/people/attendance/me") });
-  const balances = useMyBalances();
-  const leave = useMyLeave();
-  const month = useMonth(thisMonth());
-  const lists = useMyChecklists();
-  const onb = lists.data?.find((c) => c.kind === "onboarding" && c.status !== "done") ?? lists.data?.[0];
-  const r = today.data?.record;
-  const main = balances.data?.balances.find((b) => b.daysPerYear != null);
-  const worked = (month.data?.days ?? []).reduce((a, d) => a + (d.minutes ?? 0), 0);
-  return (
-    <>
-      <DashKpis loading={today.isLoading || balances.isLoading} items={[
-        { label: "Today", value: !r?.clockIn ? "Not in" : r.clockOut ? "Done" : r.onBreak ? "On a break" : "In", note: r?.clockIn ? `since ${fmtTime(r.clockIn)}` : "clock in from the top bar", to: "/me/attendance" },
-        { label: "Worked this month", value: hours(worked) || "0h", note: `${month.data?.days.length ?? 0} days`, to: "/me/attendance" },
-        { label: main ? `${main.name} left` : "Leave", value: main?.remaining ?? "—", note: main ? `of ${main.daysPerYear} days this year` : "no allowance set", to: "/me/leave" },
-        ...(onb ? [{ label: "Onboarding", value: `${onb.done} of ${onb.total}`, note: summary.data?.nextStep ? `next: ${summary.data.nextStep.title}` : "all steps done", to: "/me/onboarding" }] : []),
-      ]} />
-      <DashColumns
-        left={
-          <DashCard title="Your attendance" sub="This month" link={{ to: "/me/attendance", label: "Attendance" }} loading={month.isLoading}
-            empty={!month.isLoading && !month.data?.days.length && "You haven't clocked in this month yet."}>
-            {(month.data?.days ?? []).slice(0, 5).map((d) => (
-              <DashRow key={d.date} title={dayLabel(d.date)} detail={`${d.clockIn ? fmtTime(d.clockIn) : "—"} to ${d.clockOut ? fmtTime(d.clockOut) : "now"}`} end={hours(d.minutes)} />
-            ))}
-          </DashCard>
-        }
-        right={
-          <DashCard title="Your leave" sub="Requests and answers" link={{ to: "/me/leave", label: "Leave" }} loading={leave.isLoading}
-            empty={!leave.isLoading && !leave.data?.length && "You haven't asked for any leave yet."}>
-            {(leave.data ?? []).slice(0, 5).map((l) => (
-              <DashRow key={l.id} title={l.leaveType?.name ?? "Leave"} detail={`${fmtDate(l.startDate)}${l.endDate !== l.startDate ? ` to ${fmtDate(l.endDate)}` : ""} · ${l.days} day${l.days === 1 ? "" : "s"}`}
-                end={<Pill tone={l.status === "approved" ? "ok" : l.status === "pending" ? "warn" : l.status === "declined" ? "red" : "grey"}>{l.status[0]!.toUpperCase() + l.status.slice(1)}</Pill>} />
-            ))}
-          </DashCard>
-        }
-      />
-    </>
-  );
-}
-
-function Attendance() {
+/** Attendance > History: each day of a month. */
+function History() {
   const months = Array.from({ length: 12 }, (_, i) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i); return d.toISOString().slice(0, 7); });
   const [month, setMonth] = useState(months[0]!);
   const q = useMonth(month);
@@ -147,9 +106,12 @@ function Pay() {
           <dl className="kv pf-kv">{rows.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v || <span className="muted">Not given</span>}</dd></div>)}</dl>
         )}
       </Card>
-      <Card title="Payslips"><EmptyState title="Payslips are coming">Once WindVeal runs payroll, each month's payslip will be here.</EmptyState></Card>
     </>
   );
+}
+
+function Payslips() {
+  return <Card><EmptyState title="Payslips are coming">Once WindVeal runs payroll, each month's payslip will be here to view and download.</EmptyState></Card>;
 }
 
 function Onboarding() {
@@ -171,7 +133,6 @@ function Onboarding() {
 }
 
 
-/** My Workspace: each person's own attendance, leave, tasks, pay and onboarding. Only theirs. */
 /** The tasks given to this person from anywhere in WindVeal; no Workflows access needed. */
 function MyTasks() {
   const [params, setParams] = useSearchParams();
@@ -186,23 +147,141 @@ function MyTasks() {
   );
 }
 
-export default function MySpace() {
-  const { user } = useSession();
-  useEffect(() => { document.title = "My Workspace · WindVeal"; }, []);
+// ---------------- Attendance > Today ----------------
+
+const mondayOf = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
+const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+type Holiday = { id: string; name: string; day: string; recurring: boolean };
+const useHolidays = () => useQuery({ queryKey: ["people", "holidays"], queryFn: () => api.get<Holiday[]>("/api/people/holidays"), staleTime: 300_000 });
+/** The next date a holiday falls on (yearly ones roll forward). */
+function nextOf(h: Holiday, from: string) {
+  if (!h.recurring) return h.day;
+  const md = h.day.slice(5);
+  const y = Number(from.slice(0, 4));
+  return `${y}-${md}` >= from ? `${y}-${md}` : `${y + 1}-${md}`;
+}
+
+/** Today: the clock, this week, this month, and leave beside it. */
+function Today() {
+  const clock = useMyClock();
   const summary = useMySummary();
+  const balances = useMyBalances();
+  const leave = useMyLeave();
+  const holidays = useHolidays();
+  const [asking, setAsking] = useState(false);
+  const now = new Date();
+  const mon = mondayOf(now);
+  const week = Array.from({ length: 5 }, (_, i) => { const d = new Date(mon); d.setDate(mon.getDate() + i); return d; });
+  const thisM = useMonth(iso(now).slice(0, 7));
+  const prevM = useMonth(iso(mon).slice(0, 7));
+  const days = new Map([...(prevM.data?.days ?? []), ...(thisM.data?.days ?? [])].map((d) => [d.date, d]));
+  const todayIso = iso(now);
+  const todayMin = Math.round(clock.workedMs / 60000);
+  const weekMinutes = week.reduce((a, d) => a + (iso(d) === todayIso ? todayMin : days.get(iso(d))?.minutes ?? 0), 0);
+  const monthDays = thisM.data?.days ?? [];
+  const r = clock.record;
+  const upcoming = (leave.data ?? []).filter((l) => l.endDate >= todayIso && (l.status === "approved" || l.status === "pending")).slice(0, 3);
+  const nextHoliday = (holidays.data ?? []).map((h) => ({ ...h, next: nextOf(h, todayIso) })).filter((h) => h.next >= todayIso).sort((a, b) => a.next.localeCompare(b.next))[0];
+  const shown = (balances.data?.balances ?? []).filter((b) => b.daysPerYear != null).slice(0, 2);
+  const taken = (balances.data?.balances ?? []).reduce((a, b) => a + b.used, 0);
   return (
-    <div className="me">
-      <PageHeader title="My Workspace" subtitle={summary.data?.employee?.jobTitle ? `${user.name} · ${summary.data.employee.jobTitle}` : user.name} />
-      <Routes>
-        <Route index element={<Overview />} />
-        <Route path="attendance" element={<Attendance />} />
-        <Route path="leave" element={<Leave />} />
-        <Route path="tasks" element={<MyTasks />} />
-        <Route path="pay" element={<Pay />} />
-        <Route path="onboarding" element={<Onboarding />} />
-        <Route path="*" element={<Navigate to="/me" replace />} />
-      </Routes>
-      <p className="muted me-note">Your personal details are in <Link className="link" to="/profile">Profile</Link>.</p>
+    <div className="grid-side side-360 me-today">
+      <div>
+        <Card title="Today">
+          {clock.state === "none" ? <EmptyState title="You're not set up for attendance yet">HR needs to add you to the team first.</EmptyState> : <>
+            <div className="me-clock">
+              <div>
+                <span className="big">{fmtDuration(clock.workedMs)}</span>
+                <small>{clock.state === "out" ? "Not clocked in yet" : clock.state === "done" ? `Done for today, ${fmtTime(r!.clockIn!)} to ${fmtTime(r!.clockOut!)}`
+                  : clock.state === "break" ? "On a break" : `Working since ${fmtTime(r!.clockIn!)}`}</small>
+              </div>
+              <span className="grow" />
+              {clock.state === "out" && <Button loading={clock.busy} onClick={clock.clockIn}>Clock in</Button>}
+              {clock.state === "in" && <><Button variant="secondary" disabled={clock.busy} onClick={clock.pause}>Take a break</Button><Button loading={clock.busy} onClick={() => void clock.clockOut()}>Clock out</Button></>}
+              {clock.state === "break" && <Button loading={clock.busy} onClick={clock.resume}>Back from break</Button>}
+            </div>
+            <div className="me-week">
+              {week.map((d) => {
+                const k = iso(d), today = k === todayIso, m = today ? todayMin : days.get(k)?.minutes ?? null;
+                return <div key={k} className={today ? "today" : ""}>{d.toLocaleDateString("en-GB", { weekday: "short" })}<b>{m ? hours(m) : "-"}</b></div>;
+              })}
+            </div>
+            <p className="muted me-small">This week: {hours(weekMinutes) || "0h 00m"}. If a day looks wrong, ask HR to correct it.</p>
+          </>}
+          {clock.dialog}
+        </Card>
+        <Card title="This month">
+          {thisM.isLoading ? <Loading /> : (
+            <div className="list-row"><div className="grow"><b className="ink">{monthDays.length} day{monthDays.length === 1 ? "" : "s"} worked</b>
+              <small className="muted" style={{ display: "block" }}>{hours(monthDays.reduce((a, d) => a + (d.minutes ?? 0), 0)) || "0h 00m"} in total</small></div>
+              <Link className="btn btn-secondary btn-sm" to="/me/attendance/history">See each day</Link></div>
+          )}
+        </Card>
+      </div>
+      <div>
+        <Card title="Leave">
+          {balances.isLoading ? <Loading /> : <div className="me-bal">
+            {shown.map((b) => <div key={b.leaveTypeId}><b>{b.remaining ?? "-"}</b><small>{b.name} left</small></div>)}
+            <div><b>{taken}</b><small>Taken this year</small></div>
+          </div>}
+          {upcoming.map((l) => (
+            <div key={l.id} className="list-row"><div className="grow"><b className="ink">{fmtDate(l.startDate)}{l.endDate !== l.startDate ? ` to ${fmtDate(l.endDate)}` : ""}</b>
+              <small className="muted" style={{ display: "block" }}>{l.leaveType?.name ?? "Leave"}, {l.days} day{l.days === 1 ? "" : "s"}</small></div>
+              <Pill tone={l.status === "approved" ? "ok" : "warn"}>{l.status === "approved" ? "Approved" : "Waiting"}</Pill></div>
+          ))}
+          <Button icon={<CalendarPlus size={16} />} style={{ width: "100%", marginTop: 12 }} onClick={() => setAsking(true)}>Request leave</Button>
+        </Card>
+        {nextHoliday && <Card title="Coming up">
+          <div className="list-row"><div className="grow"><b className="ink">{nextHoliday.name}</b>
+            <small className="muted" style={{ display: "block" }}>{fmtDate(nextHoliday.next, { weekday: "short", day: "numeric", month: "short" })}, public holiday</small></div></div>
+        </Card>}
+      </div>
+      <RequestLeaveModal open={asking} onClose={() => setAsking(false)} myEmployeeId={summary.data?.employee?.id} />
     </div>
+  );
+}
+
+/** Attendance > Public holidays: days off for everyone. */
+function Holidays() {
+  const q = useHolidays();
+  const todayIso = iso(new Date());
+  const list = (q.data ?? []).map((h) => ({ ...h, next: nextOf(h, todayIso) })).sort((a, b) => a.next.localeCompare(b.next));
+  return (
+    <Card title="Public holidays" subtitle="Days off for everyone. Leave isn't taken on these days." flush={!!list.length}>
+      {q.isLoading ? <Loading /> : !list.length ? <EmptyState title="No public holidays yet">HR adds them in People &amp; HR.</EmptyState>
+        : list.map((h) => <div key={h.id} className="list-row"><div className="grow"><b className="ink">{h.name}</b></div><span className="muted">{fmtDate(h.next, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</span></div>)}
+    </Card>
+  );
+}
+
+// ---------------- the spaces ----------------
+
+function Space({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
+  useEffect(() => { document.title = `${title} · WindVeal`; }, [title]);
+  return <div className="me"><PageHeader title={title} subtitle={subtitle} />{children}</div>;
+}
+
+/**
+ * My Workspace: each person's own things, whatever their role, split into spaces (Attendance, Tasks, Finance...).
+ * Each space has its own sidebar; nothing here shows anyone else's records.
+ */
+export default function MySpace() {
+  return (
+    <Routes>
+      <Route index element={<Navigate to="/" replace />} />
+      <Route path="attendance" element={<Space title="Attendance" subtitle="Your time and your leave."><Today /></Space>} />
+      <Route path="attendance/history" element={<Space title="Attendance" subtitle="Each day you've worked."><History /></Space>} />
+      <Route path="attendance/leave" element={<Space title="Attendance" subtitle="Your leave balances and requests."><Leave /></Space>} />
+      <Route path="attendance/holidays" element={<Space title="Attendance" subtitle="Public holidays."><Holidays /></Space>} />
+      <Route path="tasks" element={<Space title="Tasks" subtitle="Everything given to you, from anywhere in the business."><MyTasks /></Space>} />
+      <Route path="tasks/getting-started" element={<Space title="Tasks" subtitle="Your first steps in your new job."><Onboarding /></Space>} />
+      <Route path="finance" element={<Space title="Finance" subtitle="Your pay. Only you and HR can see this."><Pay /></Space>} />
+      <Route path="finance/payslips" element={<Space title="Finance" subtitle="Your payslips."><Payslips /></Space>} />
+      {/* Old addresses (bookmarks, notifications) still land in the right place. */}
+      <Route path="leave" element={<Navigate to="/me/attendance/leave" replace />} />
+      <Route path="pay" element={<Navigate to="/me/finance" replace />} />
+      <Route path="onboarding" element={<Navigate to="/me/tasks/getting-started" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }

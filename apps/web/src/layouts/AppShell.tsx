@@ -12,7 +12,7 @@ import { useSession } from "../lib/session";
 import { timeAgo } from "../lib/format";
 import { useTheme } from "../lib/theme";
 import { useSignOut } from "../lib/signout";
-import { usePalette } from "../lib/palette";
+import { accentOf, usePalette } from "../lib/palette";
 import { sectionActive, useAreaAccess, workspaceFor, type WorkspaceDef } from "../lib/workspaces";
 import { HeaderClock } from "../modules/people/clock";
 import { VealProvider } from "../components/Veal";
@@ -281,7 +281,7 @@ function Shell() {
   // A new page closes the phone search.
   useEffect(() => { setMSearch(false); }, [location.pathname]);
   const palette = usePalette();
-  const accent = ws ? palette[ws.key] : null;
+  const accent = ws ? accentOf(palette, ws.key) : null;
   const toggle = () => setMini((m) => {
     try { localStorage.setItem("wv-sidebar", m ? "full" : "mini"); } catch { /* ignore */ }
     return !m;

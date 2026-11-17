@@ -112,3 +112,6 @@ export function usePalette(): Palette {
   }, [logo, fallback]);
   return paletteFrom(seed);
 }
+
+/** An area's colours; My Workspace's spaces (and anything new) share "me". */
+export const accentOf = (p: Palette, key: string): Accent => (p as Record<string, Accent>)[key] ?? p.me;

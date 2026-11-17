@@ -4,13 +4,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, LogIn, LogOut, Play, Plus } from "lucide-react";
 import { Button, useToast } from "@windveal/ui";
 import { useSession } from "../lib/session";
-import { usePalette, type Accent } from "../lib/palette";
+import { accentOf, usePalette, type Accent } from "../lib/palette";
 import { areaArt } from "../lib/areaArt";
 import { api, ApiError } from "../lib/api";
 import { WORKSPACE_DEFS, useAreaAccess, type WorkspaceDef } from "../lib/workspaces";
 import { useHomeData } from "../layouts/AppShell";
 import { useMyClock } from "../modules/people/clock";
-import { RequestLeaveModal } from "../modules/people/Leave";
 import { useMySummary } from "../modules/me";
 
 function greeting(d: Date) {
@@ -20,11 +19,9 @@ function greeting(d: Date) {
 
 /** What each card says: a fuller line than the sidebar's, about what you can do there. */
 const ABOUT: Record<string, string> = {
-  attendance: "Clock in and out, take breaks, and see the hours you've worked.",
-  leave: "See how many days you have left, and ask for time off.",
+  attendance: "Clock in and out, your hours, and your leave.",
   tasks: "Everything given to you, from anywhere in the business.",
-  pay: "Your salary, and the bank account it's paid into.",
-  onboarding: "Your first steps in your new job, one at a time.",
+  finance: "Your pay, payslips and expense claims.",
   people: "See who's in today, approve leave, and keep everyone's records up to date.",
   recruitment: "Post jobs on your careers page, move candidates along and book interviews.",
   crm: "Follow leads and deals through your pipeline, and never miss a follow-up.",
@@ -42,14 +39,14 @@ const Art = ({ k }: { k: string }) => <div className="art" aria-hidden dangerous
  * One card: the whole card opens its page; a quick action (when there is one) sits on top of that, so the most
  * common job can be done from Home. A red dot when something is waiting.
  */
-function Card({ to, label, art, accent, dot, action, className = "" }: {
-  to: string; label: string; art: string; accent: Accent; dot?: boolean; action?: ReactNode; className?: string;
+function Card({ to, label, art, about, accent, dot, action, className = "" }: {
+  to: string; label: string; art: string; about?: string; accent: Accent; dot?: boolean; action?: ReactNode; className?: string;
 }) {
   return (
     <div className={`home-card ${className}`} style={{ "--ws-c": accent.c, "--ws-t": accent.t } as CSSProperties}>
       <Link to={to} className="home-card-link" aria-label={dot ? `${label}, something to check` : label} />
       <Art k={art} />
-      <b>{label}</b><span>{ABOUT[art]}</span>
+      <b>{label}</b><span>{ABOUT[about ?? art]}</span>
       {action && <div className="home-card-act">{action}</div>}
       {dot && <i className="home-dot" title="Something to check" />}
     </div>
@@ -80,15 +77,6 @@ function ClockAction() {
   </>;
 }
 
-function LeaveAction({ employeeId }: { employeeId?: string }) {
-  const [open, setOpen] = useState(false);
-  if (!employeeId) return null;
-  return <>
-    <Button size="sm" variant="secondary" icon={<Plus size={14} />} onClick={() => setOpen(true)}>Request leave</Button>
-    {open && <RequestLeaveModal open onClose={() => setOpen(false)} myEmployeeId={employeeId} />}
-  </>;
-}
-
 type OpenTask = { id: string; title: string };
 /** The next task given to them, ticked off right here. */
 function TaskAction() {
@@ -109,22 +97,29 @@ function TaskAction() {
   );
 }
 
-function MyWorkspace({ dot }: { dot: boolean }) {
+/** The everyday action on each space's card. */
+function actionFor(key: string, employeeId?: string): ReactNode {
+  if (key === "attendance") return <ClockAction />;
+  if (key === "tasks") return <TaskAction />;
+  if (key === "finance") return undefined;
+  return undefined;
+}
+
+/** My Workspace: a card for each of the person's own spaces. */
+function MyWorkspace({ spaces }: { spaces: WorkspaceDef[] }) {
   const palette = usePalette();
-  const { viewer } = useAreaAccess();
+  const waiting = useWaiting();
+  const { sectionsOf } = useAreaAccess();
   const summary = useMySummary();
-  const { data } = useHomeData();
-  const me = palette.me;
-  const tasksWaiting = (data?.badges.myTasks ?? 0) > 0;
+  if (!spaces.length) return null;
   return (
     <section className="home-group">
       <h2 className="home-group-title">My Workspace</h2>
       <div className="home-grid">
-        <Card to="/me/attendance" label="Attendance" art="attendance" accent={me} action={<ClockAction />} />
-        <Card to="/me/leave" label="Leave" art="leave" accent={me} action={<LeaveAction employeeId={summary.data?.employee?.id} />} />
-        <Card to="/me/tasks" label="My tasks" art="tasks" accent={me} dot={tasksWaiting} action={<TaskAction />} />
-        <Card to="/me/pay" label="Pay" art="pay" accent={me} />
-        {viewer.hasOnboarding && <Card to="/me/onboarding" label="Onboarding" art="onboarding" accent={me} dot={dot && !tasksWaiting} />}
+        {spaces.map((w) => (
+          <Card key={w.key} to={sectionsOf(w)[0]?.to ?? w.base} label={w.label} art={w.art ?? w.key} about={w.key} accent={accentOf(palette, w.key)}
+            dot={waiting(w)} action={actionFor(w.key, summary.data?.employee?.id)} />
+        ))}
       </div>
     </section>
   );
@@ -139,7 +134,7 @@ function Group({ title, areas }: { title: string; areas: WorkspaceDef[] }) {
     <section className="home-group">
       <h2 className="home-group-title">{title}</h2>
       <div className="home-grid">
-        {areas.map((w) => <Card key={w.key} to={sectionsOf(w)[0]?.to ?? w.base} label={w.label} art={w.key} accent={palette[w.key]} dot={waiting(w)} />)}
+        {areas.map((w) => <Card key={w.key} to={sectionsOf(w)[0]?.to ?? w.base} label={w.label} art={w.art ?? w.key} accent={accentOf(palette, w.key)} dot={waiting(w)} />)}
       </div>
     </section>
   );
@@ -157,8 +152,8 @@ export function Home() {
   const today = new Date();
   useEffect(() => { document.title = "Home · WindVeal"; }, []);
   const open = WORKSPACE_DEFS.filter(canOpen);
-  const mine = open.find((w) => w.key === "me");
-  const workspaces = open.filter((w) => w.group === "workspace" && w.key !== "me");
+  const mine = open.filter((w) => w.group === "mine");
+  const workspaces = open.filter((w) => w.group === "workspace");
   const manage = open.filter((w) => w.group === "manage" && w.key !== "admin");
   const admin = open.find((w) => w.key === "admin");
   return (
@@ -167,7 +162,7 @@ export function Home() {
         <h1>{greeting(today)}, {user.name.split(" ")[0]}</h1>
         <p>{today.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</p>
       </div>
-      {mine && <MyWorkspace dot={waiting(mine)} />}
+      <MyWorkspace spaces={mine} />
       <Group title="With your team" areas={workspaces} />
       <Group title="Manage the business" areas={manage} />
       {admin && (

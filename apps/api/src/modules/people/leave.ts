@@ -53,7 +53,7 @@ async function applyLeaveDecision(orgId: string, leaveId: string, outcome: "appr
   const what = `${type?.name ?? "Leave"} ${fmtDay(lr.startDate)} to ${fmtDay(lr.endDate)}`;
   const title = `Your ${what} was ${outcome}`;
   const recipients = new Set([lr.requestedBy, emp?.userId].filter((x): x is string => !!x && x !== actorUserId));
-  for (const r of recipients) await notify(orgId, r, r === emp?.userId ? title : `${name}'s ${what} was ${outcome}`, note ?? undefined, r === emp?.userId ? "/me/leave" : "/people/leave", tx);
+  for (const r of recipients) await notify(orgId, r, r === emp?.userId ? title : `${name}'s ${what} was ${outcome}`, note ?? undefined, r === emp?.userId ? "/me/attendance/leave" : "/people/leave", tx);
   const [org] = await tx.select().from(organisations).where(eq(organisations.id, orgId)).limit(1);
   const [actor] = await tx.select().from(users).where(eq(users.id, actorUserId)).limit(1);
   if (org && actor) {

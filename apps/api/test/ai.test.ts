@@ -68,7 +68,7 @@ describe("WindVeal AI", () => {
     expect(r.status).toBe(200);
     expect(r.body.reply).toBe("You have 20 days of annual leave left.");
     // A button to where the answer lives, from what it looked at.
-    expect(r.body.links).toEqual([{ label: "Open My leave", to: "/me/leave" }]);
+    expect(r.body.links).toEqual([{ label: "Open Leave", to: "/me/attendance/leave" }]);
     // The tool's answer went back to the model; the tools were offered in the standard format.
     expect(r.body.messages.some((m: any) => m.role === "tool")).toBe(true);
     expect(seen.at(-1).tools.map((t: any) => t.function.name)).toContain("request_leave");

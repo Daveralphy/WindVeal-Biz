@@ -10,7 +10,7 @@ function watchErrors(page: Page) {
 }
 
 const SCREENS = [
-  "/", "/me", "/me/attendance", "/me/leave", "/me/tasks", "/me/pay", "/people", "/people/directory", "/people/departments", "/people/leave", "/people/attendance", "/people/onboarding",
+  "/", "/me/attendance", "/me/attendance/history", "/me/attendance/leave", "/me/attendance/holidays", "/me/tasks", "/me/finance", "/me/finance/payslips", "/people", "/people/directory", "/people/departments", "/people/leave", "/people/attendance", "/people/onboarding",
   "/recruitment", "/recruitment/jobs", "/recruitment/candidates", "/recruitment/interviews", "/recruitment/careers", "/recruitment/jobs/new",
   "/crm", "/crm/pipeline", "/crm/companies", "/crm/leads", "/crm/follow-ups",
   "/workflows", "/workflows/mine", "/workflows/approvals", "/workflows/all", "/workflows/templates",
@@ -344,13 +344,16 @@ test("notification settings are all on to start and can be turned off", async ({
 
 test("a member sees their own things in My Workspace, and nobody else's", async ({ page }) => {
   await signIn(page, "member@example-trading.test");
-  // Home has a card for each of their own things; the Attendance card opens My Workspace on that page.
-  await expect(page.locator('.home').getByRole("button", { name: "Request leave" })).toBeVisible();
+  // Home has a card for each of their own spaces; each space has only its own pages in the sidebar.
   await page.locator('.home a[href="/me/attendance"]').click();
-  await expect(page.getByRole("heading", { level: 1, name: "My Workspace" })).toBeVisible();
-  await page.locator('.in-ws .sb a[href="/me/leave"]').click();
+  await expect(page.getByRole("heading", { level: 1, name: "Attendance" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Request leave" })).toBeVisible();
+  await expect(page.locator(".in-ws .sb").getByRole("link", { name: "Leave" })).toBeVisible();
+  await expect(page.locator(".in-ws .sb a[href='/me/finance']")).toHaveCount(0);
+  await page.locator('.in-ws .sb a[href="/me/attendance/leave"]').click();
   await expect(page.getByRole("button", { name: "Ask for leave" })).toBeVisible();
-  await page.locator('.in-ws .sb a[href="/me/pay"]').click();
+  await page.goto(`${APP_URL}/me/finance`);
+  await expect(page.getByRole("heading", { level: 1, name: "Finance" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Your pay" })).toBeVisible();
   // Other people's attendance and the company profile aren't theirs.
   await page.goto(`${APP_URL}/people/attendance`);

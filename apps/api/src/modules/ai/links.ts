@@ -7,13 +7,13 @@ import type { OrgContext } from "../../lib/context";
  * ("Open My leave"). Worked out from what Veal actually looked at, never made up by the model.
  */
 const PAGE: Record<string, { area: AssistantArea; link: VealLink }> = {
-  my_leave: { area: "me", link: { label: "Open My leave", to: "/me/leave" } },
-  request_leave: { area: "me", link: { label: "Open My leave", to: "/me/leave" } },
-  my_attendance: { area: "me", link: { label: "Open My attendance", to: "/me/attendance" } },
-  clock: { area: "me", link: { label: "Open My attendance", to: "/me/attendance" } },
-  my_tasks: { area: "me", link: { label: "Open My tasks", to: "/me/tasks" } },
-  create_task: { area: "me", link: { label: "Open My tasks", to: "/me/tasks" } },
-  complete_task: { area: "me", link: { label: "Open My tasks", to: "/me/tasks" } },
+  my_leave: { area: "me", link: { label: "Open Leave", to: "/me/attendance/leave" } },
+  request_leave: { area: "me", link: { label: "Open Leave", to: "/me/attendance/leave" } },
+  my_attendance: { area: "me", link: { label: "Open Attendance", to: "/me/attendance" } },
+  clock: { area: "me", link: { label: "Open Attendance", to: "/me/attendance" } },
+  my_tasks: { area: "me", link: { label: "Open Tasks", to: "/me/tasks" } },
+  create_task: { area: "me", link: { label: "Open Tasks", to: "/me/tasks" } },
+  complete_task: { area: "me", link: { label: "Open Tasks", to: "/me/tasks" } },
   whos_off: { area: "people", link: { label: "Open Leave", to: "/people/leave" } },
   team_today: { area: "people", link: { label: "Open Attendance", to: "/people/attendance" } },
   add_employee: { area: "people", link: { label: "Open Directory", to: "/people/directory" } },

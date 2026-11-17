@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import {
   Briefcase, Building2, CalendarDays, CheckSquare, Clock, FileText, Flag, FolderOpen, Globe, History, LayoutDashboard, LineChart, ListChecks,
   ListTodo, Network, Phone, Rows3, Share2, Archive, SquareCheck, Stamp, UserPlus, UserSearch, Users, Workflow, BarChart3, Kanban,
-  Settings, ShieldCheck, Mail, Bell, Wallet, KeyRound, ScrollText, Upload, User, Building, Building2 as Org,
+  Settings, ShieldCheck, Mail, Bell, Wallet, Sun, KeyRound, ScrollText, Upload, User, Building, Building2 as Org,
 } from "lucide-react";
 import type { Workspace } from "@windveal/shared";
 import { useQuery } from "@tanstack/react-query";
@@ -24,13 +24,17 @@ export type Section = {
   /** Extra paths that also count as this section (e.g. a record page under a list). */
   also?: RegExp;
 };
-export type AreaKey = Workspace | "me" | "settings" | "admin" | "profile";
+/** My Workspace is split into spaces, one per own thing (each with its own sidebar). */
+export type MineKey = "attendance" | "tasks" | "finance";
+export type AreaKey = Workspace | MineKey | "settings" | "admin" | "profile";
 export type WorkspaceDef = {
   key: AreaKey; label: string; base: string; icon: (size?: number) => ReactNode; blurb: string; sections: Section[];
   /** Other paths that belong to this area (e.g. Import data inside Documents). */
   bases?: string[];
-  /** "workspace" tiles come first on Home; "manage" tiles (Settings, Import, Admin) after; "account" has no tile. */
-  group: "workspace" | "manage" | "account";
+  /** "mine" = a space in My Workspace (everyone's own things); "workspace" = a team area; "manage" = Settings, Admin; "account" has no card. */
+  group: "mine" | "workspace" | "manage" | "account";
+  /** The drawing on its Home card (lib/areaArt.ts), when it isn't the key. */
+  art?: string;
   visible?: (v: Viewer) => boolean;
   /** Whether the top bar offers search here. */
   search?: boolean;
@@ -41,16 +45,28 @@ const UUID = "[0-9a-f-]{36}";
 
 /** The six workspaces, in the order they appear on Home. Each has its own dashboard and sidebar. */
 export const WORKSPACE_DEFS: WorkspaceDef[] = [
+  // ---- My Workspace: everyone's own things, whatever their role. Each space has only its own pages. ----
   {
-    // Everyone's own things, whatever their role.
-    key: "me", label: "My Workspace", base: "/me", icon: i(User), blurb: "Your attendance, leave, pay and onboarding.", group: "workspace",
+    key: "attendance", label: "Attendance", base: "/me/attendance", icon: i(Clock), blurb: "Clock in and out, your hours, and your leave.", group: "mine",
     sections: [
-      { to: "/me", label: "Overview", icon: <LayoutDashboard size={18} /> },
-      { to: "/me/attendance", label: "Attendance", icon: <Clock size={18} /> },
-      { to: "/me/leave", label: "Leave", icon: <CalendarDays size={18} /> },
+      { to: "/me/attendance", label: "Today", icon: <Clock size={18} /> },
+      { to: "/me/attendance/history", label: "History", icon: <History size={18} /> },
+      { to: "/me/attendance/leave", label: "Leave", icon: <CalendarDays size={18} /> },
+      { to: "/me/attendance/holidays", label: "Public holidays", icon: <Sun size={18} /> },
+    ],
+  },
+  {
+    key: "tasks", label: "Tasks", base: "/me/tasks", icon: i(Kanban), blurb: "Your team's board: cards to do, in progress and done.", group: "mine",
+    sections: [
       { to: "/me/tasks", label: "My tasks", icon: <ListTodo size={18} />, badge: "myTasks" },
-      { to: "/me/pay", label: "Pay", icon: <Wallet size={18} /> },
-      { to: "/me/onboarding", label: "Onboarding", icon: <Flag size={18} />, visible: (v) => v.hasOnboarding },
+      { to: "/me/tasks/getting-started", label: "Getting started", icon: <Flag size={18} />, visible: (v) => v.hasOnboarding },
+    ],
+  },
+  {
+    key: "finance", label: "Finance", base: "/me/finance", art: "pay", icon: i(Wallet), blurb: "Your pay, payslips and expense claims.", group: "mine",
+    sections: [
+      { to: "/me/finance", label: "Pay", icon: <Wallet size={18} /> },
+      { to: "/me/finance/payslips", label: "Payslips", icon: <FileText size={18} /> },
     ],
   },
   {
@@ -171,7 +187,7 @@ export function useAreaAccess() {
     canImport: isAdmin || (["people", "crm", "recruitment"] as Workspace[]).some((w) => can(w, "manage") || (importer && can(w, "edit"))),
   };
   // Documents also opens for people who can only import.
-  const canOpen = (w: WorkspaceDef) => w.key === "me" || (w.group === "workspace" ? can(w.key as Workspace) || (w.key === "documents" && viewer.canImport) : w.visible ? w.visible(viewer) : true);
+  const canOpen = (w: WorkspaceDef) => w.group === "mine" || (w.group === "workspace" ? can(w.key as Workspace) || (w.key === "documents" && viewer.canImport) : w.visible ? w.visible(viewer) : true);
   const sectionsOf = (w: WorkspaceDef) => w.sections.filter((s) => !s.visible || s.visible(viewer));
   /**
    * Whether a page can be opened at all, however it was reached (a link, the address bar, an old bookmark).

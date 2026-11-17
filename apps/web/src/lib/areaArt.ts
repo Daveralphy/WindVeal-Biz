@@ -127,6 +127,33 @@ const ART: Record<string, string> = {
     <path class="m" d="M131 18 h34 l-8 11 l8 11 h-34 z"/>
     <ellipse class="t" cx="128.5" cy="62" rx="12" ry="4"/>`,
 
+  // A form with a stamp of approval: asking for things.
+  requests: `${ground}
+    <rect class="t" x="58" y="18" width="84" height="100" rx="10" transform="rotate(-5 100 68)"/>
+    <rect class="p st" x="50" y="20" width="84" height="102" rx="10"/>
+    <rect class="c" x="62" y="34" width="44" height="7" rx="3.5"/>
+    ${[52, 64, 76].map((y, i) => `<rect class="t" x="62" y="${y}" width="${[58, 48, 54][i]}" height="5" rx="2.5"/>`).join("")}
+    <rect class="box" x="62" y="92" width="34" height="16" rx="5"/>
+    <circle class="c" cx="138" cy="96" r="22"/><circle class="ring-p" cx="138" cy="96" r="16"/>
+    <path class="pl" d="M130 96 l6 6 l11 -12"/>`,
+
+  // An ID card and a document: your details and papers.
+  profile: `${ground}
+    <rect class="p st" x="96" y="18" width="66" height="86" rx="8" transform="rotate(6 129 61)"/>
+    ${[40, 52, 64, 76].map((y, i) => `<rect class="t" x="108" y="${y}" width="${[40, 34, 40, 26][i]}" height="5" rx="2.5" transform="rotate(6 129 61)"/>`).join("")}
+    <rect class="c" x="36" y="42" width="98" height="70" rx="12"/>
+    <rect class="pale" x="36" y="42" width="98" height="16" rx="8"/>
+    <circle class="p" cx="64" cy="82" r="13"/><path class="m" d="M53 104 a11 9 0 0 1 22 0z"/><circle class="m" cx="64" cy="79" r="6"/>
+    <rect class="pale" x="86" y="72" width="36" height="6" rx="3"/><rect class="pale" x="86" y="84" width="26" height="5" rx="2.5"/>`,
+
+  // A plant growing up a chart: goals, reviews and training.
+  growth: `${ground}
+    <path class="trend" d="M40 112 L76 92 L104 98 L150 52"/><path class="trend" d="M136 52 H150 V66"/>
+    <rect class="c" x="70" y="96" width="44" height="28" rx="6"/><rect class="m" x="66" y="90" width="52" height="10" rx="4"/>
+    <path class="stem" d="M92 90 V50"/>
+    <path class="m" d="M92 66 C76 66 66 56 66 42 C82 42 92 52 92 66z"/>
+    <path class="c" d="M92 56 C92 40 104 30 120 30 C120 46 108 56 92 56z"/>`,
+
   // A shield with a tick: approving businesses and keeping accounts safe.
   admin: `${ground}
     <path class="c" d="M100 12 L150 30 V66 C150 98 130 117 100 126 C70 117 50 98 50 66 V30 Z"/>

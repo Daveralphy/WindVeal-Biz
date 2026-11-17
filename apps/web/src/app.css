@@ -486,6 +486,7 @@ a.dash-kpi:hover { border-color: var(--ws-c, var(--blue)); }
 .art .box { fill: #fff; stroke: var(--ws-m); stroke-width: 2.5; } .art .grid { stroke: var(--art-t); stroke-width: 1.5; }
 .art .pale { fill: #fff; opacity: .55; } .art .arrow-bg { fill: var(--ws-c); }
 .art .check { fill: none; stroke: #fff; stroke-width: 9; stroke-linecap: round; stroke-linejoin: round; }
+.art .ring-p { fill: none; stroke: #fff; stroke-width: 2.5; stroke-dasharray: 3 4; } .art .stem { fill: none; stroke: var(--ws-c); stroke-width: 4; stroke-linecap: round; }
 .art .trail { fill: none; stroke: var(--art-l); stroke-width: 6; stroke-linecap: round; stroke-dasharray: 2 11; }
 
 /* Insights uses its own tiles (with an info tip); give them the same spacing and highlight as other dashboards. */
