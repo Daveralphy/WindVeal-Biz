@@ -11,6 +11,10 @@ import { addMember, getApp, signUpWithOrg } from "./helpers";
 /** A stand-in for a model server: answers each request with the next scripted reply, and remembers what it was sent. */
 const script: unknown[] = [];
 const seen: any[] = [];
+/** Where each request went and its headers. */
+const seenReq: { url: string; headers: http.IncomingHttpHeaders }[] = [];
+/** A scripted reply that's an error instead: the HTTP status and body to send. */
+const fail = (status: number, body: unknown) => ({ __status: status, body });
 let server: http.Server;
 const say = (content: string) => ({ choices: [{ message: { role: "assistant", content } }] });
 const useTool = (name: string, args: unknown) => ({
@@ -23,15 +27,26 @@ beforeAll(async () => {
     req.on("data", (c) => { body += c; });
     req.on("end", () => {
       seen.push(JSON.parse(body));
+      seenReq.push({ url: req.url ?? "", headers: req.headers });
       res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify(script.shift() ?? say("(no more scripted replies)")));
+      const next: any = script.shift() ?? say("(no more scripted replies)");
+      if (next?.__status) { res.statusCode = next.__status; res.end(JSON.stringify(next.body)); return; }
+      res.end(JSON.stringify(next));
     });
   });
   await new Promise<void>((r) => server.listen(0, r));
 });
-afterAll(() => { server.close(); env.aiBaseUrl = ""; env.aiModel = ""; });
+afterAll(() => { server.close(); env.aiBaseUrl = ""; env.aiModel = ""; env.aiFormat = ""; env.aiApiKey = ""; });
 
-const connect = () => { env.aiBaseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`; env.aiModel = "test-model"; };
+const connect = () => { env.aiFormat = ""; env.aiBaseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`; env.aiModel = "test-model"; };
+/** The same stand-in, answering in Anthropic's Messages format. */
+const connectAnthropic = () => {
+  env.aiFormat = "anthropic"; env.aiBaseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`; env.aiModel = "claude-test"; env.aiApiKey = "test-key";
+};
+const claude = (content: unknown[], stop_reason = "end_turn") => ({
+  id: `msg_${seen.length}`, type: "message", role: "assistant", model: "claude-test", content, stop_reason, stop_sequence: null,
+  usage: { input_tokens: 10, output_tokens: 5 },
+});
 const growth = (orgId: string) => db.update(organisations).set({ plan: "growth" }).where(eq(organisations.id, orgId));
 
 describe("WindVeal AI", () => {
@@ -234,5 +249,77 @@ describe("WindVeal AI", () => {
     expect(seen.length).toBe(calls + 1);
     expect((await c.get("/api/ai/status")).body.used).toBe(1);
     expect((await c.get("/api/ai/briefing/nowhere")).status).toBe(404);
+  });
+
+  it("works the same with Anthropic's format: tools, the model's own reply sent back unchanged, fallbacks and refusals", async () => {
+    const app = await getApp();
+    const { c, org } = await signUpWithOrg(app);
+    await growth(org.id);
+    connectAnthropic();
+    try {
+      const thinking = { type: "thinking", thinking: "", signature: "sig-123" };
+      script.push(
+        claude([thinking, { type: "tool_use", id: "toolu_1", name: "my_leave", input: {} }], "tool_use"),
+        claude([{ type: "text", text: "You have 20 days of annual leave left." }]),
+      );
+      const r = await c.post("/api/ai/chat", { messages: [{ role: "user", content: "How much leave do I have?" }] });
+      expect(r.status).toBe(200);
+      expect(r.body.reply).toBe("You have 20 days of annual leave left.");
+      expect(r.body.links).toEqual([{ label: "Open My leave", to: "/me/leave" }]);
+      const first = seen.at(-2), second = seen.at(-1);
+      // Anthropic's shape: system apart, tools with input_schema, the key in its own header, fallbacks asked for.
+      expect(seenReq.at(-1)!.url).toBe("/v1/messages");
+      const h = seenReq.at(-1)!.headers;
+      expect(`${h["x-api-key"] ?? ""} ${h.authorization ?? ""}`).toContain("test-key");
+      expect(String(seenReq.at(-1)!.headers["anthropic-beta"])).toContain("server-side-fallback-2026-07-01");
+      expect(first.fallbacks).toBe("default");
+      expect(first.system).toContain("You are Veal");
+      expect(first.max_tokens).toBe(16000);
+      expect(first.tools.find((t: any) => t.name === "my_leave").input_schema).toBeTruthy();
+      expect(first.messages).toEqual([{ role: "user", content: "How much leave do I have?" }]);
+      // The model's own turn (thinking included) went back exactly as it came, then the tool's answer.
+      expect(second.messages[1]).toEqual({ role: "assistant", content: [thinking, { type: "tool_use", id: "toolu_1", name: "my_leave", input: {} }] });
+      expect(second.messages[2].content[0]).toMatchObject({ type: "tool_result", tool_use_id: "toolu_1" });
+
+      // The next turn sends the saved conversation back the same way.
+      script.push(claude([{ type: "text", text: "Sure." }]));
+      await c.post("/api/ai/chat", { messages: [...r.body.messages, { role: "user", content: "thanks" }] });
+      expect(seen.at(-1).messages[1].content[0]).toEqual(thinking);
+      expect(seen.at(-1).messages.at(-1)).toEqual({ role: "user", content: "thanks" });
+
+      // A model without fallbacks: asked again without them.
+      script.push(fail(400, { type: "error", error: { type: "invalid_request_error", message: "fallbacks are not supported for this model" } }), claude([{ type: "text", text: "Hello." }]));
+      const plain = await c.post("/api/ai/chat", { messages: [{ role: "user", content: "hi" }] });
+      expect(plain.body.reply).toBe("Hello.");
+      expect(seen.at(-1).fallbacks).toBeUndefined();
+
+      // A refusal reads as a polite no, not an error.
+      script.push(claude([], "refusal"));
+      const no = await c.post("/api/ai/chat", { messages: [{ role: "user", content: "something it won't do" }] });
+      expect(no.body.reply).toBe("Sorry, I can't help with that one.");
+
+      // A wrong key reads as a settings problem, in plain words.
+      script.push(fail(401, { type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } }));
+      const bad = await c.post("/api/ai/chat", { messages: [{ role: "user", content: "hi" }] });
+      expect(bad.status).toBe(503);
+      expect(bad.body.error.message).toContain("AI_API_KEY");
+    } finally { connect(); }
+  });
+
+  it("sends only standard fields in the chat-completions format (anything else comes from AI_EXTRA_BODY)", async () => {
+    const app = await getApp();
+    const { c, org } = await signUpWithOrg(app);
+    await growth(org.id);
+    connect();
+    script.push(say("Hi."));
+    await c.post("/api/ai/chat", { messages: [{ role: "user", content: "hi" }] });
+    expect(seen.at(-1).temperature).toBeUndefined();
+    expect(seenReq.at(-1)!.url).toBe("/v1/chat/completions");
+    env.aiExtraBody = { temperature: 0.2 };
+    try {
+      script.push(say("Hi."));
+      await c.post("/api/ai/chat", { messages: [{ role: "user", content: "hi" }] });
+      expect(seen.at(-1).temperature).toBe(0.2);
+    } finally { env.aiExtraBody = {}; }
   });
 });
