@@ -1,4 +1,4 @@
-import { boolean, index, integer, jsonb, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, doublePrecision, index, integer, jsonb, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { pk, tracked } from "./_common";
 import { organisations, users } from "./core";
 
@@ -25,9 +25,18 @@ export const tasks = pgTable("tasks", {
   repeatRule: text("repeat_rule"), // "monthly" | "weekly" | null
   completedAt: timestamp("completed_at", { withTimezone: true }),
   completedBy: uuid("completed_by").references(() => users.id),
+  /** On a team board: which board and list it sits in, and where in the list. */
+  boardId: uuid("board_id"),
+  listId: uuid("list_id"),
+  position: doublePrecision("position"),
+  /** Coloured labels on the card (colour names). */
+  labels: jsonb("labels").$type<string[]>().notNull().default([]),
+  /** Other people on the card, beside the assignee. */
+  memberUserIds: jsonb("member_user_ids").$type<string[]>().notNull().default([]),
   ...tracked(),
 }, (t) => [
   index("tasks_org_assignee_idx").on(t.orgId, t.assigneeUserId),
+  index("tasks_board_idx").on(t.boardId, t.listId),
   index("tasks_link_idx").on(t.linkType, t.linkId),
   index("tasks_checklist_idx").on(t.checklistId),
 ]);
@@ -103,3 +112,27 @@ export const approvalRules = pgTable("approval_rules", {
   position: integer("position").notNull().default(0),
   ...tracked(),
 });
+
+/**
+ * A team's task board (like Trello): one per department, led by its head, or a personal one for someone
+ * without a department. Cards are tasks; lists are the board's columns.
+ */
+export const boards = pgTable("boards", {
+  id: pk(),
+  orgId: uuid("org_id").notNull().references(() => organisations.id),
+  departmentId: uuid("department_id"),
+  ownerUserId: uuid("owner_user_id"),
+  name: text("name").notNull(),
+  ...tracked(),
+}, (t) => [index("boards_org_idx").on(t.orgId, t.departmentId)]);
+
+export const boardLists = pgTable("board_lists", {
+  id: pk(),
+  orgId: uuid("org_id").notNull().references(() => organisations.id),
+  boardId: uuid("board_id").notNull(),
+  name: text("name").notNull(),
+  /** start = Getting started (new people's first tasks), todo, doing, done, or custom. Moving a card into done completes it. */
+  kind: text("kind").$type<"start" | "todo" | "doing" | "done" | "custom">().notNull().default("custom"),
+  position: doublePrecision("position").notNull(),
+  ...tracked(),
+}, (t) => [index("board_lists_board_idx").on(t.boardId)]);

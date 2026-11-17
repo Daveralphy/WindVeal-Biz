@@ -58,8 +58,8 @@ export const WORKSPACE_DEFS: WorkspaceDef[] = [
   {
     key: "tasks", label: "Tasks", base: "/me/tasks", icon: i(Kanban), blurb: "Your team's board: cards to do, in progress and done.", group: "mine",
     sections: [
-      { to: "/me/tasks", label: "My tasks", icon: <ListTodo size={18} />, badge: "myTasks" },
-      { to: "/me/tasks/getting-started", label: "Getting started", icon: <Flag size={18} />, visible: (v) => v.hasOnboarding },
+      { to: "/me/tasks", label: "Board", icon: <Kanban size={18} /> },
+      { to: "/me/tasks/mine", label: "My cards", icon: <ListTodo size={18} />, badge: "myTasks" },
     ],
   },
   {

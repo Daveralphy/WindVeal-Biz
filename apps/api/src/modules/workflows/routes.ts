@@ -12,6 +12,7 @@ import { audit, notify } from "../../lib/audit";
 import { createTask, startChecklist } from "../../lib/tasks";
 import { approvalHandler, createApproval } from "../../lib/approvals";
 import { LINK_TYPES, resolveTarget, searchTargets } from "../documents/targets";
+import { boardAccessToTask } from "../../lib/boards";
 
 const DAY = 86_400_000;
 const P = "/api/workflows";
@@ -44,16 +45,20 @@ function canEditTask(ctx: OrgContext, t: Task) {
   return hasAccess(ctx.access.workflows, "edit") || t.assigneeUserId === ctx.user.id || t.createdBy === ctx.user.id;
 }
 
-async function loadTask(ctx: OrgContext, id: string, opts: { edit?: boolean } = {}): Promise<Task> {
+export async function loadTask(ctx: OrgContext, id: string, opts: { edit?: boolean } = {}): Promise<Task> {
   if (!z.string().uuid().safeParse(id).success) throw notFound("That task");
   const [t] = await db.select().from(tasks).where(and(eq(tasks.id, id), eq(tasks.orgId, ctx.org.id), isNull(tasks.deletedAt))).limit(1);
-  if (!t || !canSeeTask(ctx, t)) throw notFound("That task");
-  if (opts.edit && !canEditTask(ctx, t)) throw forbidden("You can't change this task.");
+  if (!t) throw notFound("That task");
+  // A card on a team board: everyone on the board sees it; its lead can change it.
+  const onBoard = canSeeTask(ctx, t) && (!opts.edit || canEditTask(ctx, t)) ? null : await boardAccessToTask(ctx, t);
+  const isMember = (t.memberUserIds ?? []).includes(ctx.user.id);
+  if (!canSeeTask(ctx, t) && !onBoard && !isMember) throw notFound("That task");
+  if (opts.edit && !canEditTask(ctx, t) && onBoard !== "lead" && !isMember) throw forbidden("You can't change this task.");
   return t;
 }
 
 /** Adds names and comment / file / checklist counts to a set of tasks. */
-async function taskViews(rows: Task[]) {
+export async function taskViews(rows: Task[]) {
   if (!rows.length) return [];
   const ids = rows.map((t) => t.id);
   const [comments, links, items, names] = await Promise.all([
@@ -90,7 +95,7 @@ function nextDue(from: Date, rule: string): Date {
 }
 
 /** Marks a task done. Repeating tasks get their next occurrence created. */
-async function completeTask(ctx: OrgContext, t: Task) {
+export async function completeTask(ctx: OrgContext, t: Task) {
   return db.transaction(async (tx) => {
     const [done] = await tx.update(tasks).set({
       status: "done", completedAt: new Date(), completedBy: ctx.user.id, version: dsql`${tasks.version} + 1`,

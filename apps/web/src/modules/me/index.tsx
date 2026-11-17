@@ -8,9 +8,9 @@ import { useSession } from "../../lib/session";
 import { fmtDate, fmtTime } from "../../lib/format";
 import { fmtDuration, useMyClock } from "../people/clock";
 import { LeaveRequestRow, RequestLeaveModal, balanceText } from "../people/Leave";
-import { ChecklistDetail } from "../people/Onboarding";
 import type { Balance, LeaveRequest } from "../people/lib";
 import { TaskDrawer, TaskList, useTaskList } from "../workflows/tasks";
+import { Board } from "./board";
 import "./me.css";
 
 type Summary = {
@@ -30,7 +30,6 @@ const useMonth = (month: string) => useQuery({ queryKey: ["my", "attendance", mo
 
 const hours = (m: number | null) => (m == null ? "" : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`);
 const thisMonth = () => new Date().toISOString().slice(0, 7);
-const useMyChecklists = () => useQuery({ queryKey: ["my", "checklists"], queryFn: () => api.get<{ id: string; kind: string; title: string; status: string; total: number; done: number }[]>("/api/my/checklists") });
 
 /** Attendance > History: each day of a month. */
 function History() {
@@ -114,23 +113,6 @@ function Payslips() {
   return <Card><EmptyState title="Payslips are coming">Once WindVeal runs payroll, each month's payslip will be here to view and download.</EmptyState></Card>;
 }
 
-function Onboarding() {
-  const q = useMyChecklists();
-  const [open, setOpen] = useState<string | null>(null);
-  useEffect(() => { if (!open && q.data?.[0]) setOpen(q.data[0].id); }, [q.data, open]);
-  if (q.isLoading) return <Loading />;
-  if (!q.data?.length) return <Card><EmptyState title="No onboarding steps">You're all set. Nothing is waiting for you here.</EmptyState></Card>;
-  return (
-    <>
-      {q.data.length > 1 && (
-        <div className="toolbar">
-          <Select aria-label="Checklist" value={open ?? ""} onChange={(e) => setOpen(e.target.value)} options={q.data.map((c) => ({ value: c.id, label: `${c.title} · ${c.done} of ${c.total}` }))} />
-        </div>
-      )}
-      {open && <ChecklistDetail id={open} mine />}
-    </>
-  );
-}
 
 
 /** The tasks given to this person from anywhere in WindVeal; no Workflows access needed. */
@@ -273,14 +255,15 @@ export default function MySpace() {
       <Route path="attendance/history" element={<Space title="Attendance" subtitle="Each day you've worked."><History /></Space>} />
       <Route path="attendance/leave" element={<Space title="Attendance" subtitle="Your leave balances and requests."><Leave /></Space>} />
       <Route path="attendance/holidays" element={<Space title="Attendance" subtitle="Public holidays."><Holidays /></Space>} />
-      <Route path="tasks" element={<Space title="Tasks" subtitle="Everything given to you, from anywhere in the business."><MyTasks /></Space>} />
-      <Route path="tasks/getting-started" element={<Space title="Tasks" subtitle="Your first steps in your new job."><Onboarding /></Space>} />
+      <Route path="tasks" element={<Space title="Tasks" subtitle="Your team's board. Drag cards from list to list."><Board /></Space>} />
+      <Route path="tasks/mine" element={<Space title="Tasks" subtitle="Every card that's yours, from every board and anywhere in the business."><MyTasks /></Space>} />
+      <Route path="tasks/getting-started" element={<Navigate to="/me/tasks" replace />} />
       <Route path="finance" element={<Space title="Finance" subtitle="Your pay. Only you and HR can see this."><Pay /></Space>} />
       <Route path="finance/payslips" element={<Space title="Finance" subtitle="Your payslips."><Payslips /></Space>} />
       {/* Old addresses (bookmarks, notifications) still land in the right place. */}
       <Route path="leave" element={<Navigate to="/me/attendance/leave" replace />} />
       <Route path="pay" element={<Navigate to="/me/finance" replace />} />
-      <Route path="onboarding" element={<Navigate to="/me/tasks/getting-started" replace />} />
+      <Route path="onboarding" element={<Navigate to="/me/tasks" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

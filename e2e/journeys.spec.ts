@@ -10,7 +10,7 @@ function watchErrors(page: Page) {
 }
 
 const SCREENS = [
-  "/", "/me/attendance", "/me/attendance/history", "/me/attendance/leave", "/me/attendance/holidays", "/me/tasks", "/me/finance", "/me/finance/payslips", "/people", "/people/directory", "/people/departments", "/people/leave", "/people/attendance", "/people/onboarding",
+  "/", "/me/attendance", "/me/attendance/history", "/me/attendance/leave", "/me/attendance/holidays", "/me/tasks", "/me/tasks/mine", "/me/finance", "/me/finance/payslips", "/people", "/people/directory", "/people/departments", "/people/leave", "/people/attendance", "/people/onboarding",
   "/recruitment", "/recruitment/jobs", "/recruitment/candidates", "/recruitment/interviews", "/recruitment/careers", "/recruitment/jobs/new",
   "/crm", "/crm/pipeline", "/crm/companies", "/crm/leads", "/crm/follow-ups",
   "/workflows", "/workflows/mine", "/workflows/approvals", "/workflows/all", "/workflows/templates",
