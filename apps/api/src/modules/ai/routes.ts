@@ -1,11 +1,11 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { and, desc, eq, lt, sql as dsql } from "drizzle-orm";
 import { z } from "zod";
-import { ASSISTANT_AREAS, CHAT_KEEP_DAYS, WORKSPACES, WORKSPACE_LABELS, type AssistantArea, type VealLink } from "@windveal/shared";
+import { ASSISTANT_AREAS, CHAT_KEEP_DAYS, WORKSPACES, WORKSPACE_LABELS, type VealLink } from "@windveal/shared";
 import { db } from "../../db/client";
-import { aiBriefings, aiChats, aiUsage } from "../../db/schema";
+import { aiChats, aiUsage } from "../../db/schema";
 import { requireOrg, type OrgContext } from "../../lib/context";
-import { AppError, badRequest, forbidden, notFound, parse } from "../../lib/http";
+import { AppError, badRequest, notFound, parse } from "../../lib/http";
 import { AiUnavailable, aiConnected, chatCompletion, type ChatMessage } from "../../lib/ai";
 import { loadPricing } from "../../lib/pricing";
 import { env } from "../../env";
@@ -13,8 +13,7 @@ import { localDate } from "../people/util";
 import { toolByName, toolSpecs, type Call } from "./tools";
 import { toolsFor } from "./topics";
 import { checkColumns, describeFile } from "./imports";
-import { canOpenArea, linksFor } from "./links";
-import { makeBriefing } from "./briefing";
+import { linksFor } from "./links";
 
 const MAX_STEPS = 6;
 const month = () => localDate().slice(0, 7);
@@ -151,12 +150,6 @@ async function saveChat(ctx: OrgContext, chatId: string | undefined, area: strin
   await clearOld(ctx);
 }
 
-const areaParam = (raw: string, ctx: OrgContext): AssistantArea => {
-  const area = ASSISTANT_AREAS.find((a) => a === raw);
-  if (!area) throw notFound("That area");
-  if (!canOpenArea(ctx, area)) throw forbidden("You don't have access to this area.");
-  return area;
-};
 
 export default async function aiRoutes(app: FastifyInstance) {
   app.get("/api/ai/status", async (req) => {
@@ -252,34 +245,6 @@ export default async function aiRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  // ---------------- an area's Assistant page ----------------
-
-  /**
-   * The last look Veal took at an area for this person, if any. Opening the page never runs Veal (and never uses
-   * the allowance): the person asks for a look when they want one.
-   */
-  app.get<{ Params: { area: string } }>("/api/ai/briefing/:area", async (req) => {
-    const ctx = await requireOrg(req);
-    const area = areaParam(req.params.area, ctx);
-    const [b] = await db.select().from(aiBriefings).where(and(eq(aiBriefings.orgId, ctx.org.id), eq(aiBriefings.userId, ctx.user.id), eq(aiBriefings.area, area))).limit(1);
-    return { briefing: b?.content ?? null, today: b?.day === localDate() };
-  });
-
-  /** "Look now" / "Look again": Veal works it out now, and it's kept for next time. */
-  app.post<{ Params: { area: string } }>("/api/ai/briefing/:area/refresh", async (req) => {
-    const ctx = await requireOrg(req);
-    const area = areaParam(req.params.area, ctx);
-    return { briefing: await brief(ctx, area, req), fresh: true };
-  });
-
-  async function brief(ctx: OrgContext, area: AssistantArea, req: FastifyRequest) {
-    if (!aiConnected()) throw new AppError(503, "ai_unavailable", "Veal isn't connected yet.");
-    await useOne(ctx);
-    const content = await run(() => makeBriefing(ctx, callerFor(app, req), area));
-    await db.insert(aiBriefings).values({ orgId: ctx.org.id, userId: ctx.user.id, area, day: localDate(), content })
-      .onConflictDoUpdate({ target: [aiBriefings.orgId, aiBriefings.userId, aiBriefings.area], set: { day: localDate(), content, createdAt: new Date() } });
-    return content;
-  }
 
   /** Reads a sheet in an import (headers and sample values) and suggests what each column really is. */
   app.post<{ Params: { id: string } }>("/api/ai/imports/:id/check", async (req) => {

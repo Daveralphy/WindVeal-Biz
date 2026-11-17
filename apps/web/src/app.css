@@ -679,6 +679,15 @@ a.dash-kpi:hover { border-color: var(--ws-c, var(--blue)); }
 .veal-ic { width: 32px; height: 32px; flex: none; border: 0; border-radius: 9px; background: none; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
 .veal-ic:hover:not(:disabled) { background: var(--soft); color: var(--ink); }
 .veal-ic:disabled { opacity: .4; cursor: default; }
+.veal-ic.on { background: var(--pale); color: var(--deep); }
+.veal-history { display: flex; flex-direction: column; }
+.veal-history > button { display: block; width: 100%; text-align: left; padding: 10px 12px; border: 0; border-radius: 10px; background: none; font: inherit; cursor: pointer; }
+.veal-history > button:hover, .veal-history > button.on { background: var(--surface); }
+.veal-history b { display: block; font-size: 13.5px; color: var(--ink); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.veal-history small { color: var(--muted); font-size: 12px; }
+.veal-history .veal-back { display: inline-flex; align-items: center; gap: 6px; width: auto; padding: 4px 6px; margin-bottom: 6px; color: var(--deep); font-weight: 600; font-size: 13px; }
+.veal-history .muted { padding: 10px 12px; margin: 0; }
+.veal-note { font-size: 12px; color: var(--muted); margin: 10px 12px 0; }
 .veal-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: var(--soft); }
 .veal-turn { display: flex; flex-direction: column; gap: 10px; }
 .vm { max-width: 88%; padding: 9px 12px; border-radius: 14px; font-size: 13.5px; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; }
@@ -716,37 +725,3 @@ a.dash-kpi:hover { border-color: var(--ws-c, var(--blue)); }
 .veal-send:disabled { opacity: .4; cursor: default; }
 .veal-foot { text-align: center; font-size: 11.5px; color: var(--muted); padding: 0 0 8px; }
 
-/* ---------- An area's Assistant page ---------- */
-.assist-upd { display: flex; align-items: center; gap: 12px; font-size: 13px; }
-.assist-grid { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 20px; align-items: start; }
-.assist-sum { display: flex; gap: 14px; align-items: flex-start; padding: 18px 20px; border-radius: 16px; background: linear-gradient(135deg, var(--pale), color-mix(in srgb, var(--violet-bg) 60%, var(--surface))); border: 1px solid var(--line); margin-bottom: 16px; }
-.assist-sum p { margin: 4px 0 0; font-size: 15px; line-height: 1.55; color: var(--ink); }
-.assist-item { display: flex; gap: 14px; align-items: center; padding: 14px 0; border-top: 1px solid var(--line); }
-.assist-item:first-of-type { border-top: 0; padding-top: 4px; }
-.assist-item .grow { flex: 1; min-width: 0; }
-.assist-item b { display: block; font-size: 14.5px; color: var(--ink); }
-.assist-item span { display: block; font-size: 13.5px; color: var(--muted); margin-top: 2px; }
-.assist-dot { width: 36px; height: 36px; flex: none; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; }
-.assist-dot.bad { background: var(--red-bg); color: var(--red); } .assist-dot.warn { background: var(--warn-bg); color: var(--warn); }
-.assist-dot.good { background: var(--ok-bg); color: var(--ok); } .assist-dot.info { background: var(--pale); color: var(--deep); }
-.assist-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 40px 20px; color: var(--muted); }
-.assist-empty > svg { color: var(--deep); }
-.assist-empty b { color: var(--ink); font-size: 16px; }
-.assist-empty p { margin: 0 0 6px; max-width: 420px; line-height: 1.5; }
-.assist-side { display: flex; flex-direction: column; gap: 16px; }
-.assist-ask { display: flex; align-items: center; gap: 8px; border: 1px solid var(--field); border-radius: 12px; padding: 5px 5px 5px 12px; background: var(--surface); }
-.assist-ask:focus-within { border-color: var(--blue); box-shadow: 0 0 0 3px var(--focus); }
-.assist-ask input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font: inherit; font-size: 14px; color: var(--ink); }
-.assist-ask .veal-send { width: 32px; height: 32px; }
-.assist-sugg { display: flex; flex-direction: column; gap: 7px; margin-top: 12px; }
-.assist-sugg button { text-align: left; border: 1px solid var(--line); background: var(--soft); border-radius: 10px; padding: 8px 10px; font: inherit; font-size: 13px; color: var(--deep); cursor: pointer; }
-.assist-sugg button:hover:not(:disabled) { border-color: var(--blue); }
-.assist-sugg button:disabled { opacity: .5; cursor: default; }
-.assist-hist > button { display: block; width: 100%; text-align: left; padding: 10px 0; border: 0; border-top: 1px solid var(--line); background: none; font: inherit; cursor: pointer; }
-.assist-hist > .section-label + button { border-top: 0; padding-top: 2px; }
-.assist-hist > button:hover b { color: var(--blue); }
-.assist-hist b { display: block; font-size: 13.5px; color: var(--ink); font-weight: 500; }
-.assist-hist small { color: var(--muted); font-size: 12px; }
-.assist-note { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
-@media (max-width: 1000px) { .assist-grid { grid-template-columns: minmax(0, 1fr); } }
-@media (max-width: 640px) { .assist-item { flex-wrap: wrap; } .assist-item .btn { margin-left: 50px; } }

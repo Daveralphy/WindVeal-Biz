@@ -1,9 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as RPointerEvent, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, ArrowUp, Check, FileSpreadsheet, Maximize2, MessageCircle, Minus, Paperclip, Plus, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUp, Check, FileSpreadsheet, History, MessageCircle, Minus, Paperclip, Plus, X } from "lucide-react";
 import { Button, useToast } from "@windveal/ui";
-import { ASSISTANT_AREAS, type AssistantArea, type VealLink } from "@windveal/shared";
+import { ASSISTANT_AREAS, type VealLink } from "@windveal/shared";
 import { api, ApiError } from "../lib/api";
 import { useSession } from "../lib/session";
 
@@ -17,7 +17,6 @@ type Answer = { messages: ChatMessage[]; reply?: string; proposal?: { toolCallId
 
 const STARTERS = ["How much leave do I have left?", "What's on my plate this week?", "Remind me to call a client tomorrow"];
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) => (+c ^ (Math.random() * 16) >> (+c / 4)).toString(16)));
-export const assistantPath = (area: string) => (area === "me" || !(ASSISTANT_AREAS as readonly string[]).includes(area) ? "/me/assistant" : `/${area}/assistant`);
 
 // ---------------- opening Veal from anywhere ----------------
 
@@ -211,7 +210,7 @@ function ChatWindow({ at, area, request, onMinimise }: { at: { left: number; top
 
   const fresh = () => { setChatId(newId()); setChatArea(area); setMessages([]); setNotes([]); setText(""); };
 
-  // Opened from an Assistant page: a saved chat, or a first question.
+  // Opened with a saved chat, or a first question.
   const handled = useRef<number | null>(null);
   useEffect(() => {
     if (!request || handled.current === request.n || !s) return;
@@ -226,18 +225,39 @@ function ChatWindow({ at, area, request, onMinimise }: { at: { left: number; top
   const items = itemsOf(messages);
   const pending = items.some((it) => it.kind === "proposal" && !it.answer);
   const go = (to: string) => nav(to);
+  // Recent chats (kept 15 days), shown in place of the conversation.
+  const [showHistory, setShowHistory] = useState(false);
+  const history = useQuery({ queryKey: ["ai", "chats"], enabled: showHistory, queryFn: () => api.get<{ chats: { id: string; title: string; updatedAt: string }[]; keepDays: number }>("/api/ai/chats") });
+  const openChat = async (id: string) => {
+    try {
+      const c = await api.get<{ id: string; area: string; messages: ChatMessage[] }>(`/api/ai/chats/${id}`);
+      setChatId(c.id); setChatArea(c.area); setMessages(c.messages); setNotes([]); setShowHistory(false);
+    } catch (e) { toast(e instanceof ApiError ? e.message : "That chat couldn't be opened", "error"); }
+  };
+  const when = (iso: string) => {
+    const d = new Date(iso), days = Math.floor((Date.now() - d.getTime()) / 86_400_000);
+    return days === 0 ? d.toLocaleTimeString("en-GB", { hour: "numeric", minute: "2-digit" }) : days === 1 ? "Yesterday" : d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  };
 
   return (
     <div className="veal-win" role="dialog" aria-label="Chat with Veal" style={{ left: place.left, top: place.top, width: place.w, height: place.h }}>
       <div className="veal-head" {...drag}>
         <span className="veal-orb"><MessageCircle size={16} /></span>
         <div className="grow"><b>Veal</b><small>Asks before changing anything.</small></div>
-        {messages.length > 0 && <button className="veal-ic" title="New chat" aria-label="New chat" onClick={fresh}><Plus size={18} /></button>}
-        <button className="veal-ic" title="Open Assistant" aria-label="Open Assistant" onClick={() => { onMinimise(); go(assistantPath(area)); }}><Maximize2 size={16} /></button>
+        {(messages.length > 0 || showHistory) && <button className="veal-ic" title="New chat" aria-label="New chat" onClick={() => { fresh(); setShowHistory(false); }}><Plus size={18} /></button>}
+        <button className={`veal-ic${showHistory ? " on" : ""}`} title="Recent chats" aria-label="Recent chats" onClick={() => setShowHistory((v) => !v)}><History size={17} /></button>
         <button className="veal-ic" title="Minimise" aria-label="Minimise" onClick={onMinimise}><Minus size={18} /></button>
       </div>
       <div className="veal-body" ref={body}>
-        {status.isLoading ? null : !s?.connected ? (
+        {showHistory ? (
+          <div className="veal-history">
+            <button className="veal-back" onClick={() => setShowHistory(false)}><ArrowLeft size={15} />Back to the chat</button>
+            {history.isLoading ? null : history.data?.chats.length ? history.data.chats.map((c) => (
+              <button key={c.id} className={c.id === chatId ? "on" : ""} onClick={() => void openChat(c.id)}><b>{c.title}</b><small>{when(c.updatedAt)}</small></button>
+            )) : <p className="muted">Your chats show here.</p>}
+            <p className="veal-note">Chats are kept for {history.data?.keepDays ?? 15} days, then cleared.</p>
+          </div>
+        ) : status.isLoading ? null : !s?.connected ? (
           <div className="veal-empty"><MessageCircle size={26} /><b>Veal isn't switched on yet</b><p>It will answer here once it's connected. Everything else in WindVeal works as normal.</p></div>
         ) : s.limit === 0 ? (
           <div className="veal-empty"><MessageCircle size={26} /><b>Veal comes with Growth</b><p>Ask about anything in {org.name}, or have it add tasks, leads and leave for you.</p><Link className="btn btn-primary btn-sm" to="/billing" onClick={onMinimise}>See plans</Link></div>

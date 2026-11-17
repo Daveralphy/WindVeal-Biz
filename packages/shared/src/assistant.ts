@@ -1,6 +1,6 @@
 import type { Workspace } from "./constants";
 
-/** Areas with an Assistant page: "me" is My Workspace (everyone's own things). */
+/** The areas a chat with Veal can belong to: "me" is My Workspace (everyone's own things). */
 export const ASSISTANT_AREAS = ["me", "people", "recruitment", "crm", "workflows", "documents", "insights"] as const;
 export type AssistantArea = (typeof ASSISTANT_AREAS)[number];
 
@@ -14,7 +14,7 @@ export const AREA_NAMES: Record<AssistantArea, string> = {
 };
 
 /**
- * The pages Veal may send someone to, by area. A button in a chat or a briefing can only point at one of these,
+ * The pages Veal may send someone to, by area. A button in a chat can only point at one of these,
  * so the AI can't invent a link.
  */
 export const AREA_PAGES: Record<AssistantArea, { to: string; label: string }[]> = {
@@ -51,9 +51,6 @@ export const AREA_PAGES: Record<AssistantArea, { to: string; label: string }[]> 
 /** A button Veal adds under a reply: a page to go to. */
 export type VealLink = { label: string; to: string };
 
-/** One thing Veal noticed on an area's Assistant page. */
-export type BriefingItem = { tone: "bad" | "warn" | "good" | "info"; title: string; detail: string; link?: VealLink };
-export type Briefing = { summary: string; items: BriefingItem[]; at: string };
 
 /** Chats are kept this long after they were last used, then cleared. */
 export const CHAT_KEEP_DAYS = 15;

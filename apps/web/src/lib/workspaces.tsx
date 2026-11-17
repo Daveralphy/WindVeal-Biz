@@ -2,9 +2,9 @@ import type { ReactNode } from "react";
 import {
   Briefcase, Building2, CalendarDays, CheckSquare, Clock, FileText, Flag, FolderOpen, Globe, History, LayoutDashboard, LineChart, ListChecks,
   ListTodo, Network, Phone, Rows3, Share2, Archive, SquareCheck, Stamp, UserPlus, UserSearch, Users, Workflow, BarChart3, Kanban,
-  Settings, ShieldCheck, Mail, MessageCircle, Bell, Wallet, KeyRound, ScrollText, Upload, User, Building, Building2 as Org,
+  Settings, ShieldCheck, Mail, Bell, Wallet, KeyRound, ScrollText, Upload, User, Building, Building2 as Org,
 } from "lucide-react";
-import { ASSISTANT_AREAS, type Workspace } from "@windveal/shared";
+import type { Workspace } from "@windveal/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useSession } from "./session";
 import { api } from "./api";
@@ -145,10 +145,6 @@ export const WORKSPACE_DEFS: WorkspaceDef[] = [
     ],
   },
 ];
-// Every area with a sidebar ends with its Assistant: what Veal sees there, and chats about it.
-for (const w of WORKSPACE_DEFS) {
-  if ((ASSISTANT_AREAS as readonly string[]).includes(w.key)) w.sections.push({ to: `${w.base}/assistant`, label: "Assistant", icon: <MessageCircle size={18} /> });
-}
 
 
 /** The workspace a path belongs to, if any (Home, Profile, Settings and the like aren't in a workspace). */

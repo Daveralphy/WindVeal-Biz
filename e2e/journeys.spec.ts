@@ -361,7 +361,7 @@ test("a member sees their own things in My Workspace, and nobody else's", async 
   await expect(page.getByRole("button", { name: "Company profile" })).toHaveCount(0);
 });
 
-test("Chat with Veal floats where you put it, opens there, and each area has an Assistant", async ({ page }) => {
+test("Chat with Veal floats where you put it, opens there, and keeps recent chats", async ({ page }) => {
   await signIn(page);
   const fab = page.getByRole("button", { name: "Chat with Veal" });
   await expect(fab).toBeVisible();
@@ -380,13 +380,14 @@ test("Chat with Veal floats where you put it, opens there, and each area has an 
   const win = (await chat.boundingBox())!;
   expect(Math.abs(win.x - moved.x)).toBeLessThan(40);
   expect(Math.abs(win.y - moved.y)).toBeLessThan(40);
+  // Recent chats open inside the window.
+  await chat.getByRole("button", { name: "Recent chats" }).click();
+  await expect(chat.getByText("Chats are kept for 15 days, then cleared.")).toBeVisible();
+  await chat.getByRole("button", { name: "Back to the chat" }).click();
   // Minimising puts the button back where it was.
   await chat.getByRole("button", { name: "Minimise" }).click();
   expect(Math.abs((await fab.boundingBox())!.x - moved.x)).toBeLessThan(2);
-
+  // There are no Assistant pages: the chat does that job.
   await page.locator('.home a[href="/crm"]').click();
-  await page.locator("aside.sb").getByRole("link", { name: "Assistant" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Assistant" })).toBeVisible();
-  await expect(page.getByText("What Veal sees in CRM right now.")).toBeVisible();
-  await expect(page.getByText("Veal isn't switched on yet")).toBeVisible();
+  await expect(page.locator("aside.sb").getByRole("link", { name: "Assistant" })).toHaveCount(0);
 });

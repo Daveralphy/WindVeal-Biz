@@ -1,5 +1,5 @@
 import { boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid, bigint } from "drizzle-orm/pg-core";
-import type { AccessLevel, Briefing, NotificationPrefs, ReviewRequest, Workspace } from "@windveal/shared";
+import type { AccessLevel, NotificationPrefs, ReviewRequest, Workspace } from "@windveal/shared";
 import { pk, timestamps, tracked } from "./_common";
 
 // ---------------- accounts ----------------
@@ -272,13 +272,3 @@ export const aiChats = pgTable("ai_chats", {
   messages: jsonb("messages").notNull().$type<unknown[]>(),
   ...timestamps(),
 }, (t) => [index("ai_chats_user_idx").on(t.userId, t.updatedAt)]);
-
-/** What Veal sees in an area for one person, worked out once a day (or when they ask it to look again). */
-export const aiBriefings = pgTable("ai_briefings", {
-  orgId: uuid("org_id").notNull().references(() => organisations.id),
-  userId: uuid("user_id").notNull().references(() => users.id),
-  area: text("area").notNull(),
-  day: text("day").notNull(), // "2026-11-13"
-  content: jsonb("content").notNull().$type<Briefing>(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [uniqueIndex("ai_briefings_user_area_uq").on(t.orgId, t.userId, t.area)]);
