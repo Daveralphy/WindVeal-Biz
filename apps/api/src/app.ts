@@ -17,6 +17,7 @@ import roleRoutes from "./modules/members/roles";
 import aiRoutes from "./modules/ai/routes";
 import boardRoutes from "./modules/boards/routes";
 import requestRoutes from "./modules/requests/routes";
+import teamAccessRoutes from "./modules/members/team-access";
 import memberRoutes from "./modules/members/routes";
 import fileRoutes from "./modules/files/routes";
 import auditRoutes from "./modules/audit/routes";
@@ -78,7 +79,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   });
 
   for (const routes of [
-    authRoutes, orgRoutes, reviewRoutes, roleRoutes, aiRoutes, boardRoutes, requestRoutes, memberRoutes, fileRoutes, auditRoutes, devRoutes, overviewRoutes,
+    authRoutes, orgRoutes, reviewRoutes, roleRoutes, aiRoutes, boardRoutes, requestRoutes, teamAccessRoutes, memberRoutes, fileRoutes, auditRoutes, devRoutes, overviewRoutes,
     peopleRoutes, recruitmentRoutes, careersRoutes, crmRoutes, workflowRoutes, documentRoutes, importRoutes, insightRoutes, adminRoutes, homeRoutes,
   ]) {
     await app.register(routes);

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { OPEN_REQUEST, REQUEST_KINDS, REQUEST_LABELS, REQUEST_STATUS_LABEL, type RequestKind, type RequestStatus } from "@windveal/shared";
 import { db } from "../../db/client";
 import { employees, files, memberships, organisations, staffRequests, users } from "../../db/schema";
-import { requireAdmin, requireOrg, type OrgContext } from "../../lib/context";
+import { needPersonal, requireAdmin, requireOrg, type OrgContext } from "../../lib/context";
 import { badRequest, conflict, forbidden, notFound, parse } from "../../lib/http";
 import { audit, notify } from "../../lib/audit";
 import { readObject } from "../../lib/storage";
@@ -94,6 +94,7 @@ export default async function requestRoutes(app: FastifyInstance) {
   app.get<{ Querystring: { scope?: string; kind?: string } }>("/api/requests", async (req) => {
     const ctx = await requireOrg(req);
     const handle = req.query.scope === "handle";
+    if (!handle) needPersonal(ctx, req.query.kind === "expense" ? "finance" : "requests");
     const kind = req.query.kind === "expense" ? eq(staffRequests.kind, "expense") : req.query.kind === "other" ? dsql`${staffRequests.kind} <> 'expense'` : undefined;
     const rows = await db.select().from(staffRequests).where(and(eq(staffRequests.orgId, ctx.org.id), isNull(staffRequests.deletedAt), kind,
       handle ? and(eq(staffRequests.handlerUserId, ctx.user.id), inArray(staffRequests.status, OPEN_REQUEST))
@@ -113,6 +114,7 @@ export default async function requestRoutes(app: FastifyInstance) {
       amount: z.coerce.number({ invalid_type_error: "Enter an amount" }).positive("Enter an amount").max(1e11).optional(),
       spentOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Choose a date").optional(), receiptFileId: uuid.optional(),
     }), req.body);
+    needPersonal(ctx, input.kind === "expense" ? "finance" : "requests");
     if (input.kind === "expense" && !input.amount) throw badRequest("Some details need fixing.", { amount: "Enter how much you spent" });
     if (input.receiptFileId) {
       const [f] = await db.select({ by: files.uploadedBy }).from(files).where(and(eq(files.id, input.receiptFileId), eq(files.orgId, ctx.org.id))).limit(1);

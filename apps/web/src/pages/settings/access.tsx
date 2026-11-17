@@ -5,7 +5,7 @@ import { ChevronLeft, KeyRound, Lock, Pause, Pencil, Plus, Trash2, X, Copy } fro
 import {
   Avatar, Button, Card, ConfirmDialog, EmptyState, IconButton, Input, Loading, Modal, Pill, Segmented, Select, Switch, useToast,
 } from "@windveal/ui";
-import { ACCESS_LEVELS, SPECIAL_LABELS, SPECIAL_PERMISSIONS, WORKSPACES, WORKSPACE_LABELS, type AccessLevel, type SpecialPermission, type Workspace } from "@windveal/shared";
+import { ACCESS_LEVELS, AREAS, PERSONAL_AREAS, PERSONAL_LABELS, SPECIAL_LABELS, SPECIAL_PERMISSIONS, WORKSPACES, WORKSPACE_LABELS, type AccessLevel, type Area, type PersonalArea, type SpecialPermission, type Workspace } from "@windveal/shared";
 import { api, ApiError } from "../../lib/api";
 import { useSession } from "../../lib/session";
 import { MoreMenu } from "../../components/actions";
@@ -60,6 +60,26 @@ function PermRow({ p, on, editing, onChange, disabled, tag, from }: { p: Special
         {editing
           ? <Switch label={SPECIAL_LABELS[p].name} checked={on} disabled={disabled} onChange={(v) => onChange?.(v)} />
           : <Pill tone={on ? "ok" : "grey"}>{on ? "Allowed" : "Not allowed"}</Pill>}
+        {from && <span className="ac-from">{from}</span>}
+      </div>
+    </div>
+  );
+}
+
+const PERSONAL_WHAT: Record<PersonalArea, string> = {
+  attendance: "Clocking in and out, their hours and their leave", tasks: "Their team's task board", finance: "Their pay, payslips and expense claims",
+  requests: "Asking for equipment, purchases, letters or help", mydocs: "Their details, contract, ID and certificates", growth: "Their goals, reviews and training",
+};
+
+/** One of the person's own platforms: on or off. */
+export function PersonalRow({ a, on, editing, onChange, tag, from, disabled }: { a: PersonalArea; on: boolean; editing: boolean; onChange?: (v: boolean) => void; tag?: string; from?: string; disabled?: boolean }) {
+  return (
+    <div className="ac-row">
+      <div><b>{PERSONAL_LABELS[a]}{tag && <span className="ac-tag">{tag}</span>}</b><small>{PERSONAL_WHAT[a]}</small></div>
+      <div className="ac-right">
+        {editing
+          ? <Switch label={PERSONAL_LABELS[a]} checked={on} disabled={disabled} onChange={(v) => onChange?.(v)} />
+          : <Pill tone={on ? "ok" : "grey"}>{on ? "On" : "Off"}</Pill>}
         {from && <span className="ac-from">{from}</span>}
       </div>
     </div>
@@ -134,7 +154,8 @@ export function RolesList() {
 }
 
 // ---------------- One role ----------------
-const BLANK = Object.fromEntries(WORKSPACES.map((w) => [w, "none"])) as Record<Workspace, AccessLevel>;
+/** A new role: My Workspace on, no team workspaces. */
+const BLANK = Object.fromEntries(AREAS.map((w) => [w, (PERSONAL_AREAS as readonly string[]).includes(w) ? "view" : "none"])) as Record<Area, AccessLevel>;
 
 /** Each role (and "new") gets a fresh page, so moving between them never carries over unsaved edits. */
 export function RolePage() {
@@ -153,13 +174,13 @@ function RoleEditor({ id }: { id: string }) {
   const [editing, setEditing] = useState(isNew || new URLSearchParams(location.search).has("edit"));
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [access, setAccess] = useState<Record<Workspace, AccessLevel>>(BLANK);
+  const [access, setAccess] = useState<Record<Area, AccessLevel>>(BLANK);
   const [special, setSpecial] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const reset = () => {
     if (!role) return;
-    setName(role.name); setDescription(role.description ?? ""); setAccess({ ...role.access }); setSpecial([...role.special]);
+    setName(role.name); setDescription(role.description ?? ""); setAccess({ ...BLANK, ...role.access }); setSpecial([...role.special]);
   };
   useEffect(reset, [role]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!isNew && q.isLoading) return <Loading />;
@@ -217,6 +238,9 @@ function RoleEditor({ id }: { id: string }) {
         </div>
         {q.data?.locked && <p className="ac-upsell" style={{ marginTop: 12 }}><Lock size={14} />On the Free plan, {q.data.allowance.limit} roles can open more than My Workspace, and they're all in use. Upgrade, or take access away from another role, to give this one more. <Link className="link" to="/billing">See plans</Link></p>}
       </div>
+      <Card title="My Workspace" subtitle="Everyone's own platforms. On for everyone unless you turn one off.">
+        {PERSONAL_AREAS.map((a) => <PersonalRow key={a} a={a} on={access[a] !== "none"} editing={editing} onChange={(v) => setAccess({ ...access, [a]: v ? "view" : "none" })} />)}
+      </Card>
       <Card title="Workspaces" subtitle="View lets them look. Edit lets them add and change. Manage also lets them delete and change the workspace's settings.">
         {WORKSPACES.map((w) => <LevelRow key={w} ws={w} level={access[w]} editing={editing} onChange={(l) => setAccess({ ...access, [w]: l })} />)}
       </Card>
@@ -249,9 +273,9 @@ function RoleEditor({ id }: { id: string }) {
 type MemberDetail = {
   id: string; name: string; email: string; avatarFileId: string | null; jobTitle: string | null; status: string; isPrimaryAdmin: boolean; isYou: boolean;
   role: { id: string; name: string; kind: string } | null;
-  fromRole: { access: Record<Workspace, AccessLevel>; special: string[] };
-  own: { access: Partial<Record<Workspace, AccessLevel>>; special: string[] };
-  access: Record<Workspace, AccessLevel>; special: string[]; canEditAccess: boolean;
+  fromRole: { access: Record<Area, AccessLevel>; special: string[] };
+  own: { access: Partial<Record<Area, AccessLevel>>; special: string[] };
+  access: Record<Area, AccessLevel>; special: string[]; canEditAccess: boolean;
 };
 
 export function MemberPage() {
@@ -264,7 +288,7 @@ export function MemberPage() {
   const q = useQuery({ queryKey: ["member", id], queryFn: () => api.get<MemberDetail>(`/api/members/${id}`) });
   const m = q.data;
   const [editing, setEditing] = useState(false);
-  const [access, setAccess] = useState<Partial<Record<Workspace, AccessLevel>>>({});
+  const [access, setAccess] = useState<Partial<Record<Area, AccessLevel>>>({});
   const [special, setSpecial] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [changingRole, setChangingRole] = useState(false);
@@ -277,13 +301,13 @@ export function MemberPage() {
   const act = async (fn: () => Promise<unknown>, ok: string) => { try { await fn(); await refresh(); toast(ok); } catch (e) { fail(e); } };
   const isAdminMember = m.role?.id === "admin";
   const roleName = m.role?.name ?? "their role";
-  const levelFor = (w: Workspace) => access[w] ?? m.fromRole.access[w];
-  const extras = WORKSPACES.filter((w) => m.own.access[w] && m.own.access[w] !== m.fromRole.access[w]).length
+  const levelFor = (w: Area) => access[w] ?? m.fromRole.access[w] ?? "none";
+  const extras = AREAS.filter((w) => m.own.access[w] && m.own.access[w] !== m.fromRole.access[w]).length
     + m.own.special.filter((p) => !m.fromRole.special.includes(p)).length;
   const save = async () => {
     setSaving(true);
     // Only keep what differs from the role, so the person follows the role everywhere else.
-    const changed = Object.fromEntries(Object.entries(access).filter(([w, l]) => l !== m.fromRole.access[w as Workspace]));
+    const changed = Object.fromEntries(Object.entries(access).filter(([w, l]) => l !== m.fromRole.access[w as Area]));
     try {
       await api.patch(`/api/members/${id}`, { workspaceAccess: changed, specialPermissions: special.filter((p) => !m.fromRole.special.includes(p)) });
       await refresh(); toast("Access saved"); setEditing(false);
@@ -325,6 +349,13 @@ export function MemberPage() {
         {!m.isPrimaryAdmin && !m.isYou && (isAdmin || !isAdminMember) && <Button variant="secondary" onClick={() => setChangingRole(true)}>Change role</Button>}
       </Card>
       {!isAdminMember && <>
+        <Card title="My Workspace">
+          {PERSONAL_AREAS.map((a) => {
+            const on = levelFor(a) !== "none", base = (m.fromRole.access[a] ?? "view") !== "none";
+            return <PersonalRow key={a} a={a} on={on} editing={editing} tag={on === base ? undefined : on ? `Added for ${first(m.name)}` : `Turned off for ${first(m.name)}`}
+              from={on === base ? `From ${roleName}` : undefined} onChange={(v) => setAccess({ ...access, [a]: v ? "view" : "none" })} />;
+          })}
+        </Card>
         <Card title="Workspaces">
           {WORKSPACES.map((w) => {
             const mine = levelFor(w), base = m.fromRole.access[w];

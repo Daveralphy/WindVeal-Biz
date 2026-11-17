@@ -3,7 +3,7 @@ import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db/client";
 import { departments, employees, fileLinks, files, users } from "../../db/schema";
-import { requireOrg, type OrgContext } from "../../lib/context";
+import { needPersonal, requireOrg, type OrgContext } from "../../lib/context";
 import { badRequest, forbidden, notFound, parse } from "../../lib/http";
 import { audit } from "../../lib/audit";
 import { readObject } from "../../lib/storage";
@@ -33,6 +33,7 @@ async function myFile(ctx: OrgContext, employeeId: string, fileId: string) {
 export default async function myProfileRoutes(app: FastifyInstance) {
   app.get("/api/my/details", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "mydocs");
     const e = await me(ctx);
     const [dept] = e.departmentId ? await db.select({ name: departments.name }).from(departments).where(eq(departments.id, e.departmentId)).limit(1) : [];
     const [mgr] = e.managerId ? await db.select({ firstName: employees.firstName, lastName: employees.lastName }).from(employees).where(eq(employees.id, e.managerId)).limit(1) : [];
@@ -48,6 +49,7 @@ export default async function myProfileRoutes(app: FastifyInstance) {
   /** The details that are theirs to keep up to date. Job, team and pay stay with HR. */
   app.patch("/api/my/details", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "mydocs");
     const e = await me(ctx);
     const input = parse(z.object({ phone: optText(40), homeAddress: optText(300), emergencyContact: optText(200) }), req.body);
     const set = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
@@ -57,6 +59,7 @@ export default async function myProfileRoutes(app: FastifyInstance) {
 
   app.get("/api/my/documents", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "mydocs");
     const e = await me(ctx);
     const rows = await db.select({ f: files }).from(fileLinks).innerJoin(files, eq(files.id, fileLinks.fileId))
       .where(and(eq(fileLinks.orgId, ctx.org.id), eq(fileLinks.linkType, "employee"), eq(fileLinks.linkId, e.id), isNull(files.deletedAt)))
@@ -73,6 +76,7 @@ export default async function myProfileRoutes(app: FastifyInstance) {
   /** Adds a document to their own record (e.g. a renewed ID). It's private: them, HR and admins. */
   app.post<{ Querystring: { category?: string; expiresOn?: string } }>("/api/my/documents", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "mydocs");
     const e = await me(ctx);
     const category = req.query.category?.trim().slice(0, 60) || null;
     const expiresOn = req.query.expiresOn && /^\d{4}-\d{2}-\d{2}$/.test(req.query.expiresOn) ? req.query.expiresOn : null;
@@ -87,6 +91,7 @@ export default async function myProfileRoutes(app: FastifyInstance) {
 
   app.get<{ Params: { id: string } }>("/api/my/documents/:id/content", async (req, reply) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "mydocs");
     const f = await myFile(ctx, (await me(ctx)).id, req.params.id);
     reply.header("Content-Type", f.mime || "application/octet-stream");
     reply.header("Content-Disposition", `inline; filename="${encodeURIComponent(f.name)}"`);
@@ -97,6 +102,7 @@ export default async function myProfileRoutes(app: FastifyInstance) {
   /** Only documents they added themselves; HR's stay. */
   app.delete<{ Params: { id: string } }>("/api/my/documents/:id", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "mydocs");
     const f = await myFile(ctx, (await me(ctx)).id, req.params.id);
     if (f.uploadedBy !== ctx.user.id) throw forbidden("HR added this one, so only HR can remove it.");
     await db.update(files).set({ deletedAt: new Date() }).where(eq(files.id, f.id));

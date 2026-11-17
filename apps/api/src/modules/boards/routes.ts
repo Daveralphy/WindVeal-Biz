@@ -3,7 +3,7 @@ import { and, asc, eq, gte, inArray, isNull, or, sql as dsql } from "drizzle-orm
 import { z } from "zod";
 import { db } from "../../db/client";
 import { boardLists, tasks, users } from "../../db/schema";
-import { requireOrg, type OrgContext } from "../../lib/context";
+import { needPersonal, requireOrg, type OrgContext } from "../../lib/context";
 import { badRequest, conflict, forbidden, notFound, parse } from "../../lib/http";
 import { notify } from "../../lib/audit";
 import { createTask } from "../../lib/tasks";
@@ -44,6 +44,7 @@ export default async function boardRoutes(app: FastifyInstance) {
   /** The boards someone can open: their team's (or a personal one), and any they lead. */
   app.get("/api/boards", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "tasks");
     const list = await myBoards(ctx);
     return { boards: list.map(({ board, role }) => ({ id: board.id, name: board.name, lead: role === "lead", personal: !board.departmentId })) };
   });
@@ -51,6 +52,7 @@ export default async function boardRoutes(app: FastifyInstance) {
   /** A board: its lists, its cards, and the people on it. */
   app.get<{ Params: { id: string } }>("/api/boards/:id", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "tasks");
     const { board, role } = await openBoard(ctx, req.params.id);
     const people = await boardPeople(board);
     await gatherCards(board, people.staff);
@@ -89,6 +91,7 @@ export default async function boardRoutes(app: FastifyInstance) {
   /** A new card. Anyone on the board can add their own; the lead can give it to anyone on the board. */
   app.post<{ Params: { id: string } }>("/api/boards/:id/cards", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "tasks");
     const { board, role } = await openBoard(ctx, req.params.id);
     const input = parse(z.object({
       title: z.string().trim().min(1, "Give the card a title").max(200), listId: uuid,
@@ -118,6 +121,7 @@ export default async function boardRoutes(app: FastifyInstance) {
   /** Drag and drop: a card to another place in its list, or to another list. Done completes it; out of Done reopens it. */
   app.post<{ Params: { id: string } }>("/api/boards/cards/:id/move", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "tasks");
     const { t, board, role } = await loadCard(ctx, req.params.id);
     if (role !== "lead" && !isMine(ctx, t)) throw forbidden("Only the team lead can move other people's cards.");
     const input = parse(z.object({ listId: uuid, position: z.number().finite() }), req.body);
@@ -137,6 +141,7 @@ export default async function boardRoutes(app: FastifyInstance) {
   /** The card's own details on the board: labels, the people on it, and (for the lead) who it's for. */
   app.patch<{ Params: { id: string } }>("/api/boards/cards/:id", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "tasks");
     const { t, board, role } = await loadCard(ctx, req.params.id);
     if (role !== "lead" && !isMine(ctx, t)) throw forbidden("Only the team lead can change other people's cards.");
     const input = parse(z.object({
@@ -170,6 +175,7 @@ export default async function boardRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string } }>("/api/boards/:id/lists", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "tasks");
     const { board } = await leadOnly(ctx, req.params.id);
     const { name } = parse(z.object({ name: z.string().trim().min(1, "Give the list a name").max(60) }), req.body);
     const lists = await listsOf(board.id);
@@ -182,6 +188,7 @@ export default async function boardRoutes(app: FastifyInstance) {
 
   app.patch<{ Params: { id: string } }>("/api/boards/lists/:id", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "tasks");
     if (!uuid.safeParse(req.params.id).success) throw notFound("That list");
     const [l] = await db.select().from(boardLists).where(and(eq(boardLists.id, req.params.id), eq(boardLists.orgId, ctx.org.id), isNull(boardLists.deletedAt))).limit(1);
     if (!l) throw notFound("That list");
@@ -194,6 +201,7 @@ export default async function boardRoutes(app: FastifyInstance) {
   /** A list goes; its cards move to the first list, so nothing is lost. To do, In progress and Done stay. */
   app.delete<{ Params: { id: string } }>("/api/boards/lists/:id", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "tasks");
     if (!uuid.safeParse(req.params.id).success) throw notFound("That list");
     const [l] = await db.select().from(boardLists).where(and(eq(boardLists.id, req.params.id), eq(boardLists.orgId, ctx.org.id), isNull(boardLists.deletedAt))).limit(1);
     if (!l) throw notFound("That list");

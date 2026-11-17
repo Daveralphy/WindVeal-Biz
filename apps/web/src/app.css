@@ -8,6 +8,10 @@
 .shell > .sb { z-index: 25; }
 /* Collapsed keeps the same vertical rhythm as expanded: same block heights, only widths change. */
 .mini .sb-org { border-color: transparent; justify-content: center; }
+/* The logo and name lead back to Home. */
+.sb-home { flex: 1; min-width: 0; color: inherit; display: flex; }
+.sb-org:has(a:hover) { border-color: var(--ws-c, var(--blue)); }
+a.tb-brand { color: inherit; }
 .sb-logo { position: relative; width: 40px; height: 40px; flex: none; border-radius: 10px; }
 .sb-logo .mark { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-family: var(--display); font-weight: 800; color: #fff; overflow: hidden; }
 .sb-logo .mark.has-img { border: 1px solid var(--line); }

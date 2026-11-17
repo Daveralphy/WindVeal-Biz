@@ -70,12 +70,12 @@ function Sidebar({ ws, mini, onToggle, onNavigate }: { ws: WorkspaceDef; mini: b
   return (
     <aside className="sb">
       <div className="sb-org">
+        {/* The business's logo and name lead back to Home. Collapsed, hovering the logo reveals the expand control instead. */}
         <span className="sb-logo">
-          <OrgMark />
-          {/* Collapsed: hovering the logo reveals the expand control on top of it. */}
+          {mini ? <OrgMark /> : <Link to="/" aria-label="Home" onClick={onNavigate}><OrgMark /></Link>}
           {onToggle && mini && <ToggleButton mini onToggle={onToggle} />}
         </span>
-        {!mini && <OrgBlock />}
+        {!mini && <Link to="/" className="sb-home" onClick={onNavigate} tabIndex={-1}><OrgBlock /></Link>}
         {onToggle && !mini && <ToggleButton mini={false} onToggle={onToggle} />}
       </div>
       <nav aria-label={ws.label}>
@@ -216,7 +216,6 @@ function AccountMenu() {
             <Avatar name={user.name} size={36} src={user.avatarFileId ? publicFileUrl(user.avatarFileId) : null} />
             <div style={{ minWidth: 0 }}><b className="ink" style={{ display: "block" }}>{user.name}</b><small className="muted">{user.email} · {membership.role}</small></div>
           </div>
-          {pathname !== "/" && <><button onClick={() => { close(); navigate("/"); }}><LayoutGrid size={16} />Home</button><hr /></>}
           <button onClick={() => { close(); navigate("/profile"); }}><User size={16} />My profile</button>
           {membership.role === "admin" && <button onClick={() => { close(); navigate("/profile/company"); }}><Building2 size={16} />Company profile</button>}
           {user.platformAdmin && <button onClick={() => { close(); navigate("/admin"); }}><ShieldCheck size={16} />WindVeal admin</button>}
@@ -324,12 +323,12 @@ function Shell() {
         <TopProgress active={busy} />
         <div className="main">
           <header className={`topbar${onHome ? " topbar-home" : ""}`}>
-            <span className="tb-brand"><span className="sb-logo"><OrgMark /></span><OrgBlock /></span>
+            <Link to="/" className="tb-brand" aria-label="Home"><span className="sb-logo"><OrgMark /></span><OrgBlock /></Link>
             {onHome && <GlobalSearch ws={null} />}
             <div className="right"><HeaderClock /><Notifications /><AccountMenu /></div>
           </header>
           <header className="mtop">
-            <span className="tb-brand"><span className="sb-logo" style={{ width: 32, height: 32 }}><OrgMark size={32} /></span><b>{org.name}</b></span>
+            <Link to="/" className="tb-brand" aria-label="Home"><span className="sb-logo" style={{ width: 32, height: 32 }}><OrgMark size={32} /></span><b>{org.name}</b></Link>
             <div className="r">{onHome && <IconButton label="Search" onClick={() => setMSearch((v) => !v)}><Search size={20} /></IconButton>}<HeaderClock /><Notifications /><AccountMenu /></div>
           </header>
           {onHome && mSearch && <div className="m-search"><GlobalSearch ws={null} autoFocus /></div>}

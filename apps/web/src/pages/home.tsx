@@ -109,7 +109,7 @@ function actionFor(key: string, employeeId?: string): ReactNode {
   return undefined;
 }
 
-/** My Workspace: a card for each of the person's own spaces. */
+/** My Workspace: a card for every platform the person can open (their own ones first, then the ones they've been given). */
 function MyWorkspace({ spaces }: { spaces: WorkspaceDef[] }) {
   const palette = usePalette();
   const waiting = useWaiting();
@@ -166,8 +166,8 @@ export function Home() {
         <h1>{greeting(today)}, {user.name.split(" ")[0]}</h1>
         <p>{today.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}</p>
       </div>
-      <MyWorkspace spaces={mine} />
-      <Group title="With your team" areas={workspaces} />
+      {/* Everything this person can open, in one place: their own platforms, then the team ones they've been given. */}
+      <MyWorkspace spaces={[...mine, ...workspaces]} />
       <Group title="Manage the business" areas={manage} />
       {admin && (
         <section className="home-group">

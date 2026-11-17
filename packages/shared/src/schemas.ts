@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ACCESS_LEVELS, ROLES, WORKSPACES } from "./constants";
+import { ACCESS_LEVELS, AREAS, ROLES, WORKSPACES } from "./constants";
 import { SPECIAL_PERMISSIONS } from "./permissions";
 
 export const id = z.string().uuid();
@@ -78,13 +78,13 @@ export const memberUpdateInput = z.object({
   role: z.enum(ROLES).optional(),
   status: z.enum(["active", "suspended"]).optional(),
   /** Changes for this one person on top of their role (a workspace left out follows the role). */
-  workspaceAccess: z.record(z.enum(WORKSPACES), z.enum(ACCESS_LEVELS)).optional(),
+  workspaceAccess: z.record(z.enum(AREAS), z.enum(ACCESS_LEVELS)).optional(),
   specialPermissions: z.array(z.enum(SPECIAL_PERMISSIONS)).optional(),
 });
 export const roleInput = z.object({
   name: z.string().trim().min(1, "Give the role a name").max(60),
   description: z.string().trim().max(160).optional().or(z.literal("")),
-  access: z.record(z.enum(WORKSPACES), z.enum(ACCESS_LEVELS)),
+  access: z.record(z.enum(AREAS), z.enum(ACCESS_LEVELS)),
   special: z.array(z.enum(SPECIAL_PERMISSIONS)),
 });
 

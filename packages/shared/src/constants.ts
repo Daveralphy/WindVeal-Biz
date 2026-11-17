@@ -1,6 +1,20 @@
 export const WORKSPACES = ["recruitment", "people", "crm", "workflows", "documents", "insights"] as const;
 export type Workspace = (typeof WORKSPACES)[number];
 
+/**
+ * The person's own platforms in My Workspace. Everyone has them unless an admin (or their team lead) turns one
+ * off; they're on or off ("view" or "none"), not View/Edit/Manage like the team workspaces.
+ */
+export const PERSONAL_AREAS = ["attendance", "tasks", "finance", "requests", "mydocs", "growth"] as const;
+export type PersonalArea = (typeof PERSONAL_AREAS)[number];
+export const PERSONAL_LABELS: Record<PersonalArea, string> = {
+  attendance: "Attendance", tasks: "Tasks", finance: "Finance", requests: "Requests", mydocs: "Profile & documents", growth: "Growth",
+};
+/** Everything access is given to: the team workspaces and the personal platforms. */
+export const AREAS = [...WORKSPACES, ...PERSONAL_AREAS] as const;
+export type Area = Workspace | PersonalArea;
+export const isPersonal = (a: string): a is PersonalArea => (PERSONAL_AREAS as readonly string[]).includes(a);
+
 export const WORKSPACE_LABELS: Record<Workspace, string> = {
   recruitment: "Recruitment",
   people: "People & HR",

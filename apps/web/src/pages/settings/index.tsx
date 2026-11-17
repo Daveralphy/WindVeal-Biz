@@ -14,6 +14,7 @@ import { monthlyPrice, usePricing, yearlyTotal, type PricingPlan } from "../../l
 import { fmtDate, timeAgo } from "../../lib/format";
 import { InviteModal, MemberPage, RolePage, RolesList } from "./access";
 import { RequestSettings } from "./requests";
+import { TeamAccess } from "./team";
 
 /** Admins, and people whose role lets them invite and manage members. */
 function useCanManageMembers() {
@@ -307,7 +308,9 @@ export function SettingsRoutes() {
     <>
       <PageHeader title="Settings" subtitle={`Manage ${org.name}'s team and permissions. Your details and the company's are in Profile.`} />
       <Routes>
-        <Route index element={<SettingsDashboard />} />
+        {/* Team leads who don't manage members come here only for Team access. */}
+        <Route index element={canManage || isAdmin ? <SettingsDashboard /> : <Navigate to="/settings/team" replace />} />
+        <Route path="team" element={<TeamAccess />} />
         <Route path="members" element={<Members view="members" />} />
         <Route path="members/:id" element={canManage ? <MemberPage /> : <Navigate to="/settings/members" replace />} />
         <Route path="invitations" element={canManage ? <Members view="invites" /> : <Navigate to="/settings" replace />} />

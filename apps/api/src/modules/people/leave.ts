@@ -5,7 +5,7 @@ import { db, type Tx } from "../../db/client";
 import {
   approvalSteps, approvals, departments, employees, leaveRequests, leaveTypes, organisations, publicHolidays, users,
 } from "../../db/schema";
-import { requireAccess, requireOrg, type OrgContext } from "../../lib/context";
+import { requireAccess, requireOrg, type OrgContext, needPersonal } from "../../lib/context";
 import { badRequest, conflict, forbidden, notFound, parse } from "../../lib/http";
 import { audit, notify } from "../../lib/audit";
 import { createApproval, onApprovalDecided } from "../../lib/approvals";
@@ -232,6 +232,7 @@ export default async function leaveRoutes(app: FastifyInstance) {
       emp = await getTeamEmployee(ctx, input.employeeId);
     }
     if (!emp) throw badRequest("You're not on the team list. Ask an admin to add you back in People & HR.");
+    if (emp.id === mine?.id) needPersonal(ctx, "attendance");
     if (emp.status === "left") throw badRequest(`${fullName(emp)} has left the organisation.`);
     const [type] = await db.select().from(leaveTypes)
       .where(and(eq(leaveTypes.id, input.leaveTypeId), eq(leaveTypes.orgId, ctx.org.id), isNull(leaveTypes.deletedAt))).limit(1);

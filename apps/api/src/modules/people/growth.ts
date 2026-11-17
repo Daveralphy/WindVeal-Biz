@@ -3,7 +3,7 @@ import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../../db/client";
 import { employees, goals, reviews, trainings, users } from "../../db/schema";
-import { requireOrg, type OrgContext } from "../../lib/context";
+import { needPersonal, requireOrg, type OrgContext } from "../../lib/context";
 import { badRequest, conflict, forbidden, notFound, parse } from "../../lib/http";
 import { notify } from "../../lib/audit";
 
@@ -43,6 +43,7 @@ export default async function growthRoutes(app: FastifyInstance) {
   /** Whose growth the person can look at: themself, then the people who report to them. */
   app.get("/api/growth/people", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "growth");
     return { people: [{ id: ctx.user.id, name: "Me" }, ...(await reportsOf(ctx))] };
   });
 
@@ -50,6 +51,7 @@ export default async function growthRoutes(app: FastifyInstance) {
 
   app.get<{ Querystring: { for?: string } }>("/api/growth/goals", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "growth");
     const userId = await whose(ctx, req.query.for);
     const rows = await db.select().from(goals).where(and(eq(goals.orgId, ctx.org.id), eq(goals.userId, userId), isNull(goals.deletedAt)))
       .orderBy(asc(goals.status), desc(goals.createdAt));
@@ -59,6 +61,7 @@ export default async function growthRoutes(app: FastifyInstance) {
 
   app.post("/api/growth/goals", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "growth");
     const input = parse(z.object({ for: uuid.optional(), title: z.string().trim().min(1, "Say what the goal is").max(200), details: z.string().trim().max(2000).optional(), dueOn: day.optional() }), req.body);
     const userId = await whose(ctx, input.for);
     const [g] = await db.insert(goals).values({ orgId: ctx.org.id, userId, title: input.title, details: input.details || null, dueOn: input.dueOn ?? null, setByUserId: ctx.user.id }).returning();
@@ -68,6 +71,7 @@ export default async function growthRoutes(app: FastifyInstance) {
 
   app.patch<{ Params: { id: string } }>("/api/growth/goals/:id", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "growth");
     if (!uuid.safeParse(req.params.id).success) throw notFound("That goal");
     const [g] = await db.select().from(goals).where(and(eq(goals.id, req.params.id), eq(goals.orgId, ctx.org.id), isNull(goals.deletedAt))).limit(1);
     if (!g || !(await canSee(ctx, g.userId))) throw notFound("That goal");
@@ -82,6 +86,7 @@ export default async function growthRoutes(app: FastifyInstance) {
 
   app.delete<{ Params: { id: string } }>("/api/growth/goals/:id", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "growth");
     if (!uuid.safeParse(req.params.id).success) throw notFound("That goal");
     const [g] = await db.select().from(goals).where(and(eq(goals.id, req.params.id), eq(goals.orgId, ctx.org.id), isNull(goals.deletedAt))).limit(1);
     if (!g || !(await canSee(ctx, g.userId))) throw notFound("That goal");
@@ -95,6 +100,7 @@ export default async function growthRoutes(app: FastifyInstance) {
   /** Reviews of me, and the ones I give. */
   app.get("/api/growth/reviews", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "growth");
     const rows = await db.select().from(reviews).where(and(eq(reviews.orgId, ctx.org.id), isNull(reviews.deletedAt),
       or(eq(reviews.userId, ctx.user.id), eq(reviews.reviewerUserId, ctx.user.id)))).orderBy(desc(reviews.createdAt));
     const n = await nameMap(rows.flatMap((r) => [r.userId, r.reviewerUserId]));
@@ -111,6 +117,7 @@ export default async function growthRoutes(app: FastifyInstance) {
   /** A manager starts a review for someone who reports to them; that person writes theirs first. */
   app.post("/api/growth/reviews", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "growth");
     const input = parse(z.object({ for: uuid, title: z.string().trim().min(1, "Name the review").max(120), dueOn: day.optional() }), req.body);
     if (input.for === ctx.user.id) throw badRequest("Your manager starts your reviews.");
     if (!(await canSee(ctx, input.for))) throw forbidden("You can only review the people who report to you.");
@@ -122,6 +129,7 @@ export default async function growthRoutes(app: FastifyInstance) {
   /** The person sends their self-review; then the manager writes theirs and finishes it. */
   app.post<{ Params: { id: string } }>("/api/growth/reviews/:id", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "growth");
     if (!uuid.safeParse(req.params.id).success) throw notFound("That review");
     const [r] = await db.select().from(reviews).where(and(eq(reviews.id, req.params.id), eq(reviews.orgId, ctx.org.id), isNull(reviews.deletedAt))).limit(1);
     if (!r || (r.userId !== ctx.user.id && r.reviewerUserId !== ctx.user.id)) throw notFound("That review");
@@ -142,6 +150,7 @@ export default async function growthRoutes(app: FastifyInstance) {
 
   app.get<{ Querystring: { for?: string } }>("/api/growth/training", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "growth");
     const userId = await whose(ctx, req.query.for);
     const rows = await db.select().from(trainings).where(and(eq(trainings.orgId, ctx.org.id), eq(trainings.userId, userId), isNull(trainings.deletedAt)))
       .orderBy(asc(trainings.status), desc(trainings.createdAt));
@@ -150,6 +159,7 @@ export default async function growthRoutes(app: FastifyInstance) {
 
   app.post("/api/growth/training", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "growth");
     const input = parse(z.object({
       for: uuid.optional(), title: z.string().trim().min(1, "Name the course or certificate").max(200), provider: z.string().trim().max(120).optional(),
       status: z.enum(["planned", "in_progress", "done"]).optional(), dueOn: day.optional(), completedOn: day.optional(), certificateExpiresOn: day.optional(),
@@ -163,6 +173,7 @@ export default async function growthRoutes(app: FastifyInstance) {
 
   app.patch<{ Params: { id: string } }>("/api/growth/training/:id", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "growth");
     if (!uuid.safeParse(req.params.id).success) throw notFound("That training");
     const [t] = await db.select().from(trainings).where(and(eq(trainings.id, req.params.id), eq(trainings.orgId, ctx.org.id), isNull(trainings.deletedAt))).limit(1);
     if (!t || !(await canSee(ctx, t.userId))) throw notFound("That training");
@@ -176,6 +187,7 @@ export default async function growthRoutes(app: FastifyInstance) {
 
   app.delete<{ Params: { id: string } }>("/api/growth/training/:id", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "growth");
     if (!uuid.safeParse(req.params.id).success) throw notFound("That training");
     const [t] = await db.select().from(trainings).where(and(eq(trainings.id, req.params.id), eq(trainings.orgId, ctx.org.id), isNull(trainings.deletedAt))).limit(1);
     if (!t || !(await canSee(ctx, t.userId))) throw notFound("That training");

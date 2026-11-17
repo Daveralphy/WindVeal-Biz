@@ -1,7 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import {
-  ACCESS_LEVELS, DEFAULT_ACCESS, DEFAULT_SPECIAL, type AccessLevel, type Role, type SpecialPermission, type Workspace, WORKSPACES,
+  ACCESS_LEVELS, AREAS, DEFAULT_ACCESS, DEFAULT_SPECIAL, PERSONAL_LABELS, type AccessLevel, type Area, type PersonalArea, type Role, type SpecialPermission, type Workspace, WORKSPACES,
 } from "@windveal/shared";
 import { db } from "../db/client";
 import { devices, memberships, organisations, sessions, users } from "../db/schema";
@@ -21,7 +21,7 @@ export type OrgContext = {
   user: User;
   org: Org;
   membership: Membership;
-  access: Record<Workspace, AccessLevel>;
+  access: Record<Area, AccessLevel>;
   special: SpecialPermission[];
   /** Their role (null for admins). */
   role: RoleRow | null;
@@ -64,7 +64,7 @@ export function requireUser(req: FastifyRequest, opts: { verified?: boolean } = 
 }
 
 /** What their role allows (before anything changed for them alone). */
-export function roleAccess(org: Org, m: Membership, role: RoleRow | null): Record<Workspace, AccessLevel> {
+export function roleAccess(org: Org, m: Membership, role: RoleRow | null): Record<Area, AccessLevel> {
   const tier = m.role as Role;
   if (tier === "admin") return { ...DEFAULT_ACCESS.admin };
   if (role) return { ...DEFAULT_ACCESS.member, ...role.access };
@@ -79,10 +79,10 @@ export function roleSpecial(org: Org, m: Membership, role: RoleRow | null): Spec
 }
 
 /** Everything someone can open: their role, plus whatever an admin changed for them alone. */
-export function computeAccess(org: Org, m: Membership, role: RoleRow | null): Record<Workspace, AccessLevel> {
+export function computeAccess(org: Org, m: Membership, role: RoleRow | null): Record<Area, AccessLevel> {
   const base = roleAccess(org, m, role);
   if (m.role === "admin") return base;
-  return Object.fromEntries(WORKSPACES.map((w) => [w, m.workspaceAccess?.[w] ?? base[w]])) as Record<Workspace, AccessLevel>;
+  return Object.fromEntries(AREAS.map((w) => [w, (m.workspaceAccess as Partial<Record<Area, AccessLevel>>)?.[w] ?? base[w]])) as Record<Area, AccessLevel>;
 }
 
 export function computeSpecial(org: Org, m: Membership, role: RoleRow | null): SpecialPermission[] {
@@ -145,7 +145,7 @@ export async function requireOrg(req: FastifyRequest, opts: OrgOpts = {}): Promi
 }
 
 /** Requires at least `level` access to a workspace. Returns the org context. */
-export async function requireAccess(req: FastifyRequest, ws: Workspace, level: AccessLevel = "view"): Promise<OrgContext> {
+export async function requireAccess(req: FastifyRequest, ws: Area, level: AccessLevel = "view"): Promise<OrgContext> {
   const ctx = await requireOrg(req);
   if (ACCESS_LEVELS.indexOf(ctx.access[ws]) < ACCESS_LEVELS.indexOf(level)) {
     throw forbidden(level === "view" ? "You don't have access to this workspace." : "You don't have permission to change this.");
@@ -182,4 +182,9 @@ export function setSessionCookie(reply: FastifyReply, token: string, maxAgeSecon
     secure: process.env.NODE_ENV === "production",
     ...(maxAgeSeconds ? { maxAge: maxAgeSeconds } : {}),
   });
+}
+
+/** One of the person's own platforms (Attendance, Finance...) must be on for them. */
+export function needPersonal(ctx: OrgContext, area: PersonalArea) {
+  if (ctx.access[area] === "none") throw forbidden(`${PERSONAL_LABELS[area]} isn't switched on for you. Ask an admin or your team lead.`);
 }

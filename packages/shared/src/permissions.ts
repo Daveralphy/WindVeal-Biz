@@ -1,15 +1,18 @@
-import { ACCESS_LEVELS, type AccessLevel, type Role, type Workspace, WORKSPACES } from "./constants";
+import { ACCESS_LEVELS, AREAS, PERSONAL_AREAS, type AccessLevel, type Area, type Role, WORKSPACES } from "./constants";
 
-export type WorkspaceAccess = Partial<Record<Workspace, AccessLevel>>;
+export type WorkspaceAccess = Partial<Record<Area, AccessLevel>>;
 
-export const DEFAULT_ACCESS: Record<Role, Record<Workspace, AccessLevel>> = {
-  admin: { recruitment: "manage", people: "manage", crm: "manage", workflows: "manage", documents: "manage", insights: "manage" },
-  manager: { recruitment: "edit", people: "view", crm: "edit", workflows: "edit", documents: "edit", insights: "view" },
-  // Everyone has My Workspace for their own things; anything more is given by an admin, through their role or to them.
-  member: { recruitment: "none", people: "none", crm: "none", workflows: "none", documents: "none", insights: "none" },
+/** Everyone's own platforms start on. */
+const PERSONAL_ON = Object.fromEntries(PERSONAL_AREAS.map((p) => [p, "view"])) as Record<(typeof PERSONAL_AREAS)[number], AccessLevel>;
+
+export const DEFAULT_ACCESS: Record<Role, Record<Area, AccessLevel>> = {
+  admin: { recruitment: "manage", people: "manage", crm: "manage", workflows: "manage", documents: "manage", insights: "manage", ...PERSONAL_ON },
+  manager: { recruitment: "edit", people: "view", crm: "edit", workflows: "edit", documents: "edit", insights: "view", ...PERSONAL_ON },
+  // Everyone has My Workspace for their own things; anything more is given by an admin or their team lead.
+  member: { recruitment: "none", people: "none", crm: "none", workflows: "none", documents: "none", insights: "none", ...PERSONAL_ON },
 };
 
-export function accessFor(role: Role, overrides: WorkspaceAccess | null | undefined, ws: Workspace): AccessLevel {
+export function accessFor(role: Role, overrides: WorkspaceAccess | null | undefined, ws: Area): AccessLevel {
   if (role === "admin") return "manage";
   return overrides?.[ws] ?? DEFAULT_ACCESS[role][ws];
 }
@@ -18,8 +21,8 @@ export function hasAccess(level: AccessLevel, needed: AccessLevel): boolean {
   return ACCESS_LEVELS.indexOf(level) >= ACCESS_LEVELS.indexOf(needed);
 }
 
-export function effectiveAccess(role: Role, overrides: WorkspaceAccess | null | undefined): Record<Workspace, AccessLevel> {
-  return Object.fromEntries(WORKSPACES.map((w) => [w, accessFor(role, overrides, w)])) as Record<Workspace, AccessLevel>;
+export function effectiveAccess(role: Role, overrides: WorkspaceAccess | null | undefined): Record<Area, AccessLevel> {
+  return Object.fromEntries(AREAS.map((w) => [w, accessFor(role, overrides, w)])) as Record<Area, AccessLevel>;
 }
 
 export const SPECIAL_PERMISSIONS = ["approve_leave", "see_pay", "export_data", "import_data", "manage_members", "manage_billing"] as const;
@@ -55,5 +58,6 @@ export function planAtLeast(plan: string, needed: (typeof PLAN_ORDER)[number]): 
 export const FREE_ROLES_WITH_ACCESS = 3;
 
 /** Whether a role opens anything beyond My Workspace. */
-export const opensMore = (r: { access: Partial<Record<Workspace, AccessLevel>>; special: readonly string[] }) =>
-  Object.values(r.access).some((v) => v && v !== "none") || r.special.length > 0;
+/** Only the team workspaces count: the personal platforms are everyone's by default. */
+export const opensMore = (r: { access: Partial<Record<Area, AccessLevel>>; special: readonly string[] }) =>
+  WORKSPACES.some((w) => { const v = r.access[w]; return !!v && v !== "none"; }) || r.special.length > 0;

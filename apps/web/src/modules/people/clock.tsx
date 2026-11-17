@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Coffee, LogIn, LogOut, Play, Timer } from "lucide-react";
 import { Menu, useConfirm, useToast } from "@windveal/ui";
+import { useSession } from "../../lib/session";
 import { api } from "../../lib/api";
 import { fmtTime } from "../../lib/format";
 
@@ -81,6 +82,12 @@ const LABEL: Record<Exclude<ClockState, "none">, string> = { out: "Not clocked i
 
 /** Your clock in the top bar: shows your time; click it to clock in, take a break, resume or clock out. */
 export function HeaderClock() {
+  const { can } = useSession();
+  if (!can("attendance")) return null;
+  return <HeaderClockInner />;
+}
+
+function HeaderClockInner() {
   const c = useMyClock();
   if (c.loading || c.state === "none") return null;
   const s = c.state;

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AccessLevel, Workspace } from "@windveal/shared";
+import type { AccessLevel, Area, Workspace } from "@windveal/shared";
 import { ACCESS_LEVELS, formatMoney } from "@windveal/shared";
 import { api } from "./api";
 
@@ -36,8 +36,8 @@ export function useSetMe() {
 export function useSession() {
   const { data } = useMe();
   const me = data!;
-  const access = (ws: Workspace, level: AccessLevel = "view") =>
-    !!me.membership && ACCESS_LEVELS.indexOf(me.membership.access[ws]) >= ACCESS_LEVELS.indexOf(level);
+  const access = (ws: Area, level: AccessLevel = "view") =>
+    !!me.membership && ACCESS_LEVELS.indexOf((me.membership.access as Record<string, AccessLevel>)[ws] ?? "none") >= ACCESS_LEVELS.indexOf(level);
   return {
     user: me.user!,
     org: me.org!,

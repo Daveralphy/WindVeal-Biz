@@ -68,7 +68,9 @@ describe("roles", () => {
     expect((await c.post(`/api/invite/${token}/accept`)).status).toBe(200);
     const me = (await c.get("/api/auth/me")).body;
     expect(me.membership.roleName).toBe("Accountant");
-    expect(Object.values(me.membership.access).every((v) => v === "none")).toBe(true);
+    // My Workspace's own platforms are on; no team workspace is.
+    expect(me.membership.access).toMatchObject({ attendance: "view", tasks: "view", finance: "view", requests: "view", mydocs: "view", growth: "view" });
+    expect(["recruitment", "people", "crm", "workflows", "documents", "insights"].every((w) => me.membership.access[w] === "none")).toBe(true);
     expect((await c.get("/api/crm/overview")).status).toBe(403);
     // Their own things work: My Workspace and the tasks given to them.
     expect((await c.get("/api/my/summary")).status).toBe(200);

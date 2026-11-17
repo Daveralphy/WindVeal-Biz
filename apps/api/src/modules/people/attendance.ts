@@ -3,7 +3,7 @@ import { and, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, sql as dsql, typ
 import { z } from "zod";
 import { db } from "../../db/client";
 import { attendance, employees, leaveRequests, leaveTypes } from "../../db/schema";
-import { can, requireAccess, requireOrg, type OrgContext } from "../../lib/context";
+import { can, requireAccess, requireOrg, type OrgContext, needPersonal } from "../../lib/context";
 import { badRequest, conflict, forbidden, parse } from "../../lib/http";
 import { audit } from "../../lib/audit";
 import { toCsv } from "../../lib/csv";
@@ -119,6 +119,7 @@ export default async function attendanceRoutes(app: FastifyInstance) {
 
   app.post("/api/people/attendance/clock-in", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "attendance");
     const me = await myEmployee(ctx);
     if (!me) throw badRequest("You're not on the team list. Ask an admin to add you back in People & HR.");
     await closeEndedDays(eq(attendance.employeeId, me.id));
@@ -135,6 +136,7 @@ export default async function attendanceRoutes(app: FastifyInstance) {
 
   app.post("/api/people/attendance/clock-out", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "attendance");
     const me = await myEmployee(ctx);
     if (!me) throw badRequest("You're not on the team list. Ask an admin to add you back in People & HR.");
     await closeEndedDays(eq(attendance.employeeId, me.id));
@@ -152,6 +154,7 @@ export default async function attendanceRoutes(app: FastifyInstance) {
   /** Take a break: the time stops counting until Resume. */
   app.post("/api/people/attendance/pause", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "attendance");
     const r = await myOpenRecord(ctx);
     if (onBreak(r)) throw conflict("You're already on a break.");
     const [u] = await db.update(attendance).set({ breaks: [...r.breaks, { start: new Date().toISOString(), end: null }], version: dsql`${attendance.version} + 1` })
@@ -162,6 +165,7 @@ export default async function attendanceRoutes(app: FastifyInstance) {
   /** Back from a break, or back after clocking out (e.g. by mistake): the time away counts as a break. */
   app.post("/api/people/attendance/resume", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "attendance");
     const me = await myEmployee(ctx);
     if (!me) throw badRequest("You're not on the team list. Ask an admin to add you back in People & HR.");
     await closeEndedDays(eq(attendance.employeeId, me.id));

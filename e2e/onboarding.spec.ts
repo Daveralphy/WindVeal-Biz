@@ -138,12 +138,12 @@ test("wrong password shows one clear message", async ({ page }) => {
 test("the admin sees the demo business and can open each workspace", async ({ page }) => {
   await signIn(page);
   await expect(page.getByText("Example Trading").first()).toBeVisible();
-  // Home has a tile for each workspace; each opens on its own dashboard, and Home is back in the account menu.
+  // Home has a card for each platform; each opens on its own dashboard, and the logo leads back to Home.
   for (const [href, heading] of [["/recruitment", "Recruitment"], ["/people", "People & HR"], ["/crm", "CRM"], ["/workflows", "Workflows"], ["/documents", "Documents"], ["/insights", "Insights"], ["/settings", "Settings"]] as const) {
     await page.locator(`.home a[href="${href}"]`).click();
     await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
-    await page.getByRole("button", { name: "Account menu" }).first().click();
-    await page.locator(".menu-float").getByRole("button", { name: "Home" }).click();
+    // The business's logo at the top of the sidebar leads back to Home.
+    await page.locator("aside.sb").getByRole("link", { name: "Home" }).click();
     await expect(page.getByRole("heading", { level: 1, name: /Good (morning|afternoon|evening)/ })).toBeVisible();
   }
 });

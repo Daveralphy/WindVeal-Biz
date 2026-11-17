@@ -2,9 +2,9 @@ import type { FastifyInstance } from "fastify";
 import { and, asc, desc, eq, gte, isNull, lte } from "drizzle-orm";
 import { db } from "../../db/client";
 import {
-  attendance, checklists, employeePay, employees, staffRequests, tasks,
+  attendance, checklists, departments, employeePay, employees, staffRequests, tasks,
 } from "../../db/schema";
-import { requireOrg } from "../../lib/context";
+import { requireOrg, needPersonal } from "../../lib/context";
 import { checklistProgress, myEmployee } from "./shared";
 import { workedMinutes } from "./attendance";
 import { localDate } from "./util";
@@ -19,7 +19,9 @@ export default async function mySpaceRoutes(app: FastifyInstance) {
     const ctx = await requireOrg(req);
     const me = await myEmployee(ctx);
     const handles = await handlesRequests(ctx);
-    if (!me) return { employee: null, onboarding: false, handles };
+    if (!me) return { employee: null, onboarding: false, handles, leads: false };
+    const [led] = await db.select({ id: departments.id }).from(departments)
+      .where(and(eq(departments.orgId, ctx.org.id), eq(departments.headEmployeeId, me.id), isNull(departments.deletedAt))).limit(1);
     const [cl] = await db.select({ id: checklists.id }).from(checklists)
       .where(and(eq(checklists.employeeId, me.id), isNull(checklists.deletedAt))).limit(1);
     // The next onboarding step that isn't done.
@@ -28,13 +30,14 @@ export default async function mySpaceRoutes(app: FastifyInstance) {
       .orderBy(asc(tasks.dueAt)).limit(1) : [];
     return {
       employee: { id: me.id, firstName: me.firstName, jobTitle: me.jobTitle, startDate: me.startDate, status: me.status },
-      onboarding: !!cl, nextStep: next ?? null, handles,
+      onboarding: !!cl, nextStep: next ?? null, handles, leads: !!led,
     };
   });
 
   /** Their own clock-ins, a month at a time. */
   app.get<{ Querystring: { month?: string } }>("/api/my/attendance", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "attendance");
     const me = await myEmployee(ctx);
     const month = /^\d{4}-\d{2}$/.test(req.query.month ?? "") ? req.query.month! : localDate().slice(0, 7);
     if (!me) return { month, days: [] };
@@ -55,6 +58,7 @@ export default async function mySpaceRoutes(app: FastifyInstance) {
   /** Their own pay details (no payroll yet, so no payslips). */
   app.get("/api/my/pay", async (req) => {
     const ctx = await requireOrg(req);
+    needPersonal(ctx, "finance");
     const me = await myEmployee(ctx);
     const [p] = me ? await db.select().from(employeePay).where(eq(employeePay.employeeId, me.id)).limit(1) : [];
     return {
