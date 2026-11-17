@@ -70,12 +70,12 @@ function Sidebar({ ws, mini, onToggle, onNavigate }: { ws: WorkspaceDef; mini: b
   return (
     <aside className="sb">
       <div className="sb-org">
-        {/* The business's logo and name lead back to Home. Collapsed, hovering the logo reveals the expand control instead. */}
+        {/* The business's logo leads back to Home. Collapsed, hovering it reveals the expand control instead. */}
         <span className="sb-logo">
           {mini ? <OrgMark /> : <Link to="/" aria-label="Home" onClick={onNavigate}><OrgMark /></Link>}
           {onToggle && mini && <ToggleButton mini onToggle={onToggle} />}
         </span>
-        {!mini && <Link to="/" className="sb-home" onClick={onNavigate} tabIndex={-1}><OrgBlock /></Link>}
+        {!mini && <OrgBlock />}
         {onToggle && !mini && <ToggleButton mini={false} onToggle={onToggle} />}
       </div>
       <nav aria-label={ws.label}>
@@ -323,12 +323,12 @@ function Shell() {
         <TopProgress active={busy} />
         <div className="main">
           <header className={`topbar${onHome ? " topbar-home" : ""}`}>
-            <Link to="/" className="tb-brand" aria-label="Home"><span className="sb-logo"><OrgMark /></span><OrgBlock /></Link>
+            <span className="tb-brand"><Link to="/" className="sb-logo" aria-label="Home"><OrgMark /></Link><OrgBlock /></span>
             {onHome && <GlobalSearch ws={null} />}
             <div className="right"><HeaderClock /><Notifications /><AccountMenu /></div>
           </header>
           <header className="mtop">
-            <Link to="/" className="tb-brand" aria-label="Home"><span className="sb-logo" style={{ width: 32, height: 32 }}><OrgMark size={32} /></span><b>{org.name}</b></Link>
+            <span className="tb-brand"><Link to="/" className="sb-logo" aria-label="Home" style={{ width: 32, height: 32 }}><OrgMark size={32} /></Link><b>{org.name}</b></span>
             <div className="r">{onHome && <IconButton label="Search" onClick={() => setMSearch((v) => !v)}><Search size={20} /></IconButton>}<HeaderClock /><Notifications /><AccountMenu /></div>
           </header>
           {onHome && mSearch && <div className="m-search"><GlobalSearch ws={null} autoFocus /></div>}
