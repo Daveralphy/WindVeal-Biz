@@ -12,6 +12,7 @@ import type { Balance, LeaveRequest } from "../people/lib";
 import { TaskDrawer, TaskList, useTaskList } from "../workflows/tasks";
 import { Board } from "./board";
 import { ExpenseClaims, MyRequests, ToHandle } from "./requests";
+import { MyDetails, MyDocuments } from "./profile";
 import "./me.css";
 
 type Summary = {
@@ -263,6 +264,8 @@ export default function MySpace() {
       <Route path="finance/payslips" element={<Space title="Finance" subtitle="Your payslips."><Payslips /></Space>} />
       <Route path="finance/expenses" element={<Space title="Finance" subtitle="Money you spent for work, claimed back."><ExpenseClaims /></Space>} />
       <Route path="requests" element={<Space title="Requests" subtitle="Ask for what you need. Each request goes to the right person, and you can see where it is."><MyRequests /></Space>} />
+      <Route path="profile" element={<Space title="Profile & documents" subtitle="Your details and papers. HR sees the same."><MyDetails /></Space>} />
+      <Route path="profile/documents" element={<Space title="Profile & documents" subtitle="Your contract, ID and certificates."><MyDocuments /></Space>} />
       <Route path="requests/handle" element={<Space title="Requests" subtitle="What your team has asked you for."><ToHandle /></Space>} />
       {/* Old addresses (bookmarks, notifications) still land in the right place. */}
       <Route path="leave" element={<Navigate to="/me/attendance/leave" replace />} />

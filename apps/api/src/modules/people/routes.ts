@@ -23,6 +23,7 @@ import leaveRoutes from "./leave";
 import attendanceRoutes from "./attendance";
 import onboardingRoutes from "./onboarding";
 import mySpaceRoutes from "./me";
+import myProfileRoutes from "./my-profile";
 import { followJobTitle, inviteNewStaff } from "../../lib/invites";
 
 const mgr = alias(employees, "mgr");
@@ -133,6 +134,7 @@ export default async function peopleRoutes(app: FastifyInstance) {
   await app.register(attendanceRoutes);
   await app.register(onboardingRoutes);
   await app.register(mySpaceRoutes);
+  await app.register(myProfileRoutes);
 
   // ---------------- overview ----------------
   app.get("/api/people/stats", async (req) => {

@@ -23,6 +23,7 @@ const ABOUT: Record<string, string> = {
   tasks: "Everything given to you, from anywhere in the business.",
   finance: "Your pay, payslips and expense claims.",
   requests: "Ask for equipment, purchases, letters or help.",
+  mydocs: "Your details, contract, ID and certificates.",
   people: "See who's in today, approve leave, and keep everyone's records up to date.",
   recruitment: "Post jobs on your careers page, move candidates along and book interviews.",
   crm: "Follow leads and deals through your pipeline, and never miss a follow-up.",

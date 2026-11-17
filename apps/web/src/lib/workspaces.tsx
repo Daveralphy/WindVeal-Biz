@@ -25,7 +25,7 @@ export type Section = {
   also?: RegExp;
 };
 /** My Workspace is split into spaces, one per own thing (each with its own sidebar). */
-export type MineKey = "attendance" | "tasks" | "finance" | "requests";
+export type MineKey = "attendance" | "tasks" | "finance" | "requests" | "mydocs";
 export type AreaKey = Workspace | MineKey | "settings" | "admin" | "profile";
 export type WorkspaceDef = {
   key: AreaKey; label: string; base: string; icon: (size?: number) => ReactNode; blurb: string; sections: Section[];
@@ -75,6 +75,13 @@ export const WORKSPACE_DEFS: WorkspaceDef[] = [
     sections: [
       { to: "/me/requests", label: "My requests", icon: <Inbox size={18} /> },
       { to: "/me/requests/handle", label: "To handle", icon: <CheckSquare size={18} />, badge: "requestsToHandle", visible: (v) => v.handlesRequests },
+    ],
+  },
+  {
+    key: "mydocs", label: "Profile & documents", base: "/me/profile", art: "profile", icon: i(User), blurb: "Your details, contract, ID and certificates.", group: "mine",
+    sections: [
+      { to: "/me/profile", label: "My details", icon: <User size={18} /> },
+      { to: "/me/profile/documents", label: "Documents", icon: <FileText size={18} /> },
     ],
   },
   {
