@@ -20,11 +20,11 @@ export const AREA_NAMES: Record<AssistantArea, string> = {
 export const AREA_PAGES: Record<AssistantArea, { to: string; label: string }[]> = {
   me: [
     { to: "/me/attendance", label: "Attendance" }, { to: "/me/attendance/leave", label: "Leave" }, { to: "/me/attendance/history", label: "Attendance history" },
-    { to: "/me/tasks", label: "Tasks" }, { to: "/me/finance", label: "Finance" },
+    { to: "/me/tasks", label: "Tasks" }, { to: "/me/finance", label: "Finance" }, { to: "/me/finance/payslips", label: "Payslips" },
   ],
   people: [
     { to: "/people", label: "People dashboard" }, { to: "/people/attendance", label: "Attendance" }, { to: "/people/directory", label: "Directory" },
-    { to: "/people/departments", label: "Departments" }, { to: "/people/leave", label: "Leave" }, { to: "/people/onboarding", label: "Onboarding" },
+    { to: "/people/departments", label: "Departments" }, { to: "/people/leave", label: "Leave" }, { to: "/people/onboarding", label: "Onboarding" }, { to: "/people/payroll", label: "Payroll" },
   ],
   recruitment: [
     { to: "/recruitment", label: "Recruitment dashboard" }, { to: "/recruitment/jobs", label: "Jobs" },

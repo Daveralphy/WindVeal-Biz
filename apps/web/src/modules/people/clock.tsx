@@ -67,6 +67,7 @@ export function useMyClock() {
         resume: wasDone ? "You're back on the clock. The time you were away isn't counted." : "Welcome back. Your time is running again.",
       }[what]);
       qc.invalidateQueries({ queryKey: ["people", "attendance"] });
+      qc.invalidateQueries({ queryKey: ["my", "attendance"] });
     },
   });
   const clockOut = async () => {

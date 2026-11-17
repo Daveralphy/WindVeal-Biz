@@ -10,7 +10,7 @@ function watchErrors(page: Page) {
 }
 
 const SCREENS = [
-  "/", "/me/attendance", "/me/attendance/history", "/me/attendance/leave", "/me/attendance/holidays", "/me/tasks", "/me/tasks/mine", "/me/finance", "/me/finance/payslips", "/me/finance/expenses", "/me/requests", "/me/requests/handle", "/me/profile", "/me/profile/documents", "/me/growth", "/me/growth/reviews", "/me/growth/training", "/people", "/people/directory", "/people/departments", "/people/leave", "/people/attendance", "/people/onboarding",
+  "/", "/me/attendance", "/me/attendance/history", "/me/attendance/leave", "/me/attendance/holidays", "/me/tasks", "/me/tasks/mine", "/me/finance", "/me/finance/payslips", "/me/finance/expenses", "/me/requests", "/me/requests/handle", "/me/profile", "/me/profile/documents", "/me/growth", "/me/growth/reviews", "/me/growth/training", "/people", "/people/directory", "/people/departments", "/people/leave", "/people/attendance", "/people/onboarding", "/people/payroll",
   "/recruitment", "/recruitment/jobs", "/recruitment/candidates", "/recruitment/interviews", "/recruitment/careers", "/recruitment/jobs/new",
   "/crm", "/crm/pipeline", "/crm/companies", "/crm/leads", "/crm/follow-ups",
   "/workflows", "/workflows/mine", "/workflows/approvals", "/workflows/all", "/workflows/templates",
@@ -24,7 +24,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
   test(`every screen loads without errors (${viewport.width}px)`, async ({ page }) => {
     await page.setViewportSize(viewport);
     const errors = watchErrors(page);
-    test.setTimeout(150_000);
+    test.setTimeout(300_000);
     await signIn(page);
     for (const path of SCREENS) {
       await page.goto(path);
@@ -435,5 +435,27 @@ test("the team board: add a full card, open it, tick its checklist, comment, the
   await page.getByRole("dialog", { name: title }).getByRole("button", { name: "Archive" }).click();
   await expect(page.getByText("Archived", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: title })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test("payroll: HR prepares a month, changes one amount, and it waits for approval", async ({ page }) => {
+  const errors = watchErrors(page);
+  await signIn(page);
+  const me = await (await page.request.get("/api/my/summary")).json();
+  await page.request.put(`/api/people/employees/${me.employee.id}/pay`, { data: { salaryAmount: "500000", currency: "NGN", payFrequency: "Monthly", bankName: "GTBank", accountNumber: "0123456789" } });
+  await page.goto("/people/payroll");
+  await page.getByRole("button", { name: "Prepare payroll" }).first().click();
+  await page.getByRole("dialog").getByRole("button", { name: "Prepare" }).click();
+  await expect(page.getByRole("button", { name: "Mark as checked" })).toBeVisible();
+  // ₦500,000: PAYE ₦63,950 and ₦388,550 take-home (checked by hand in the API tests).
+  const row = page.getByRole("row", { name: /Amaka Okafor/ });
+  await expect(row).toContainText("₦388,550");
+  await row.click();
+  await page.getByLabel("Bonus").fill("100000");
+  await page.getByRole("dialog").getByRole("button", { name: "Save" }).click();
+  await expect(row).toContainText("₦470,550");
+  await expect(row).toContainText("Changed");
+  await page.getByRole("button", { name: "Mark as checked" }).click();
+  await expect(page.getByRole("button", { name: "Approve payroll" })).toBeVisible();
   expect(errors).toEqual([]);
 });

@@ -13,6 +13,7 @@ import { OnboardingPage } from "./Onboarding";
 import { EmployeeDrawer } from "./EmployeeForm";
 import "./people.css";
 import { MoreMenu } from "../../components/actions";
+import { PayrollPage, PayrollRun } from "./payroll";
 
 export default function PeopleModule() {
   const { can, hasSpecial } = useSession();
@@ -57,6 +58,8 @@ export default function PeopleModule() {
         <Route path="departments" element={<Departments />} />
         <Route path="leave" element={<LeavePage />} />
         <Route path="onboarding" element={<OnboardingPage />} />
+        <Route path="payroll" element={<PayrollPage />} />
+        <Route path="payroll/:id" element={<PayrollRun />} />
         <Route path="employees/:id" element={<ProfilePage />} />
         <Route path=":id" element={<ProfilePage />} />
         <Route path="*" element={<Navigate to="/people" replace />} />

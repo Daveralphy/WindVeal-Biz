@@ -305,3 +305,34 @@ describe("people: a clock left running overnight", () => {
     expect((await p.c.post("/api/people/attendance/clock-in")).status).toBe(200);
   });
 });
+
+describe("people: my attendance overview", () => {
+  it("marks each day on time, late or a public holiday, totals the month, and works out the usual day", async () => {
+    const app = await getApp();
+    const p = await signUpWithOrg(app);
+    const e = await createEmployee(p.c, { firstName: "Ada", lastName: "Eze", email: p.email, startDate: "2020-01-01" });
+    const org = (await p.c.get("/api/org")).body.org;
+    // Last month: an on-time day (8:30 to 17:00 with a 30-minute break), a late day (9:40 to 17:00) and a holiday.
+    const base = new Date(); base.setDate(1); base.setMonth(base.getMonth() - 1);
+    const month = ymd(base).slice(0, 7);
+    const at = (day: number, h: number, m: number) => { const x = new Date(base); x.setDate(day); x.setHours(h, m, 0, 0); return x; };
+    await db.insert(attendance).values([
+      { orgId: org.id, employeeId: e.id, workDate: `${month}-03`, clockIn: at(3, 8, 30), clockOut: at(3, 17, 0),
+        breaks: [{ start: at(3, 12, 0).toISOString(), end: at(3, 12, 30).toISOString() }] },
+      { orgId: org.id, employeeId: e.id, workDate: `${month}-04`, clockIn: at(4, 9, 40), clockOut: at(4, 17, 0), breaks: [] },
+    ]);
+    expect((await p.c.post("/api/people/holidays", { name: "Founders Day", day: `${month}-05` })).status).toBe(200);
+    const r = await p.c.get(`/api/my/attendance/overview?month=${month}`);
+    expect(r.status).toBe(200);
+    const day = (n: string) => r.body.days.find((d: any) => d.date === `${month}-${n}`);
+    expect(day("03").status).toBe("on_time");
+    expect(day("03").minutes).toBe(480);
+    expect(day("04").status).toBe("late");
+    expect(day("05")).toMatchObject({ status: "holiday", label: "Founders Day" });
+    expect(r.body.totals).toMatchObject({ minutes: 480 + 440, worked: 2, onTime: 1, late: 1 });
+    expect(r.body.usual).toMatchObject({ clockIn: Math.round((510 + 580) / 2), clockOut: 17 * 60, breakMinutes: 15 });
+    // Someone else's attendance never shows.
+    const other = await signUpWithOrg(app);
+    expect((await other.c.get(`/api/my/attendance/overview?month=${month}`)).body.totals.worked).toBe(0);
+  });
+});

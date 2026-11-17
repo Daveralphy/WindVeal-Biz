@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import {
-  Briefcase, Building2, CalendarDays, CheckSquare, Clock, FileText, Flag, FolderOpen, Globe, History, LayoutDashboard, LineChart, ListChecks,
+  Banknote, Briefcase, Building2, CalendarDays, CheckSquare, Clock, FileText, Flag, FolderOpen, Globe, History, LayoutDashboard, LineChart, ListChecks,
   ListTodo, Network, Phone, Rows3, Share2, Archive, SquareCheck, Stamp, UserPlus, UserSearch, Users, Workflow, BarChart3, Kanban,
   Settings, ShieldCheck, Mail, Bell, Wallet, Sun, Inbox, Receipt, Target, Star, GraduationCap, UserCheck, KeyRound, ScrollText, Upload, User, Building, Building2 as Org,
 } from "lucide-react";
@@ -10,7 +10,7 @@ import { useSession } from "./session";
 import { api } from "./api";
 
 /** What decides whether someone can see an area or one of its sections. */
-export type Viewer = { isAdmin: boolean; platformAdmin: boolean; canImport: boolean; canManageMembers: boolean; canDocuments: boolean; hasOnboarding: boolean; handlesRequests: boolean; leadsTeam: boolean };
+export type Viewer = { isAdmin: boolean; platformAdmin: boolean; canImport: boolean; canManageMembers: boolean; canDocuments: boolean; hasOnboarding: boolean; handlesRequests: boolean; leadsTeam: boolean; runsPayroll: boolean };
 
 /** A page inside a workspace, shown in that workspace's sidebar. */
 export type Section = {
@@ -50,7 +50,7 @@ export const WORKSPACE_DEFS: WorkspaceDef[] = [
     key: "attendance", label: "Attendance", base: "/me/attendance", icon: i(Clock), blurb: "Clock in and out, your hours, and your leave.", group: "mine",
     sections: [
       { to: "/me/attendance", label: "Today", icon: <Clock size={18} /> },
-      { to: "/me/attendance/history", label: "History", icon: <History size={18} /> },
+      { to: "/me/attendance/history", label: "Calendar", icon: <CalendarDays size={18} /> },
       { to: "/me/attendance/leave", label: "Leave", icon: <CalendarDays size={18} /> },
       { to: "/me/attendance/holidays", label: "Public holidays", icon: <Sun size={18} /> },
     ],
@@ -100,6 +100,7 @@ export const WORKSPACE_DEFS: WorkspaceDef[] = [
       { to: "/people/directory", label: "Directory", icon: <Users size={18} />, also: new RegExp(`^/people/(employees/)?${UUID}`) },
       { to: "/people/departments", label: "Departments", icon: <Network size={18} /> },
       { to: "/people/leave", label: "Leave", icon: <CalendarDays size={18} />, badge: "leave" },
+      { to: "/people/payroll", label: "Payroll", icon: <Banknote size={18} />, visible: (v) => v.runsPayroll },
       { to: "/people/onboarding", label: "Onboarding", icon: <Flag size={18} />, badge: "onboarding" },
     ],
   },
@@ -210,6 +211,7 @@ export function useAreaAccess() {
   const viewer: Viewer = {
     isAdmin, platformAdmin: !!user.platformAdmin, canManageMembers: hasSpecial("manage_members"), canDocuments: can("documents"),
     hasOnboarding: !!mine.data?.onboarding, handlesRequests: !!mine.data?.handles, leadsTeam: !!mine.data?.leads,
+    runsPayroll: isAdmin || (can("people", "manage") && hasSpecial("see_pay")),
     canImport: isAdmin || (["people", "crm", "recruitment"] as Workspace[]).some((w) => can(w, "manage") || (importer && can(w, "edit"))),
   };
   // Documents also opens for people who can only import.

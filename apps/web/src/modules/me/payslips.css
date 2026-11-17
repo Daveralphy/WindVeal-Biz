@@ -1,0 +1,44 @@
+/* ---------- My Workspace › Finance › Payslips ---------- */
+.ps { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; align-items: start; }
+.ps .grow { flex: 1; min-width: 0; }
+.ps-left > * + * { margin-top: 16px; }
+.ps-chart { padding-left: 34px; }
+.ps-plot { position: relative; height: 130px; border-bottom: 1px solid var(--line); }
+.ps-grid { position: absolute; left: 0; right: 0; border-top: 1px dashed color-mix(in srgb, var(--line) 80%, transparent); }
+.ps-grid span { position: absolute; left: -34px; top: -8px; font-size: 11px; color: var(--muted); }
+.ps-bars { position: absolute; inset: 0; display: flex; align-items: flex-end; gap: 2px; }
+.ps-col { flex: 1; height: 100%; display: flex; align-items: flex-end; justify-content: center; border: 0; background: none; padding: 0 4px; cursor: pointer; }
+.ps-col i { display: block; width: 100%; border-radius: 4px 4px 0 0; background: color-mix(in srgb, var(--ws-c, var(--blue)) 55%, var(--surface)); }
+.ps-col.on i, .ps-col:hover i, .ps-col:focus-visible i { background: var(--ws-c, var(--blue)); }
+.ps-tip { position: absolute; top: -4px; transform: translate(-50%, -100%); background: var(--ink); color: var(--surface); border-radius: 10px; padding: 6px 10px; font-size: 12.5px; white-space: nowrap; pointer-events: none; z-index: 2; }
+.ps-tip b { display: block; }
+.ps-x { display: flex; margin-top: 6px; } .ps-x span { flex: 1; text-align: center; font-size: 11.5px; color: var(--muted); }
+.ps-list { padding: 6px; }
+.ps-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px; border: 1px solid transparent; border-radius: 12px; background: none; text-align: left; cursor: pointer; font: inherit; }
+.ps-item:hover { background: var(--soft); }
+.ps-item.on { background: color-mix(in srgb, var(--ws-c, var(--blue)) 8%, var(--surface)); border-color: color-mix(in srgb, var(--ws-c, var(--blue)) 40%, var(--line)); }
+.ps-item b { display: block; font-size: 14.5px; color: var(--ink); } .ps-item small { color: var(--muted); font-size: 12.5px; }
+.ps-item .amt { font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ps-doc-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.ps-eyebrow { font-size: 12.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.ps-paper { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.ps-who { display: flex; justify-content: space-between; gap: 12px; padding: 14px 16px; background: var(--soft); border-bottom: 1px solid var(--line); }
+.ps-who b { display: block; color: var(--ink); font-size: 15px; } .ps-who small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.ps-who .r { text-align: right; } .ps-who .r b { font-size: 13.5px; }
+.ps-line { display: flex; justify-content: space-between; gap: 12px; padding: 11px 16px; border-bottom: 1px solid var(--line); font-size: 14px; color: var(--text); }
+.ps-line b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.ps-line.strong { font-weight: 700; color: var(--ink); background: color-mix(in srgb, var(--soft) 50%, var(--surface)); }
+.ps-line.minus b { color: var(--red); }
+.ps-net { display: flex; justify-content: space-between; align-items: center; padding: 16px; background: color-mix(in srgb, var(--ws-c, var(--blue)) 10%, var(--surface)); font-weight: 700; color: var(--ink); }
+.ps-net b { font: 800 24px var(--display); font-variant-numeric: tabular-nums; }
+.ps-note { font-size: 12.5px; margin: 12px 0 0; }
+@media (max-width: 960px) { .ps { grid-template-columns: 1fr; } }
+
+/* Download PDF: print only the payslip. */
+@media print {
+  body.printing-payslip * { visibility: hidden; }
+  body.printing-payslip .ps-doc, body.printing-payslip .ps-doc * { visibility: visible; }
+  body.printing-payslip .ps-doc { position: absolute; left: 0; top: 0; width: 100%; padding: 24px; }
+  body.printing-payslip .ps-noprint { display: none; }
+  body.printing-payslip .ps-paper, body.printing-payslip .ps-who, body.printing-payslip .ps-net { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
