@@ -56,8 +56,6 @@ const message = z.discriminatedUnion("role", [
     tool_calls: z.array(z.object({ id: z.string(), type: z.literal("function"), function: z.object({ name: z.string(), arguments: z.string().max(8000) }) })).optional(),
     links: z.array(link).max(3).optional(),
     proposal: z.string().max(500).optional(),
-    /** The model's reply exactly as it sent it (some providers need it back unchanged). */
-    raw: z.array(z.unknown()).max(200).optional(),
   }),
   z.object({ role: z.literal("tool"), tool_call_id: z.string(), content: z.string().max(12000) }),
 ]);
@@ -75,7 +73,7 @@ function args(raw: string) { try { return JSON.parse(raw || "{}"); } catch { ret
 /** What the model is sent: the standard chat format, without WindVeal's own extras (buttons, files). */
 const forModel = (messages: Msg[]): ChatMessage[] => messages.map((m) => {
   if (m.role === "user") return { role: "user", content: m.content };
-  if (m.role === "assistant") return { role: "assistant", content: m.content, ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}), ...(m.raw ? { raw: m.raw } : {}) };
+  if (m.role === "assistant") return { role: "assistant", content: m.content, ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}) };
   return m;
 });
 
@@ -90,10 +88,10 @@ async function converse(ctx: OrgContext, call: Call, messages: Msg[]): Promise<O
     if (!res.toolCalls.length) {
       const reply = res.content?.trim() || "Sorry, I didn't catch that. Could you say it another way?";
       const links = linksFor(ctx, messages);
-      messages.push({ role: "assistant", content: reply, ...(links.length ? { links } : {}), ...(res.raw ? { raw: res.raw } : {}) });
+      messages.push({ role: "assistant", content: reply, ...(links.length ? { links } : {}) });
       return { messages, reply, links };
     }
-    const said: Msg = { role: "assistant", content: res.content, tool_calls: res.toolCalls, ...(res.raw ? { raw: res.raw } : {}) };
+    const said: Msg = { role: "assistant", content: res.content, tool_calls: res.toolCalls };
     messages.push(said);
     for (const tc of res.toolCalls) {
       const tool = toolByName(tc.function.name);
