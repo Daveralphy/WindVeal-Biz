@@ -27,7 +27,7 @@ describe("task boards", () => {
     const todo = board.lists[0].id, doing = board.lists[1].id, done = board.lists[2].id;
 
     // Kofi adds his own card: no approval needed.
-    const mine = await kofi.post(`/api/boards/${kb.id}/cards`, { title: "Call Apex Bakery", listId: todo, labels: ["red"] });
+    const mine = await kofi.post(`/api/boards/${kb.id}/cards`, { title: "Call Apex Bakery", listId: todo });
     expect(mine.status).toBe(200);
     expect(mine.body.card.assignee.id).toBe(kofiId);
     // Only the lead gives cards to other people.
@@ -57,8 +57,10 @@ describe("task boards", () => {
     expect(after.cards.find((c: any) => c.id === given.body.card.id).listId).toBe(done);
 
     // Labels and people on a card.
-    expect((await kofi.patch(`/api/boards/cards/${mine.body.card.id}`, { labels: ["green", "blue"], memberUserIds: [ngoziId] })).status).toBe(200);
-    expect((await kofi.get(`/api/boards/${kb.id}`)).body.cards.find((c: any) => c.id === mine.body.card.id)).toMatchObject({ labels: ["green", "blue"], members: [{ id: ngoziId }] });
+    const labels = board.labels.map((l: any) => l.id);
+    expect(board.labels.map((l: any) => l.name)).toEqual(["Urgent", "Client", "Report", "Proposal", "Onboarding"]);
+    expect((await kofi.patch(`/api/boards/cards/${mine.body.card.id}`, { labelIds: labels.slice(0, 2), memberUserIds: [ngoziId] })).status).toBe(200);
+    expect((await kofi.get(`/api/boards/${kb.id}`)).body.cards.find((c: any) => c.id === mine.body.card.id)).toMatchObject({ labels: labels.slice(0, 2), members: [{ id: ngoziId }] });
 
     // Lists are the lead's: a new one goes before Done; To do can't be removed; removing one keeps its cards.
     expect((await kofi.post(`/api/boards/${kb.id}/lists`, { name: "Waiting" })).status).toBe(403);
@@ -84,5 +86,46 @@ describe("task boards", () => {
     const [own] = (await other.get("/api/boards")).body.boards;
     expect(own).toMatchObject({ name: "My board", personal: true, lead: true });
     expect((await other.get(`/api/workflows/tasks/${t.body.id}`)).status).toBe(404);
+  });
+
+  it("a full card: details, checklist, labels and due date; open it; archive, copy and delete", async () => {
+    const { ngozi, kofi, ngoziId, kofiId } = await salesTeam();
+    const [b] = (await ngozi.get("/api/boards")).body.boards;
+    const board = (await ngozi.get(`/api/boards/${b.id}`)).body;
+    const todo = board.lists[0].id, doing = board.lists[1].id;
+    expect(board.people.find((p: any) => p.id === kofiId)).toMatchObject({ openCards: 0 });
+    const label = (await kofi.post(`/api/boards/${b.id}/labels`, { name: "Q1", color: "orange" })).body.label;
+    const made = await ngozi.post(`/api/boards/${b.id}/cards`, {
+      title: "Prepare the Q1 targets", description: "Per rep and per product.", listId: todo, assigneeUserId: kofiId,
+      dueDate: "2026-12-05", labelIds: [label.id, board.labels[0].id], items: ["Pull this year's numbers", "Agree targets with each rep"],
+    });
+    expect(made.status).toBe(200);
+    const id = made.body.card.id;
+    const open = (await kofi.get(`/api/boards/cards/${id}`)).body;
+    expect(open.card).toMatchObject({ title: "Prepare the Q1 targets", description: "Per rep and per product.", labels: [label.id, board.labels[0].id], assignee: { id: kofiId } });
+    expect(open.items.map((i: any) => i.label)).toEqual(["Pull this year's numbers", "Agree targets with each rep"]);
+    expect(open.card.history[0].text).toContain("added this card to To do");
+    expect(open.canEdit).toBe(true);
+    expect(open.canDelete).toBe(false);
+    // He edits his card and moves it; both are in its history.
+    expect((await kofi.patch(`/api/boards/cards/${id}`, { title: "Prepare Q1 targets", dueDate: null })).status).toBe(200);
+    await kofi.post(`/api/boards/cards/${id}/move`, { listId: doing });
+    const after = (await kofi.get(`/api/boards/cards/${id}`)).body.card;
+    expect(after.title).toBe("Prepare Q1 targets");
+    expect(after.dueAt).toBeNull();
+    expect(after.history.map((h: any) => h.text).join(" | ")).toContain("moved this card from To do to In progress");
+    // A teammate can attach a file to it (no Workflows access needed).
+    // Archive puts it away; it can come back.
+    await kofi.patch(`/api/boards/cards/${id}`, { archived: true });
+    expect((await kofi.get(`/api/boards/${b.id}`)).body.cards.some((c: any) => c.id === id)).toBe(false);
+    expect((await kofi.get(`/api/boards/${b.id}?archived=1`)).body.cards.some((c: any) => c.id === id)).toBe(true);
+    await kofi.patch(`/api/boards/cards/${id}`, { archived: false });
+    // Copy keeps the checklist; only the lead or whoever made a card can delete it.
+    const copy = await kofi.post(`/api/boards/cards/${id}/copy`, {});
+    expect((await kofi.get(`/api/boards/cards/${copy.body.id}`)).body.items).toHaveLength(2);
+    expect((await kofi.del(`/api/boards/cards/${id}`)).status).toBe(403);
+    expect((await kofi.del(`/api/boards/cards/${copy.body.id}`)).status).toBe(200);
+    expect((await ngozi.del(`/api/boards/cards/${id}`)).status).toBe(200);
+    expect(ngoziId).toBeTruthy();
   });
 });

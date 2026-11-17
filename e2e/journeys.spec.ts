@@ -394,3 +394,46 @@ test("Chat with Veal floats where you put it, opens there, and keeps recent chat
   await page.locator('.home a[href="/crm"]').click();
   await expect(page.locator("aside.sb").getByRole("link", { name: "Assistant" })).toHaveCount(0);
 });
+
+test("the team board: add a full card, open it, tick its checklist, comment, then archive it", async ({ page }) => {
+  const errors = watchErrors(page);
+  await signIn(page);
+  await page.goto("/me/tasks");
+  await page.getByRole("button", { name: "Add card" }).click();
+  const title = `Board card ${Date.now()}`;
+  const form = page.getByRole("dialog", { name: "New card" });
+  await form.getByLabel("Title").fill(title);
+  await form.getByLabel(/Description/).fill("Send the **monthly** report");
+  await form.getByRole("button", { name: "Assign to" }).click();
+  await page.getByLabel("Search people").fill("zzz-nobody");
+  await expect(page.getByText("No one on this board by that name.")).toBeVisible();
+  await page.getByLabel("Search people").fill("");
+  await page.getByRole("button", { name: /Assign to me/ }).click();
+  await form.getByRole("button", { name: "Add labels" }).click();
+  await page.getByRole("dialog", { name: "Labels" }).getByRole("button", { name: "Urgent" }).click();
+  await page.keyboard.press("Escape");
+  await form.getByLabel("Checklist item").fill("Gather numbers");
+  await form.getByLabel("Checklist item").press("Enter");
+  await form.getByRole("button", { name: "Create card" }).click();
+  await expect(page.getByText("Card added")).toBeVisible();
+
+  await page.getByRole("button", { name: title }).click();
+  const card = page.getByRole("dialog", { name: title });
+  await expect(card.getByText("monthly", { exact: true })).toBeVisible();
+  await card.getByRole("checkbox", { name: "Gather numbers" }).click();
+  await expect(card.getByRole("checkbox", { name: "Gather numbers" })).toBeChecked();
+  await expect(card.getByText("100%")).toBeVisible();
+  await card.getByLabel("Write a comment").fill("On it");
+  await card.getByRole("button", { name: "Save" }).click();
+  await expect(card.locator(".bdm-bubble", { hasText: "On it" })).toBeVisible();
+
+  await card.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "Table" }).click();
+  await expect(page.getByRole("cell", { name: new RegExp(title) })).toBeVisible();
+  await page.getByRole("button", { name: "Board" }).click();
+  await page.getByRole("button", { name: title }).click();
+  await page.getByRole("dialog", { name: title }).getByRole("button", { name: "Archive" }).click();
+  await expect(page.getByText("Archived", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: title })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

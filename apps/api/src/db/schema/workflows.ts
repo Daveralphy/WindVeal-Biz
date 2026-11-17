@@ -33,6 +33,10 @@ export const tasks = pgTable("tasks", {
   labels: jsonb("labels").$type<string[]>().notNull().default([]),
   /** Other people on the card, beside the assignee. */
   memberUserIds: jsonb("member_user_ids").$type<string[]>().notNull().default([]),
+  /** Put away from the board, but kept (it can be brought back). */
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+  /** What happened to the card: created, moved, assigned, due date set... */
+  history: jsonb("history").$type<{ at: string; by: string; byName: string; text: string }[]>().notNull().default([]),
   ...tracked(),
 }, (t) => [
   index("tasks_org_assignee_idx").on(t.orgId, t.assigneeUserId),
@@ -136,3 +140,14 @@ export const boardLists = pgTable("board_lists", {
   position: doublePrecision("position").notNull(),
   ...tracked(),
 }, (t) => [index("board_lists_board_idx").on(t.boardId)]);
+
+/** A board's named labels (e.g. "Urgent", red). Cards list the ids of theirs. */
+export const boardLabels = pgTable("board_labels", {
+  id: pk(),
+  orgId: uuid("org_id").notNull().references(() => organisations.id),
+  boardId: uuid("board_id").notNull(),
+  name: text("name").notNull(),
+  color: text("color").notNull(),
+  position: integer("position").notNull().default(0),
+  ...tracked(),
+}, (t) => [index("board_labels_board_idx").on(t.boardId)]);

@@ -3,7 +3,8 @@ import { and, eq, isNull, sql as dsql } from "drizzle-orm";
 import { hasAccess, type Workspace } from "@windveal/shared";
 import { loadPricing, planStorageBytes } from "../../lib/pricing";
 import { db } from "../../db/client";
-import { employees, fileLinks, fileVersions, files, folders } from "../../db/schema";
+import { employees, fileLinks, fileVersions, files, folders, tasks } from "../../db/schema";
+import { boardAccessToTask } from "../../lib/boards";
 import { requireOrg, type OrgContext } from "../../lib/context";
 import { AppError, badRequest, forbidden, notFound } from "../../lib/http";
 import { MAX_UPLOAD_BYTES, checkFileType, putObject, readObject } from "../../lib/storage";
@@ -26,6 +27,15 @@ const LINK_WORKSPACE: Record<string, Workspace> = {
  */
 export async function canAccessLinkTarget(ctx: OrgContext, linkType: string, linkId: string, level: "view" | "edit"): Promise<boolean> {
   if (ctx.membership.role === "admin") return true;
+  // A card on a team board: whoever can see it (or change it) can see (or add) its files.
+  if (linkType === "task") {
+    const [t] = await db.select().from(tasks).where(and(eq(tasks.id, linkId), eq(tasks.orgId, ctx.org.id), isNull(tasks.deletedAt))).limit(1);
+    if (!t) return false;
+    const mine = t.assigneeUserId === ctx.user.id || t.createdBy === ctx.user.id || (t.memberUserIds ?? []).includes(ctx.user.id);
+    if (mine || hasAccess(ctx.access.workflows, level)) return true;
+    const role = await boardAccessToTask(ctx, t);
+    return level === "view" ? !!role : role === "lead";
+  }
   const ws = LINK_WORKSPACE[linkType];
   if (!ws) return false;
   if (linkType === "employee") {
