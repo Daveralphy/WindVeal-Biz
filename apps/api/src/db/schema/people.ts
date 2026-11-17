@@ -125,3 +125,52 @@ export const publicHolidays = pgTable("public_holidays", {
   position: integer("position").notNull().default(0),
 });
 
+
+// ---------------- Growth (My Workspace) ----------------
+
+/** Something a person is working towards this year, set by them or with their manager. */
+export const goals = pgTable("goals", {
+  id: pk(),
+  orgId: uuid("org_id").notNull().references(() => organisations.id),
+  userId: uuid("user_id").notNull(),
+  title: text("title").notNull(),
+  details: text("details"),
+  /** 0 to 100. */
+  progress: integer("progress").notNull().default(0),
+  dueOn: date("due_on"),
+  status: text("status").$type<"active" | "done" | "dropped">().notNull().default("active"),
+  setByUserId: uuid("set_by_user_id"),
+  ...tracked(),
+}, (t) => [index("goals_user_idx").on(t.orgId, t.userId)]);
+
+/** A review of how someone is doing: they write theirs, their manager writes theirs, then it's finished. */
+export const reviews = pgTable("reviews", {
+  id: pk(),
+  orgId: uuid("org_id").notNull().references(() => organisations.id),
+  userId: uuid("user_id").notNull(),
+  reviewerUserId: uuid("reviewer_user_id").notNull(),
+  title: text("title").notNull(),
+  dueOn: date("due_on"),
+  selfReview: text("self_review"),
+  managerReview: text("manager_review"),
+  /** 1 to 5, from the manager. */
+  rating: integer("rating"),
+  status: text("status").$type<"self" | "manager" | "done">().notNull().default("self"),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  ...tracked(),
+}, (t) => [index("reviews_user_idx").on(t.orgId, t.userId), index("reviews_reviewer_idx").on(t.orgId, t.reviewerUserId)]);
+
+/** A course or certificate: planned, in progress or done, and when the certificate runs out. */
+export const trainings = pgTable("trainings", {
+  id: pk(),
+  orgId: uuid("org_id").notNull().references(() => organisations.id),
+  userId: uuid("user_id").notNull(),
+  title: text("title").notNull(),
+  provider: text("provider"),
+  status: text("status").$type<"planned" | "in_progress" | "done">().notNull().default("planned"),
+  dueOn: date("due_on"),
+  completedOn: date("completed_on"),
+  certificateExpiresOn: date("certificate_expires_on"),
+  addedByUserId: uuid("added_by_user_id"),
+  ...tracked(),
+}, (t) => [index("trainings_user_idx").on(t.orgId, t.userId)]);

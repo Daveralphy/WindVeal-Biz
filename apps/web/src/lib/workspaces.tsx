@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import {
   Briefcase, Building2, CalendarDays, CheckSquare, Clock, FileText, Flag, FolderOpen, Globe, History, LayoutDashboard, LineChart, ListChecks,
   ListTodo, Network, Phone, Rows3, Share2, Archive, SquareCheck, Stamp, UserPlus, UserSearch, Users, Workflow, BarChart3, Kanban,
-  Settings, ShieldCheck, Mail, Bell, Wallet, Sun, Inbox, Receipt, KeyRound, ScrollText, Upload, User, Building, Building2 as Org,
+  Settings, ShieldCheck, Mail, Bell, Wallet, Sun, Inbox, Receipt, Target, Star, GraduationCap, KeyRound, ScrollText, Upload, User, Building, Building2 as Org,
 } from "lucide-react";
 import type { Workspace } from "@windveal/shared";
 import { useQuery } from "@tanstack/react-query";
@@ -25,7 +25,7 @@ export type Section = {
   also?: RegExp;
 };
 /** My Workspace is split into spaces, one per own thing (each with its own sidebar). */
-export type MineKey = "attendance" | "tasks" | "finance" | "requests" | "mydocs";
+export type MineKey = "attendance" | "tasks" | "finance" | "requests" | "mydocs" | "growth";
 export type AreaKey = Workspace | MineKey | "settings" | "admin" | "profile";
 export type WorkspaceDef = {
   key: AreaKey; label: string; base: string; icon: (size?: number) => ReactNode; blurb: string; sections: Section[];
@@ -82,6 +82,14 @@ export const WORKSPACE_DEFS: WorkspaceDef[] = [
     sections: [
       { to: "/me/profile", label: "My details", icon: <User size={18} /> },
       { to: "/me/profile/documents", label: "Documents", icon: <FileText size={18} /> },
+    ],
+  },
+  {
+    key: "growth", label: "Growth", base: "/me/growth", icon: i(Target), blurb: "Your goals, reviews and training.", group: "mine",
+    sections: [
+      { to: "/me/growth", label: "Goals", icon: <Target size={18} /> },
+      { to: "/me/growth/reviews", label: "Reviews", icon: <Star size={18} /> },
+      { to: "/me/growth/training", label: "Training", icon: <GraduationCap size={18} /> },
     ],
   },
   {

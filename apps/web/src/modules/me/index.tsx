@@ -13,6 +13,7 @@ import { TaskDrawer, TaskList, useTaskList } from "../workflows/tasks";
 import { Board } from "./board";
 import { ExpenseClaims, MyRequests, ToHandle } from "./requests";
 import { MyDetails, MyDocuments } from "./profile";
+import { Goals, Reviews, TrainingPage } from "./growth";
 import "./me.css";
 
 type Summary = {
@@ -266,6 +267,9 @@ export default function MySpace() {
       <Route path="requests" element={<Space title="Requests" subtitle="Ask for what you need. Each request goes to the right person, and you can see where it is."><MyRequests /></Space>} />
       <Route path="profile" element={<Space title="Profile & documents" subtitle="Your details and papers. HR sees the same."><MyDetails /></Space>} />
       <Route path="profile/documents" element={<Space title="Profile & documents" subtitle="Your contract, ID and certificates."><MyDocuments /></Space>} />
+      <Route path="growth" element={<Space title="Growth" subtitle="What you're working towards, and how it's going."><Goals /></Space>} />
+      <Route path="growth/reviews" element={<Space title="Growth" subtitle="How you're doing, in your words and your manager's."><Reviews /></Space>} />
+      <Route path="growth/training" element={<Space title="Growth" subtitle="Courses and certificates."><TrainingPage /></Space>} />
       <Route path="requests/handle" element={<Space title="Requests" subtitle="What your team has asked you for."><ToHandle /></Space>} />
       {/* Old addresses (bookmarks, notifications) still land in the right place. */}
       <Route path="leave" element={<Navigate to="/me/attendance/leave" replace />} />

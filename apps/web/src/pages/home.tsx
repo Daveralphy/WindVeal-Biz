@@ -20,10 +20,11 @@ function greeting(d: Date) {
 /** What each card says: a fuller line than the sidebar's, about what you can do there. */
 const ABOUT: Record<string, string> = {
   attendance: "Clock in and out, your hours, and your leave.",
-  tasks: "Everything given to you, from anywhere in the business.",
+  tasks: "Your team's board: cards to do, in progress and done.",
   finance: "Your pay, payslips and expense claims.",
   requests: "Ask for equipment, purchases, letters or help.",
   mydocs: "Your details, contract, ID and certificates.",
+  growth: "Your goals, reviews and training.",
   people: "See who's in today, approve leave, and keep everyone's records up to date.",
   recruitment: "Post jobs on your careers page, move candidates along and book interviews.",
   crm: "Follow leads and deals through your pipeline, and never miss a follow-up.",
